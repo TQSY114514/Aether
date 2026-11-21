@@ -221,10 +221,19 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                   <div className={`flex flex-col items-end ${message.content ? 'mb-2' : ''}`}>
                     {imageList.length === 1 ? (
                       <div
-                        className="rounded-[6px] overflow-hidden border max-w-[280px] max-h-[220px] cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={t('chat.attachment.double_click_zoom')}
+                        className="rounded-[6px] overflow-hidden border max-w-[280px] max-h-[220px] cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5 focus-visible:ring-2 focus-visible:ring-[var(--accent)] outline-none"
                         style={{ borderColor: 'var(--border)' }}
                         onClick={() => setLightboxIndex(0)}
                         onDoubleClick={() => setLightboxIndex(0)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setLightboxIndex(0)
+                          }
+                        }}
                         title={t('chat.attachment.double_click_zoom')}
                       >
                         <img
@@ -254,10 +263,19 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                           return (
                             <div
                               key={i}
-                              className={`aspect-square ${sizeClass} rounded-[6px] overflow-hidden border cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5 flex items-center justify-center`}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={att.name || `image-${i + 1}`}
+                              className={`aspect-square ${sizeClass} rounded-[6px] overflow-hidden border cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5 flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[var(--accent)] outline-none`}
                               style={{ borderColor: 'var(--border)' }}
                               onClick={() => setLightboxIndex(i)}
                               onDoubleClick={() => setLightboxIndex(i)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  setLightboxIndex(i)
+                                }
+                              }}
                               title={t('chat.attachment.double_click_zoom')}
                             >
                               <img

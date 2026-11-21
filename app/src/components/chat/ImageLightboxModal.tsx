@@ -389,7 +389,7 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
         )}
         <div className="w-[1px] h-3 bg-white/15 mx-1" />
         <span className="opacity-80 text-[11px] font-mono tabular-nums">
-          {isFit ? 'Fit' : `${Math.round(scale * 100)}%`}
+          {isFit ? t('chat.lightbox.fit') : `${Math.round(scale * 100)}%`}
         </span>
         {rotation !== 0 && (
           <span className="opacity-60 text-[11px] font-mono tabular-nums">
@@ -409,8 +409,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           onClick={handleToggleFullscreen}
           className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
           style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
-          title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-          aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          title={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
+          aria-label={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
         >
           {isFullscreen ? <Shrink size={16} /> : <Expand size={16} />}
         </button>
@@ -420,8 +420,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           onClick={onClose}
           className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
           style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
-          title="Close (Esc)"
-          aria-label="Close"
+          title={t('chat.lightbox.close')}
+          aria-label={t('chat.lightbox.close')}
         >
           <X size={16} />
         </button>
@@ -438,8 +438,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
             isHudIdle ? 'opacity-20 hover:opacity-100' : 'opacity-100'
           }`}
           style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
-          title="Previous image (← / h)"
-          aria-label="Previous image"
+          title={t('chat.lightbox.prev')}
+          aria-label={t('chat.lightbox.prev')}
         >
           <ChevronLeft size={20} />
         </button>
@@ -489,8 +489,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
             isHudIdle ? 'opacity-20 hover:opacity-100' : 'opacity-100'
           }`}
           style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
-          title="Next image (→ / l)"
-          aria-label="Next image"
+          title={t('chat.lightbox.next')}
+          aria-label={t('chat.lightbox.next')}
         >
           <ChevronRight size={20} />
         </button>
@@ -553,8 +553,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
             onClick={handleZoomOut}
             disabled={scale <= 0.25}
             className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky disabled:opacity-30"
-            title="Zoom out (-)"
-            aria-label="Zoom out"
+            title={t('chat.lightbox.zoom_out')}
+            aria-label={t('chat.lightbox.zoom_out')}
           >
             <ZoomOut size={14} />
           </button>
@@ -563,10 +563,10 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           <button
             onClick={handleResetZoom}
             className="px-2 py-0.5 rounded-full font-mono text-[11px] hover:bg-white/15 icon-btn-silky tabular-nums"
-            title="Reset to Fit (0)"
-            aria-label="Reset scale"
+            title={t('chat.lightbox.reset')}
+            aria-label={t('chat.lightbox.reset')}
           >
-            {isFit ? 'Fit' : `${Math.round(scale * 100)}%`}
+            {isFit ? t('chat.lightbox.fit') : `${Math.round(scale * 100)}%`}
           </button>
 
           {/* Zoom In */}
@@ -574,8 +574,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
             onClick={handleZoomIn}
             disabled={scale >= 8}
             className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky disabled:opacity-30"
-            title="Zoom in (+)"
-            aria-label="Zoom in"
+            title={t('chat.lightbox.zoom_in')}
+            aria-label={t('chat.lightbox.zoom_in')}
           >
             <ZoomIn size={14} />
           </button>
@@ -586,8 +586,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           <button
             onClick={() => handleToggleFitOrActual()}
             className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
-            title={scale > 1.05 ? 'Fit to window (0)' : '1:1 Actual Size (1)'}
-            aria-label="Toggle fit or 1:1"
+            title={scale > 1.05 ? t('chat.lightbox.fit_to_window') : t('chat.lightbox.actual_size')}
+            aria-label={scale > 1.05 ? t('chat.lightbox.fit_to_window') : t('chat.lightbox.actual_size')}
           >
             {scale > 1.05 ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
@@ -596,8 +596,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           <button
             onClick={handleToggleFullscreen}
             className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
-            title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-            aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            title={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
+            aria-label={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
           >
             {isFullscreen ? <Shrink size={14} /> : <Expand size={14} />}
           </button>
@@ -606,8 +606,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           <button
             onClick={handleRotate}
             className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
-            title="Rotate 90° (R)"
-            aria-label="Rotate 90°"
+            title={t('chat.lightbox.rotate')}
+            aria-label={t('chat.lightbox.rotate')}
           >
             <RotateCw size={14} />
           </button>
@@ -616,8 +616,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           <button
             onClick={handleCopy}
             className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky relative"
-            title={copied ? 'Copied to clipboard' : 'Copy image'}
-            aria-label="Copy image"
+            title={copied ? t('chat.lightbox.copied') : t('chat.lightbox.copy')}
+            aria-label={copied ? t('chat.lightbox.copied') : t('chat.lightbox.copy')}
           >
             {copied ? <Check size={14} className="text-emerald-400 animate-scale-pop" /> : <Copy size={14} />}
           </button>
@@ -626,8 +626,8 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           <button
             onClick={handleDownload}
             className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
-            title="Download image"
-            aria-label="Download image"
+            title={t('chat.lightbox.download')}
+            aria-label={t('chat.lightbox.download')}
           >
             <Download size={14} />
           </button>
