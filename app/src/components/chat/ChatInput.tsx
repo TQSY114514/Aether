@@ -351,6 +351,47 @@ export default function ChatInput() {
   }
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items || [])
+    const files = Array.from(e.clipboardData.files || [])
+    const imageFiles: File[] = []
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const f = item.getAsFile()
+        if (f) imageFiles.push(f)
+      }
+    }
+    if (imageFiles.length === 0) {
+      for (const file of files) {
+        if (file.type.startsWith('image/')) imageFiles.push(file)
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault()
+      setFileError(null)
+      for (const file of imageFiles) {
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          setFileError(t('chat.file_too_large', file.name || 'image'))
+          continue
+        }
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = reader.result as string
+          setPending(prev => [
+            ...prev,
+            {
+              name: file.name || 'pasted-image.png',
+              mime: file.type || 'image/png',
+              kind: 'image',
+              dataUrl,
+            },
+          ])
+        }
+        reader.onerror = () => setFileError(t('chat.file_read_failed', file.name || 'image'))
+        reader.readAsDataURL(file)
+      }
+      return
+    }
+
     const text = e.clipboardData.getData('text')
     if (!text) return
     const lines = text.split('\n').length

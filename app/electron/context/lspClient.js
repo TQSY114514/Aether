@@ -1316,6 +1316,8 @@ async function searchWorkspace(root, query, { language = 'javascript', timeoutMs
   const server = serverOverrides.get(language) || defaultServerFor(language)
   if (!server) return null
   const key = `${root}|${language}`
+  const cooldownUntil = serverCooldowns.get(key)
+  if (cooldownUntil && Date.now() < cooldownUntil) return null
   let client = clientCache.get(key)
   if (!client) {
     client = createClient({ command: server.command, args: server.args, root, timeoutMs })
@@ -1623,7 +1625,9 @@ function formatDiagnosticsSummary(file, diagnostics, { maxItems = 15 } = {}) {
     const label = SEVERITY_LABELS[d.severity ?? 1] || 'Diag'
     const lineNum = (d.line ?? 0) + 1
     const src = d.source ? `${d.source}: ` : ''
-    return `  - [${label}] line ${lineNum}: ${src}${d.message}`
+    const rawMsg = String(d.message || '')
+    const msg = rawMsg.length > 200 ? `${rawMsg.slice(0, 197)}...` : rawMsg
+    return `  - [${label}] line ${lineNum}: ${src}${msg}`
   })
   if (sorted.length > maxItems) {
     lines.push(`  - ... (+${sorted.length - maxItems} more)`)
