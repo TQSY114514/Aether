@@ -76,6 +76,17 @@ function clearStreaming(sid: number | null) {
   }
 }
 
+function normalizeLoadedMessages(messages: Message[]): Message[] {
+  for (const m of messages) {
+    if ((m as any).attachment && typeof (m as any).attachment === 'string') {
+      try {
+        m.attachment = JSON.parse((m as any).attachment)
+      } catch {}
+    }
+  }
+  return messages
+}
+
 export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> = (set, get) => ({
   chatMode: "normal",
   sending: false,
@@ -220,8 +231,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       attachment: firstAttachment ? {
         name: firstAttachment.name,
         mime: firstAttachment.mime,
-        kind: firstAttachment.kind,
-        preview: firstAttachment.kind === "image" ? firstAttachment.dataUrl : undefined,
+        kind: imageAttachments.length > 0 ? "image" : firstAttachment.kind,
+        preview: firstAttachment.kind === "image" ? firstAttachment.dataUrl : (imageAttachments[0]?.dataUrl ?? undefined),
         all: imageAttachments.map(img => ({ name: img.name, preview: img.dataUrl })),
       } : null,
     }
@@ -298,7 +309,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       if (!current) return
 
       try {
-        const messages = await window.electronAPI.message.list(current)
+        const rawMessages = await window.electronAPI.message.list(current)
+        const messages = normalizeLoadedMessages(rawMessages)
         if (get().currentSessionId === current) {
           const dbAssistant = preservedMsgId != null
             ? messages.find(m => m.id === preservedMsgId && m.role === "assistant")
@@ -532,7 +544,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     )
     if (hasRecentOptimistic) return
     try {
-      const allMessages = await window.electronAPI.message.list(sessionId)
+      const rawMessages = await window.electronAPI.message.list(sessionId)
+      const allMessages = normalizeLoadedMessages(rawMessages)
       const nextSummaries = { ...get().fileSummariesByMessage }
       for (const m of allMessages) {
         if ((m as any).file_summary) {
@@ -540,11 +553,6 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
             nextSummaries[m.id] = typeof (m as any).file_summary === 'string'
               ? JSON.parse((m as any).file_summary)
               : (m as any).file_summary
-          } catch {}
-        }
-        if ((m as any).attachment && typeof (m as any).attachment === 'string') {
-          try {
-            m.attachment = JSON.parse((m as any).attachment)
           } catch {}
         }
       }
