@@ -28,6 +28,119 @@ const { checkSSRF, checkSSRFHostname } = require('./ssrf')
 const { resolveBackendForMode } = require('../exec/resolveBackend')
 const { dockerBackend } = require('../exec/dockerBackend')
 
+const POST_WRITE_LSP_DEADLINE_MS = 700
+const SCRIPT_LSP_WAIT_MS = 120
+const SCRIPT_LSP_DEADLINE_MS = 250
+const SCRIPT_LSP_DEBOUNCE_MS = 200
+const _reportedLspDegraded = new Set()
+const _loggedMissingLsp = new Set()
+const _recentScriptDiagAt = new Map()
+
+function reportLspDegradedOnce(ctx, lang, reason, detail) {
+  const key = `${ctx?.sessionId || 'global'}|${lang || 'unknown'}`
+  if (reason === 'missing') {
+    if (_loggedMissingLsp.has(key)) return
+    if (_loggedMissingLsp.size > 500) _loggedMissingLsp.clear()
+    _loggedMissingLsp.add(key)
+    try {
+      require('../logger').debug(`[LSP] ${lang || 'language'} server unavailable (${detail || 'not installed'})`)
+    } catch {}
+    return
+  }
+  if (_reportedLspDegraded.has(key)) return
+  if (_reportedLspDegraded.size > 500) _reportedLspDegraded.clear()
+  _reportedLspDegraded.add(key)
+
+  const msg = `[LSP] ${lang || 'language'} diagnostics skipped (${reason}${detail ? `: ${detail}` : ''})`
+  try {
+    require('../logger').warn(msg)
+  } catch {}
+  const onStatus = ctx?.onStatus || ctx?.callbacks?.onStatus
+  if (typeof onStatus === 'function') {
+    try {
+      onStatus({ kind: 'lsp_degraded', text: msg })
+    } catch {}
+  }
+}
+
+async function collectPostWriteDiagnostics(filePath, content, ctx) {
+  if (ctx?.skipPostWriteDiagnostics) return ''
+  let lang = null
+  try {
+    const lsp = require('../context/lspClient')
+    lang = lsp.extToLanguage(filePath)
+    if (!lang) return ''
+    const featureFlags = require('../featureFlags')
+    if (!featureFlags.isEnabled(ctx?.db, 'lsp.autoDiagnostics')) return ''
+    let root
+    try { root = getWorkspaceRoot(ctx?.sessionId) } catch { /* ignore */ }
+    if (!root) root = path.dirname(path.resolve(filePath))
+
+    const baseWaitMs = typeof ctx?.lspWaitMs === 'number' ? ctx.lspWaitMs : 450
+    const waitMs = ctx?.viaScript ? Math.min(baseWaitMs, SCRIPT_LSP_WAIT_MS) : baseWaitMs
+    const deadlineMs = typeof ctx?.lspDeadlineMs === 'number'
+      ? ctx.lspDeadlineMs
+      : ctx?.viaScript
+        ? Math.min(waitMs + 130, SCRIPT_LSP_DEADLINE_MS)
+        : (typeof ctx?.lspWaitMs === 'number' ? Math.max(waitMs + 300, POST_WRITE_LSP_DEADLINE_MS) : POST_WRITE_LSP_DEADLINE_MS)
+
+    if (ctx?.viaScript) {
+      const isCaseSensitive = process.platform !== 'win32' && process.platform !== 'darwin'
+      const resolved = path.resolve(filePath)
+      const normalizedPath = isCaseSensitive ? resolved : resolved.toLowerCase()
+      const absKey = `${ctx?.sessionId || 'global'}|${normalizedPath}`
+      const now = Date.now()
+      const last = _recentScriptDiagAt.get(absKey)
+      if (last && now - last < SCRIPT_LSP_DEBOUNCE_MS) {
+        // Still push the updated buffer to any active LSP client so later
+        // lsp_diagnostics calls do not analyze stale edits.
+        if (typeof lsp.syncDocumentAfterEdit === 'function') {
+          lsp.syncDocumentAfterEdit(root, filePath, { content, language: lang })
+        }
+        return ''
+      }
+      if (_recentScriptDiagAt.size > 500) _recentScriptDiagAt.clear()
+      _recentScriptDiagAt.set(absKey, now)
+    }
+
+    let degradedInfo = null
+    let timer = null
+    const timedOutSentinel = Symbol('lsp-deadline')
+    const diagPromise = lsp.diagnosticsAfterEdit(root, filePath, {
+      content,
+      waitMs,
+      deadlineMs,
+      onDegraded: (info) => { degradedInfo = info },
+    }).catch((err) => {
+      degradedInfo = { reason: 'error', language: lang, message: err?.message || String(err) }
+      return null
+    })
+    const timeoutPromise = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(timedOutSentinel), deadlineMs)
+      if (timer.unref) timer.unref()
+    })
+
+    let diags
+    try {
+      diags = await Promise.race([diagPromise, timeoutPromise])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+
+    if (diags === timedOutSentinel) {
+      reportLspDegradedOnce(ctx, lang, 'timeout', `exceeded ${deadlineMs}ms`)
+      return ''
+    }
+    if (degradedInfo) {
+      reportLspDegradedOnce(ctx, lang, degradedInfo.reason, degradedInfo.message)
+    }
+    return diags && diags.length ? lsp.formatDiagnosticsSummary(filePath, diags, { maxItems: 15 }) : ''
+  } catch (err) {
+    reportLspDegradedOnce(ctx, lang, 'error', err?.message || String(err))
+    return ''
+  }
+}
+
 const MAX_READ_BYTES = 64 * 1024
 const MAX_GREP_BYTES = 32 * 1024
 
@@ -402,7 +515,8 @@ const TOOLS = [
       recordFileActivity(ctx?.sessionId, p, 'write')
     } catch {}
     maybeInvalidateRuleCaches(p, ctx?.sessionId)
-    return `wrote ${c.length} chars to ${p}`
+    const diagSuffix = await collectPostWriteDiagnostics(p, c, ctx)
+    return `wrote ${c.length} chars to ${p}${diagSuffix}`
   }},
   { name: 'edit_file', description: 'Replace text in a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, old_string: { type: 'string' }, new_string: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['path', 'old_string', 'new_string'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const o = String(args.old_string ?? ''); const n = String(args.new_string ?? '')
@@ -472,7 +586,8 @@ const TOOLS = [
       recordFileActivity(ctx?.sessionId, p, 'edit')
     } catch {}
     maybeInvalidateRuleCaches(p, ctx?.sessionId)
-    return `edited ${p}`
+    const diagSuffix = await collectPostWriteDiagnostics(p, updated, ctx)
+    return `edited ${p}${diagSuffix}`
   }},
   { name: 'apply_patch', description: 'Apply a unified diff patch or Aider-style SEARCH/REPLACE blocks. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, patch: { type: 'string' } }, required: ['path', 'patch'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const pt = String(args.patch || ''); if (!p || !pt) throw new Error('path and patch required')
@@ -496,7 +611,8 @@ const TOOLS = [
       recordFileActivity(ctx?.sessionId, p, 'edit')
     } catch {}
     maybeInvalidateRuleCaches(p, ctx?.sessionId)
-    return `patched ${p} (${r.applied} changes applied via ${r.format})`
+    const diagSuffix = await collectPostWriteDiagnostics(p, r.content, ctx)
+    return `patched ${p} (${r.applied} changes applied via ${r.format})${diagSuffix}`
   }},
 
   // ── Execution tools ─────────────────────────────────────────────────
@@ -786,6 +902,17 @@ const TOOLS = [
       : (Array.isArray(ctx?.options?.disabledTools) ? ctx.options.disabledTools : [])
     if (disabled.includes(toolName) || disabled.includes('call_extended_tool')) {
       return `[BLOCKED] Tool "${toolName}" is disabled in current settings.`
+    }
+
+    if (toolName === 'run_script') {
+      try {
+        const featureFlags = require('../featureFlags')
+        if (!featureFlags.isEnabled(ctx?.db, 'agent.script')) {
+          return '[BLOCKED] Tool "run_script" is disabled by feature flag "agent.script".'
+        }
+      } catch {
+        return '[BLOCKED] Tool "run_script" is unavailable.'
+      }
     }
 
     // Check boundary allowlist
@@ -1608,7 +1735,39 @@ TOOLS.push(
     if (!pattern) throw new Error('pattern is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
     const m = await globFiles(pattern, { cwd: cwd || undefined, absolute: true, nodir: true })
     return m.slice(0, 100).join('\n') || '(no matches)'
-  }}
+  }},
+  {
+    name: 'run_script',
+    description: 'Execute a short JavaScript batch script inside an isolated sandboxed Node VM worker with access to `inputs`, `console`, and `await tools.<name>(args)` RPC calls (no filesystem/network/require). Ideal for multi-file batch reads/edits without extra model turns. DANGEROUS.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'Async JavaScript body with access to `inputs`, `tools`, and `console`. Use `return` to output final value.' },
+        inputs: { type: 'object', description: 'Optional structured inputs passed to the script as `inputs`.' },
+        timeoutMs: { type: 'number', description: 'Execution timeout in milliseconds (default 30000, max 120000).' },
+        maxToolCalls: { type: 'number', description: 'Maximum tool calls allowed inside the script (default 50, max 200).' },
+      },
+      required: ['code'],
+    },
+    run: async (args, ctx) => {
+      if (!ctx?.allowRunScript) {
+        const featureFlags = require('../featureFlags')
+        if (!featureFlags.isEnabled(ctx?.db, 'agent.script')) {
+          throw new Error('Tool "run_script" is disabled by feature flag "agent.script".')
+        }
+      }
+      const { runScript } = require('./scriptRunner')
+      const res = await runScript({
+        code: String(args.code || ''),
+        inputs: args.inputs,
+        timeoutMs: args.timeoutMs,
+        maxToolCalls: args.maxToolCalls,
+        ctx,
+      })
+      return res.text
+    },
+  }
 )
 
 // ── Exports ──────────────────────────────────────────────────────────────
@@ -1619,13 +1778,16 @@ function toolsPayload(mode, opts = {}) {
   if (!opts?.includeExtendedLedger) {
     list = list.filter(t => t.name !== 'report_finding')
   }
-  if (opts?.db) {
-    try {
-      const featureFlags = require('../featureFlags')
-      if (!featureFlags.isEnabled(opts.db, 'agent.browser')) {
-        list = list.filter(t => t.name !== 'agent_browser')
-      }
-    } catch {}
+  try {
+    const featureFlags = require('../featureFlags')
+    if (opts?.db && !featureFlags.isEnabled(opts.db, 'agent.browser')) {
+      list = list.filter(t => t.name !== 'agent_browser')
+    }
+    if (!opts?.includeRunScript && !featureFlags.isEnabled(opts?.db, 'agent.script')) {
+      list = list.filter(t => t.name !== 'run_script')
+    }
+  } catch {
+    if (!opts?.includeRunScript) list = list.filter(t => t.name !== 'run_script')
   }
   const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
   if (opts && opts.cacheStable === false) return raw

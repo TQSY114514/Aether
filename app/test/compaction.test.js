@@ -261,9 +261,18 @@ describe('findKeepPoint（token 保尾）', () => {
 
 // --- summarize prompt split (TQS-5: instructions ≠ untrusted data) ---
 describe('buildSummarizerSystemPrompt', () => {
-  it('full mode: six headings and verbatim rule, no untrusted data blocks', () => {
+  it('full mode: eight anchored headings and verbatim rule, no untrusted data blocks', () => {
     const s = buildSummarizerSystemPrompt(null)
-    for (const sec of ['## Goal', '## Constraints', '## Progress', '## Key Decisions', '## Next Steps', '## Critical Context']) {
+    for (const sec of [
+      '## Goal',
+      '## Constraints & Decisions',
+      '## Files & Locations',
+      '## Progress',
+      '## Errors & Verification Status',
+      '## Next Steps',
+      '## Critical Context',
+      '## Open Questions',
+    ]) {
       expect(s).toContain(sec)
     }
     expect(s).toContain('逐字保留')
@@ -376,5 +385,34 @@ describe('maybeCompact prunes NOISE before retention', () => {
       budget: 800,
     })
     expect(JSON.stringify(out)).toContain('result pruned')
+  })
+})
+
+describe('maybeCompact error/rehydration budget enforcement (CodeRabbit #4)', () => {
+  it('bounds CJK-dense error blocks and drops/shrinks errorBlock rather than exceeding budget', async () => {
+    const cjkErrorLine = '错误：' + '校验失败细节'.repeat(40)
+    const msgs = [
+      m('system', 'sys prompt'),
+      m('user', `first error: ${cjkErrorLine}1`),
+      m('assistant', `second error: ${cjkErrorLine}2`),
+      m('user', `third error: ${cjkErrorLine}3`),
+      m('assistant', `fourth error: ${cjkErrorLine}4`),
+      m('user', `fifth error: ${cjkErrorLine}5`),
+      m('assistant', `sixth error: ${cjkErrorLine}6`),
+      m('user', `seventh error: ${cjkErrorLine}7`),
+      m('user', '继续处理'),
+    ]
+    const provider = { api_url: 'http://127.0.0.1:9', api_format: 'openai' }
+    const model = { model_name: 'test-model' }
+    const budget = 2600
+    const out = await maybeCompact({
+      provider,
+      model,
+      messages: msgs,
+      budget,
+      force: true,
+    })
+    expect(Array.isArray(out)).toBe(true)
+    expect(estimateMessagesTokens(out, provider, model)).toBeLessThanOrEqual(budget)
   })
 })

@@ -380,6 +380,9 @@ export interface AppState {
   btwOpen: boolean
   setBtwOpen: (v: boolean) => void
   toggleBtw: () => void
+  handoffOpen: boolean
+  handoffInitialGoal: string
+  setHandoffOpen: (v: boolean, initialGoal?: string) => void
   stopGeneration: () => Promise<void>
   continueMessage: () => Promise<void>
 
@@ -388,7 +391,7 @@ export interface AppState {
   undoLastEdit: () => void
   redo: () => void
   editMessage: (messageId: number, newContent: string) => Promise<void>
-  sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[], overrides?: { agentMode?: AgentMode }) => Promise<void>
+  sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[], overrides?: { agentMode?: AgentMode; targetSessionId?: number; throwOnError?: boolean }) => Promise<void>
   loadMessages: (sessionId: number) => Promise<void>
 
   // Arena

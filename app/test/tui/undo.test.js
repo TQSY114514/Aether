@@ -37,6 +37,16 @@ describe('findUndoBoundary（W1-t13）', () => {
     expect(findUndoBoundary([{ id: 1, role: 'system', text: 'x' }])).toBeNull()
     expect(findUndoBoundary(null)).toBeNull()
   })
+
+  it('忽略 ephemeral:true 的未落库消息（!shell / /handoff 预览）', () => {
+    const msgs = [
+      { id: 1, role: 'user', text: 'persisted u1' },
+      { id: 2, role: 'assistant', text: 'persisted a1' },
+      { id: 3, role: 'user', text: '[Handoff Draft Preview]', ephemeral: true },
+    ]
+    expect(findUndoBoundary(msgs)).toEqual({ lastUserIndex: 0, lastUserMsgId: 1 })
+    expect(findUndoBoundary([{ id: 1, role: 'user', text: '!ls', ephemeral: true }])).toBeNull()
+  })
 })
 
 describe('syncUndoToDb（真实 temp DB, W1-t13）', () => {

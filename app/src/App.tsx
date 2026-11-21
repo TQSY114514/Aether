@@ -18,6 +18,7 @@ import { useUI } from '@/components/ui/feedback'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import CheckpointTimelineDrawer from '@/components/chat/CheckpointTimelineDrawer'
 import BtwDrawer from '@/components/chat/BtwDrawer'
+import HandoffModal from '@/components/chat/HandoffModal'
 import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
 import { useFeatureFlag } from '@/utils/featureFlags'
 import { PanelLeft, ChevronLeft } from 'lucide-react'
@@ -253,8 +254,8 @@ export default function App() {
       when: () => !shortcutsOpenRef.current, // ShortcutOverlay handles its own ESC
       run: () => {
         const s = useStore.getState()
-        if (s.btwOpen) {
-          // If BTW drawer is open, Escape closes the drawer, do not stop main generation
+        if (s.btwOpen || s.handoffOpen) {
+          // If BTW drawer or Handoff modal is open, Escape closes the overlay, do not stop main generation
           return
         }
         if (s.sending) {
@@ -334,6 +335,7 @@ export default function App() {
         </main>
         <CheckpointTimelineDrawer />
         <BtwDrawer />
+        <HandoffModal />
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

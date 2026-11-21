@@ -267,6 +267,7 @@ export async function runSession({
   // dbSessionId == null → 建新会话行（W2-t17 自动标题: 首条 prompt 前 40 字）;
   // 非 null（/use /fork 置入）→ 复用既有行，不重复建。
   let sessionRowId = null
+  let priorMessages = []
   if (db) {
     const adapter = taskDbAdapter(db)
     try {
@@ -278,6 +279,14 @@ export async function runSession({
         sessionRowId = Number(adapter.createSession({ title, parentSessionId: null }).lastInsertRowid)
       } else {
         sessionRowId = Number(dbSessionId)
+        try {
+          const rows = db.prepare(
+            "SELECT role, content FROM message WHERE session_id = ? AND role IN ('user', 'assistant') ORDER BY id ASC"
+          ).all(sessionRowId)
+          priorMessages = rows
+            .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
+            .map((m) => ({ role: m.role, content: m.content }))
+        } catch { priorMessages = [] }
       }
       // 用户消息在运行前落库：agent 抛错也保留该行（中断轮次 = 合法的"无回复"态）
       adapter.addMessage({ session_id: sessionRowId, role: 'user', content: String(prompt || '') })
@@ -345,14 +354,104 @@ export async function runSession({
   try { require('../electron/tools/sandbox').setWorkspaceRoot(ws) } catch {}
   try { await connectMcpServers({ db }) } catch {}
   try { await runSessionHooks('SessionStart', { sessionId, timestamp: new Date().toISOString() }) } catch {}
+  let effectiveBudget = Number(model?.context_window) > 0 ? Number(model.context_window) : 0
+  if (!effectiveBudget && db && model?.id != null) {
+    try {
+      const mRow = db.prepare('SELECT context_window FROM model WHERE id = ?').get(model.id)
+      if (Number(mRow?.context_window) > 0) effectiveBudget = Number(mRow.context_window)
+    } catch { /* ignore */ }
+  }
+  if (!effectiveBudget) effectiveBudget = 32000
+  const effectiveModel = model && typeof model === 'object' ? { ...model, context_window: effectiveBudget } : model
+
+  let initialMessagesOption = {}
+  if (priorMessages.length > 0) {
+    let bounded = [...priorMessages, { role: 'user', content: String(prompt || '') }]
+    try {
+      const compMod = await import('../electron/llm/compaction.js')
+      const maybeCompact = compMod.maybeCompact || compMod.default?.maybeCompact
+      const estimateMessagesTokens = compMod.estimateMessagesTokens || compMod.default?.estimateMessagesTokens
+      const estimateTextTokens = compMod.estimateTextTokens || compMod.default?.estimateTextTokens
+
+      let prefixTokens = 0
+      if (db) {
+        try {
+          const scMod = await import('../electron/llm/sessionContext.js')
+          const buildSessionContext = scMod.buildSessionContext || scMod.default?.buildSessionContext
+          if (typeof buildSessionContext === 'function') {
+            const { prefix } = buildSessionContext({ db, sessionId, personaId, userMessage: String(prompt || '') })
+            if (Array.isArray(prefix) && prefix.length > 0 && typeof estimateMessagesTokens === 'function') {
+              prefixTokens = estimateMessagesTokens(prefix, effectiveProvider, effectiveModel)
+            }
+          }
+        } catch { prefixTokens = 0 }
+      }
+
+      let toolsTokens = 3000
+      try {
+        const regMod = await import('../electron/tools/registry.js')
+        const toolsPayload = regMod.toolsPayload || regMod.default?.toolsPayload
+        if (typeof toolsPayload === 'function' && typeof estimateTextTokens === 'function') {
+          const payload = toolsPayload(agentMode, { db })
+          const measured = estimateTextTokens(JSON.stringify(payload || []))
+          if (Number.isFinite(measured) && measured > 0) toolsTokens = measured
+        }
+      } catch { toolsTokens = 3000 }
+
+      const systemAndResponseReserve = Math.min(6000, Math.max(2500, Math.floor(effectiveBudget * 0.25)))
+      const historyBudget = Math.min(
+        effectiveBudget,
+        Math.max(1024, effectiveBudget - prefixTokens - toolsTokens - systemAndResponseReserve)
+      )
+
+      if (typeof maybeCompact === 'function') {
+        const canCallLlm = Boolean(effectiveProvider && (effectiveProvider.api_url || effectiveProvider.base_url))
+        const compacted = await maybeCompact({
+          provider: canCallLlm ? effectiveProvider : null,
+          model: effectiveModel,
+          messages: bounded,
+          budget: historyBudget,
+          sessionId: sessionRowId,
+          db,
+          wsRoot: ws,
+        })
+        if (Array.isArray(compacted) && compacted.length > 0) {
+          bounded = compacted
+        }
+      }
+      if (typeof estimateMessagesTokens === 'function' && estimateMessagesTokens(bounded, effectiveProvider, effectiveModel) > historyBudget) {
+        const newest = bounded[bounded.length - 1]
+        const summaryHead = bounded.length > 1
+          && bounded[0]?.role === 'system'
+          && typeof bounded[0]?.content === 'string'
+          && bounded[0].content.includes('[context compaction]')
+          ? bounded[0]
+          : null
+        const base = summaryHead && estimateMessagesTokens([summaryHead, ...(newest ? [newest] : [])], effectiveProvider, effectiveModel) <= historyBudget
+          ? [summaryHead, ...(newest ? [newest] : [])]
+          : (newest ? [newest] : [])
+        const insertAt = summaryHead && base[0] === summaryHead ? 1 : 0
+        const startIdx = summaryHead ? 1 : 0
+        for (let i = bounded.length - 2; i >= startIdx; i--) {
+          const candidate = [...base.slice(0, insertAt), bounded[i], ...base.slice(insertAt)]
+          if (estimateMessagesTokens(candidate, effectiveProvider, effectiveModel) > historyBudget) break
+          base.splice(insertAt, 0, bounded[i])
+        }
+        bounded = base
+      }
+    } catch { /* best-effort context cap; keep bounded priorMessages + current prompt */ }
+    initialMessagesOption = { messages: bounded }
+  }
+
   let result
   let hasAppendedText = false
   let hasAppendedError = false
   try {
     result = await runAgentImpl({
       prompt: String(prompt || ''),
+      ...initialMessagesOption,
       provider: effectiveProvider,
-      model,
+      model: effectiveModel,
       db,
       personaId,
       workspace: ws,

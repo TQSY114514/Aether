@@ -14,6 +14,24 @@
 const SLOW = process.argv.includes('--slow')
 const CRASH = process.argv.includes('--crash')
 const DEFUNCT = process.argv.includes('--defunct')
+const PUSH_DIAG = process.argv.includes('--push-diag')
+const HANG_INIT = process.argv.includes('--hang-init')
+const HANG_DIAG = process.argv.includes('--hang-diag')
+const EMPTY_PULL_ON_CLEAN = process.argv.includes('--empty-pull-on-clean')
+const STALE_PUSH = process.argv.includes('--stale-push')
+const UNVERSIONED_STALE_PUSH = process.argv.includes('--unversioned-stale-push')
+const PUSH_UNVERSIONED_ONLY = process.argv.includes('--push-unversioned-only')
+const SLOW_INIT_ARG = process.argv.find(a => a.startsWith('--slow-init='))
+const SLOW_INIT_MS = SLOW_INIT_ARG ? parseInt(SLOW_INIT_ARG.slice('--slow-init='.length), 10) : 0
+const SLOW_PULL_ARG = process.argv.find(a => a.startsWith('--slow-pull='))
+const SLOW_PULL_MS = SLOW_PULL_ARG ? parseInt(SLOW_PULL_ARG.slice('--slow-pull='.length), 10) : 0
+const EXIT_MARKER_ARG = process.argv.find(a => a.startsWith('--exit-once-marker='))
+const EXIT_MARKER = EXIT_MARKER_ARG ? EXIT_MARKER_ARG.slice('--exit-once-marker='.length) : null
+const GATE_INIT_ARG = process.argv.find(a => a.startsWith('--gate-init-file='))
+const GATE_INIT_FILE = GATE_INIT_ARG ? GATE_INIT_ARG.slice('--gate-init-file='.length) : null
+const LOG_ARG = process.argv.find(a => a.startsWith('--log-file='))
+const LOG_FILE = LOG_ARG ? LOG_ARG.slice('--log-file='.length) : null
+const docTexts = new Map()
 
 if (DEFUNCT) {
   process.exit(1)
@@ -59,8 +77,26 @@ const write = (msg) => {
 }
 
 const handle = (msg) => {
+  if (LOG_FILE && msg.method) {
+    try {
+      const text = msg.method === 'textDocument/didOpen'
+        ? (msg.params?.textDocument?.text ?? null)
+        : msg.method === 'textDocument/didChange'
+          ? (msg.params?.contentChanges?.[0]?.text ?? null)
+          : null
+      require('fs').appendFileSync(
+        LOG_FILE,
+        JSON.stringify({
+          method: msg.method,
+          version: msg.params?.textDocument?.version ?? null,
+          ...(text !== null ? { text } : {}),
+        }) + '\n'
+      )
+    } catch {}
+  }
   if (msg.method === 'initialize') {
-    write({
+    if (HANG_INIT) return // never respond — exercises init deadline
+    const reply = () => write({
       jsonrpc: '2.0',
       id: msg.id,
       result: {
@@ -68,6 +104,24 @@ const handle = (msg) => {
         serverInfo: { name: 'fixture-lsp', version: '1.0.0' },
       },
     })
+    if (GATE_INIT_FILE) {
+      const fs = require('fs')
+      if (fs.existsSync(GATE_INIT_FILE)) {
+        reply()
+      } else {
+        const poll = setInterval(() => {
+          if (fs.existsSync(GATE_INIT_FILE)) {
+            clearInterval(poll)
+            reply()
+          }
+        }, 15)
+        if (poll.unref) poll.unref()
+      }
+    } else if (SLOW_INIT_MS > 0) {
+      setTimeout(reply, SLOW_INIT_MS)
+    } else {
+      reply()
+    }
     return
   }
   if (msg.method === 'initialized') return // notification
@@ -135,20 +189,120 @@ const handle = (msg) => {
     return
   }
   if (msg.method === 'textDocument/diagnostic') {
-    write({
-      jsonrpc: '2.0',
-      id: msg.id,
-      result: {
+    if (HANG_DIAG) return // never respond — exercises pull deadline
+    if (PUSH_UNVERSIONED_ONLY) {
+      write({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } })
+      return
+    }
+    const uri = msg.params?.textDocument?.uri
+    // Snapshot document contents upon receiving the pull request, delaying only the reply.
+    let result
+    if (EMPTY_PULL_ON_CLEAN && uri && docTexts.has(uri)) {
+      const text = docTexts.get(uri) || ''
+      const items = text.includes('BAD_SYNTAX')
+        ? [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' }]
+        : []
+      result = { kind: 'full', items }
+    } else {
+      result = {
         kind: 'full',
         items: [
           { severity: 1, message: 'Type X is not assignable to Y', range: { start: { line: 12, character: 0 } } },
           { severity: 2, message: 'Unused variable foo', range: { start: { line: 30, character: 2 } } },
         ],
-      },
-    })
+      }
+    }
+    const sendPull = () => write({ jsonrpc: '2.0', id: msg.id, result })
+    if (SLOW_PULL_MS > 0) setTimeout(sendPull, SLOW_PULL_MS)
+    else sendPull()
     return
   }
-  if (msg.method === 'textDocument/didOpen') return // notification
+  if (msg.method === 'textDocument/didOpen' || msg.method === 'textDocument/didChange') {
+    if (msg.params && msg.params.textDocument && msg.params.textDocument.uri) {
+      const uri = msg.params.textDocument.uri
+      const version = msg.params.textDocument.version
+      const text = msg.method === 'textDocument/didOpen'
+        ? (msg.params.textDocument.text || '')
+        : ((msg.params.contentChanges && msg.params.contentChanges[0] && msg.params.contentChanges[0].text) || '')
+      docTexts.set(uri, text)
+
+      if (UNVERSIONED_STALE_PUSH && typeof version === 'number' && version >= 2) {
+        // Emit an unversioned stale push before emitting the versioned clean push
+        write({
+          jsonrpc: '2.0',
+          method: 'textDocument/publishDiagnostics',
+          params: {
+            uri,
+            diagnostics: [{ severity: 1, message: 'UNVERSIONED_STALE_ERR', range: { start: { line: 0, character: 0 } } }],
+          },
+        })
+        setTimeout(() => {
+          write({
+            jsonrpc: '2.0',
+            method: 'textDocument/publishDiagnostics',
+            params: { uri, version, diagnostics: [] },
+          })
+        }, 30)
+        return
+      }
+
+      if (STALE_PUSH && typeof version === 'number' && version >= 2) {
+        // Emit a stale push for version - 1 before emitting the current version
+        write({
+          jsonrpc: '2.0',
+          method: 'textDocument/publishDiagnostics',
+          params: {
+            uri,
+            version: version - 1,
+            diagnostics: [{ severity: 1, message: 'STALE_ERR_FROM_OLD_VERSION', range: { start: { line: 0, character: 0 } } }],
+          },
+        })
+        setTimeout(() => {
+          const diags = text.includes('BAD_SYNTAX')
+            ? [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' }]
+            : []
+          write({
+            jsonrpc: '2.0',
+            method: 'textDocument/publishDiagnostics',
+            params: { uri, version, diagnostics: diags },
+          })
+        }, 30)
+        return
+      }
+
+      if (PUSH_DIAG || PUSH_UNVERSIONED_ONLY) {
+        if (EMPTY_PULL_ON_CLEAN && !text.includes('BAD_SYNTAX')) {
+          // Intentionally omit push when clean so the client exercises empty pull fallback
+          return
+        }
+        const diags = text.includes('BAD_SYNTAX')
+          ? [
+              { severity: 2, message: 'Style hint on line 1', range: { start: { line: 0, character: 0 } } },
+              { severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' },
+            ]
+          : []
+        const params = (!PUSH_UNVERSIONED_ONLY && typeof version === 'number')
+          ? { uri, version, diagnostics: diags }
+          : { uri, diagnostics: diags }
+        write({
+          jsonrpc: '2.0',
+          method: 'textDocument/publishDiagnostics',
+          params,
+        })
+      }
+    }
+    return
+  }
+  if (msg.method === 'textDocument/didSave') {
+    if (EXIT_MARKER) {
+      const fs = require('fs')
+      if (!fs.existsSync(EXIT_MARKER)) {
+        fs.writeFileSync(EXIT_MARKER, 'exited', 'utf8')
+        process.exit(0)
+      }
+    }
+    return
+  }
   // Unknown request — reply empty.
   if (msg.id !== undefined && msg.id !== null) {
     write({ jsonrpc: '2.0', id: msg.id, result: null })

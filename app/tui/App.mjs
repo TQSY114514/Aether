@@ -257,6 +257,10 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   // W2-t16: /delete 两步确认——pendingDeleteRef 持有待确认删除的 dbSessionId;
   // 任何其他命令/普通输入都会清除（见 handleCommand 入口与 startSession）。
   const pendingDeleteRef = useRef(null)
+  // /handoff 两步预览/编辑/确认——持有 { parentSessionId, title, prompt, source }
+  const pendingHandoffRef = useRef(null)
+  const handoffEpochRef = useRef(0)
+  const handoffInFlightRef = useRef(false)
   const allowRulesRef = useRef(null)
   // W4-t24: 三态规则存储（allow/deny/ask）。创建时从 settings 表载入持久化规则
   // （loadPersistedRules 已复制进内存 Map, db 连接用完即关——不跨渲染持有连接）。
@@ -370,6 +374,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   const startSession = useCallback(async (promptText) => {
     if (sessionBusyRef.current) return
     pendingDeleteRef.current = null // W2-t16: 普通输入取消待确认的删除
+    pendingHandoffRef.current = null
+    handoffInFlightRef.current = false
+    handoffEpochRef.current += 1
     sessionBusyRef.current = true
     try {
       // W3-t18: @文件引用注入（≤50KB 内容块 / 超限截断标注 / 缺失原样保留）
@@ -435,6 +442,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     const parsed = parseShellLine(text)
     if (!parsed) return
     pendingDeleteRef.current = null
+    pendingHandoffRef.current = null
+    handoffInFlightRef.current = false
+    handoffEpochRef.current += 1
     // 与 enter 提交同款清理: 清输入 + 入历史（重复 push 由去重兜底）
     historyRef.current = [...historyRef.current.filter((x) => x !== text), text].slice(-100)
     historyIdxRef.current = -1
@@ -485,7 +495,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       // 注入: user 消息带 [shell: !cmd] 上下文块（对话内载体）+ 缓冲（下次提交前置）
       const block = formatShellContext(parsed.line, truncated, exitCode)
       shellContextRef.current = [...shellContextRef.current, { command: parsed.line, output: truncated, exitCode }].slice(-5)
-      dispatch({ type: 'APPEND_USER', text: `!${parsed.line}${block}` })
+      dispatch({ type: 'APPEND_USER', text: `!${parsed.line}${block}`, ephemeral: true })
       dispatch({ type: 'STATUS', text: `!shell: exit ${exitCode}` })
     }
     run()
@@ -876,6 +886,11 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     if (!cmd) return
     // W2-t16: 除 /delete 自身外，任何命令都取消待确认的删除（两步确认取消路径）
     if (cmd.type !== 'delete') pendingDeleteRef.current = null
+    if (cmd.type !== 'handoff') {
+      pendingHandoffRef.current = null
+      handoffInFlightRef.current = false
+      handoffEpochRef.current += 1
+    }
     const db = openSessionDb(dbPath)
     try {
       if (cmd.type === 'sessions') {
@@ -885,6 +900,116 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       } else if (cmd.type === 'fork') {
         const r = forkSession(db, { title: cmd.title, parentSessionId: state.currentSessionId })
         dispatch({ type: 'SESSION_FORK', sessionId: r.lastInsertRowid, parentId: state.currentSessionId, title: cmd.title || 'fork' })
+      } else if (cmd.type === 'handoff') {
+        const st = latestState.current
+        if (st.running) {
+          dispatch({ type: 'STATUS', text: 'handoff: 请等待当前回合结束' })
+        } else if (st.dbSessionId == null) {
+          dispatch({ type: 'STATUS', text: 'handoff: 当前无持久化会话 — 请先发送一条消息' })
+        } else {
+          try {
+            const sub = String(cmd.goal || '').trim().toLowerCase()
+            const pending = pendingHandoffRef.current
+            if (sub === 'cancel') {
+              const hadDraftOrInFlight = Boolean(
+                (pending && pending.parentSessionId === st.dbSessionId) || handoffInFlightRef.current
+              )
+              pendingHandoffRef.current = null
+              handoffInFlightRef.current = false
+              handoffEpochRef.current += 1
+              dispatch({
+                type: 'STATUS',
+                text: hadDraftOrInFlight
+                  ? 'handoff: 已取消草稿'
+                  : 'handoff: 当前没有待确认草稿 — 请先执行 /handoff [goal]',
+              })
+            } else if (pending && pending.parentSessionId === st.dbSessionId && sub === 'edit') {
+              const editEpoch = ++handoffEpochRef.current
+              try { db?.close() } catch {}
+              const file = editorTempPath()
+              try {
+                writeFileSync(file, pending.prompt, 'utf8')
+                const editorCmd = resolveEditorCommand()
+                dispatch({ type: 'STATUS', text: 'handoff: 已打开编辑器，保存并关闭后返回…' })
+                const { child, wait } = spawnEditor(editorCmd, file)
+                const watchdog = setTimeout(() => { try { child.kill() } catch {} }, 5 * 60 * 1000)
+                const t0 = Date.now()
+                await wait
+                clearTimeout(watchdog)
+                if (Date.now() - t0 < 800) {
+                  const until = Date.now() + 10000
+                  while (Date.now() < until) {
+                    await new Promise((r) => setTimeout(r, 400))
+                    const probe = readEditorResult(file)
+                    if (probe != null && probe !== pending.prompt) break
+                  }
+                }
+                if (handoffEpochRef.current !== editEpoch || latestState.current.dbSessionId !== pending.parentSessionId) {
+                  return
+                }
+                const edited = readEditorResult(file)
+                if (edited != null && edited.trim()) {
+                  pendingHandoffRef.current = { ...pending, prompt: edited.trim() }
+                  dispatch({ type: 'APPEND_USER', text: `[Handoff Draft Updated — ${pending.title}]\n${edited.trim()}`, ephemeral: true })
+                  dispatch({ type: 'STATUS', text: 'handoff: 草稿已更新 — 输入 /handoff confirm (或 /handoff) 创建新会话，/handoff cancel 取消' })
+                } else {
+                  dispatch({ type: 'STATUS', text: 'handoff: 编辑为空或取消，保留原草稿（/handoff confirm 提交）' })
+                }
+              } finally {
+                try { rmSync(file, { force: true }) } catch {}
+              }
+            } else if (pending && pending.parentSessionId === st.dbSessionId && (!sub || sub === 'confirm')) {
+              const cjs = await import('../electron/llm/handoff.js')
+              const handoff = cjs.commitHandoff ? cjs : (cjs.default || {})
+              const created = handoff.commitHandoff({
+                db,
+                parentSessionId: pending.parentSessionId,
+                prompt: pending.prompt,
+                title: pending.title,
+              })
+              pendingHandoffRef.current = null
+              handoffInFlightRef.current = false
+              handoffEpochRef.current += 1
+              dispatch({ type: 'RESET' })
+              dispatch({ type: 'SESSION_ID_SET', sessionId: created.sessionId })
+              dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) })
+              dispatch({ type: 'MESSAGES_LOAD', messages: loadSessionMessages(db, created.sessionId) })
+              dispatch({ type: 'STATUS', text: `handoff: 已交接至新会话 #${created.sessionId} (${pending.source})` })
+            } else if (sub === 'confirm' || sub === 'edit') {
+              dispatch({ type: 'STATUS', text: 'handoff: 当前没有待确认草稿 — 请先执行 /handoff [goal]' })
+            } else {
+              const draftEpoch = ++handoffEpochRef.current
+              handoffInFlightRef.current = true
+              dispatch({ type: 'STATUS', text: 'handoff: 正在提炼上下文...' })
+              try {
+                const cjs = await import('../electron/llm/handoff.js')
+                const handoff = cjs.generateHandoffDraft ? cjs : (cjs.default || {})
+                const draft = await handoff.generateHandoffDraft({
+                  db,
+                  sessionId: st.dbSessionId,
+                  goal: cmd.goal || '',
+                })
+                if (handoffEpochRef.current !== draftEpoch || latestState.current.dbSessionId !== st.dbSessionId) {
+                  return
+                }
+                pendingHandoffRef.current = {
+                  parentSessionId: st.dbSessionId,
+                  title: draft.title,
+                  prompt: draft.draftPrompt,
+                  source: draft.source,
+                }
+                dispatch({ type: 'APPEND_USER', text: `[Handoff Draft Preview (${draft.source}) — ${draft.title}]\n\n${draft.draftPrompt}`, ephemeral: true })
+                dispatch({ type: 'STATUS', text: 'handoff: 草稿已预览 — 输入 /handoff confirm (或 /handoff) 创建，/handoff edit 编辑，/handoff cancel 取消' })
+              } finally {
+                if (handoffEpochRef.current === draftEpoch) {
+                  handoffInFlightRef.current = false
+                }
+              }
+            }
+          } catch (err) {
+            dispatch({ type: 'STATUS', text: `handoff failed: ${err && err.message ? err.message : String(err)}` })
+          }
+        }
       } else if (cmd.type === 'memory') {
         // todo 8：/memory <关键词> → autoMemory.search（keyword 兜底）→ 卡片
         const { results } = searchMemory(dbPath, cmd.query || '')

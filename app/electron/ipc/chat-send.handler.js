@@ -200,13 +200,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
     if (!model) {
       db.addMessage({ session_id: sessionId, role: 'assistant', content: '错误: 模型未找到', status: 'error' })
       getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-      return { messageId: 0 }
+      return { messageId: 0, error: 'Model not found' }
     }
     let provider = db.getProvider(model.provider_id)
     if (!provider) {
       db.addMessage({ session_id: sessionId, role: 'assistant', content: '错误: 供应商未找到', status: 'error' })
       getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-      return { messageId: 0 }
+      return { messageId: 0, error: 'Provider not found' }
     }
 
         // Model suggestion (auto-routing rationale for the renderer).
@@ -609,22 +609,52 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           }
         }
+        let loopReturned = ''
+        let orchestrateFailed = false
+        let orchestrateErrorMsg = null
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
             const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', parentSessionId: sessionId, callbacks: {
               ...cb,
               onFileSummary: (summary) => { mergeFileSummary(summary) },
             } })
-            const returned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
-            finalContent = streamedContent || returned || ''
-          } catch {
-            const returned = await runWithOverflowHeal()
-            finalContent = streamedContent || returned || ''
+            if (orc && orc.ok && orc.summary) {
+              const hasFailedSubtask = Array.isArray(orc.results) && orc.results.some(r => r && r.success === false)
+              loopReturned = orc.summary
+              if (hasFailedSubtask) {
+                orchestrateFailed = true
+                const failed = orc.results.find(r => r && r.success === false)
+                orchestrateErrorMsg = (failed && (failed.error || failed.output)) || 'Orchestration subtask failed'
+              }
+            } else if (orc && orc.ok === false) {
+              orchestrateFailed = true
+              orchestrateErrorMsg = orc.error || 'Orchestration failed'
+              loopReturned = `[agent error: ${orchestrateErrorMsg}]`
+            } else {
+              loopReturned = await runWithOverflowHeal()
+            }
+            finalContent = streamedContent || loopReturned || ''
+          } catch (err) {
+            orchestrateFailed = true
+            orchestrateErrorMsg = (err && err.message) || String(err)
+            loopReturned = `[agent error: ${orchestrateErrorMsg}]`
+            finalContent = streamedContent || loopReturned || ''
           }
         } else {
-          const returned = await runWithOverflowHeal()
-          finalContent = streamedContent || returned || ''
+          loopReturned = await runWithOverflowHeal()
+          finalContent = streamedContent || loopReturned || ''
         }
+        const wasAborted = controller.signal.aborted
+        const loopError =
+          wasAborted
+            ? null
+            : orchestrateFailed
+              ? (orchestrateErrorMsg ? `[agent error: ${orchestrateErrorMsg}]` : '[agent error: Orchestration failed]')
+              : (typeof loopReturned === 'string' && /^\[agent error:/i.test(loopReturned.trim()))
+                ? loopReturned.trim()
+                : (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim()))
+                  ? finalContent.trim()
+                  : null
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
         const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)
@@ -636,15 +666,17 @@ ipcMain.handle('chat:complete', handleChatComplete)
         const _thinking = cb.getThinkingData ? cb.getThinkingData() : null
         db.updateMessage(msgId, {
           content: finalContent,
-          status: 'success',
+          status: wasAborted ? 'aborted' : (loopError ? 'error' : 'success'),
+          ...(loopError ? { error_message: loopError } : {}),
           token_count: tokens,
           thinking_content: _thinking?.content || null,
           thinking_duration_ms: _thinking?.durationMs || null,
         })
-        if (needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
+        const isSuccess = !wasAborted && !loopError
+        if (isSuccess && needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
-        if (autoMemoryOn) {
+        if (isSuccess && autoMemoryOn) {
           autoMemory.sync({
             db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot,
             onMemorySaved: (payload) => {
@@ -661,11 +693,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
         try { db.setSetting('llm.lastProvider', String(provider?.id || provider || '')); db.setSetting('llm.lastModel', String(model?.model_name || model?.id || model || '')) } catch {}
         // Habit learner: detect recurring preferences and promote them to a
         // user-habits skill once they repeat. Also fire-and-forget.
-        if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
+        if (isSuccess && autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
         // Memory → Skill bridge: every 20 messages, run a memory audit to
         // detect patterns and draft new skills from accumulated memories.
         // Fire-and-forget, never blocks the reply.
-        if (autoMemoryOn && sessionId && db) {
+        if (isSuccess && autoMemoryOn && sessionId && db) {
           try {
             const msgCount = (db.allRows('SELECT COUNT(*) as c FROM message WHERE session_id = ?', [sessionId]) || [])[0]?.c || 0
             if (msgCount > 0 && msgCount % 20 === 0) {
@@ -692,7 +724,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           } catch {}
         }
-        if (autoMemoryOn && sessionId && db) {
+        if (!loopError && autoMemoryOn && sessionId && db) {
           try {
             const bridge = require('../llm/memorySkillBridge')
             const mems = (db.getMemoriesScoped && recallWs) ? db.getMemoriesScoped(recallWs, 30) : (db.getMemories ? db.getMemories(30) : [])
@@ -725,17 +757,24 @@ ipcMain.handle('chat:complete', handleChatComplete)
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
+        if (loopError) {
+          return { messageId: msgId, error: loopError, modelSuggestion }
+        }
+        if (wasAborted) {
+          return { messageId: msgId, aborted: true, modelSuggestion }
+        }
         return { messageId: msgId, modelSuggestion }
       } catch (err) {
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         abortControllers.delete(msgId)
-        const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
+        const isAbort = err.name === 'AbortError' || controller.signal.aborted
+        const errMsg = isAbort ? '已中止' : (err.message || String(err))
         // Preserve accumulated content and file summary on abort (tool-loop path)
         const preserved = streamedContent || finalContent || ''
         const _errThinking = cb?.getThinkingData ? cb.getThinkingData() : null
         const updatePayload = {
           content: preserved,
-          status: 'aborted',
+          status: isAbort ? 'aborted' : 'error',
           error_message: errMsg,
           thinking_content: _errThinking?.content || null,
           thinking_duration_ms: _errThinking?.durationMs || null,
@@ -752,7 +791,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         db.updateMessage(msgId, updatePayload)
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
-        return { messageId: msgId, modelSuggestion }
+        return isAbort
+          ? { messageId: msgId, aborted: true, modelSuggestion }
+          : { messageId: msgId, error: errMsg, modelSuggestion }
       } finally {
         activeToolLoops.delete(sessionId)
       }
@@ -931,7 +972,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             thinking_duration_ms: streamThinkingDurationMs || null,
           })
           getWebContents()?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
-          return { messageId: msgId }
+          return { messageId: msgId, aborted: true }
         }
         lastError = err.message
         db.updateMessage(msgId, {
@@ -954,7 +995,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     }
 
     if (lastError) getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-    return { messageId: 0, modelSuggestion }
+    return { messageId: 0, error: lastError || 'Send failed', modelSuggestion }
   })
 
   // Generate a concise, summarized title for a session's first exchange.
