@@ -560,8 +560,14 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     const { getWorkspaceRoot } = require('../tools/sandbox')
     let wsRoot = cwd
     if (!wsRoot && sessionId != null) {
-      const cfg = db.getSessionConfig(sessionId)
-      if (cfg && cfg.workspace) wsRoot = cfg.workspace
+      try {
+        const sess = typeof db.getSession === 'function' ? db.getSession(sessionId) : null
+        if (sess && sess.cwd) wsRoot = sess.cwd
+      } catch {}
+      if (!wsRoot) {
+        const cfg = db.getSessionConfig(sessionId)
+        if (cfg && cfg.workspace) wsRoot = cfg.workspace
+      }
     }
     if (!wsRoot) {
       wsRoot = getWorkspaceRoot(sessionId) || getWorkspaceRoot()
@@ -573,6 +579,16 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     try {
       const { extractAndApplyPatches } = require('../llm/objectiveArena')
       const result = extractAndApplyPatches(wsRoot, content)
+      if (result.ok && result.appliedCount > 0 && sessionId != null && Array.isArray(result.filesModified)) {
+        try {
+          const shadowGit = require('../llm/shadowGit')
+          const absPaths = result.filesModified.map((f) => path.resolve(wsRoot, f))
+          shadowGit.commitCheckpoint(sessionId, wsRoot, {
+            affectedPaths: absPaths,
+            message: `arena_patch_${Date.now()}`,
+          })
+        } catch {}
+      }
       return {
         ok: Boolean(result.ok && result.appliedCount > 0),
         appliedCount: result.appliedCount,

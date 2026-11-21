@@ -642,14 +642,34 @@ export function ensureQuestionListener() {
   _questionListenerInstalled = true
   window.electronAPI.chat.onQuestion?.((payload: any) => {
     if (!payload || !payload.reqId) return
-    getStore().setState((s) => ({
-      pendingQuestions: [...s.pendingQuestions, payload],
-    }))
+    getStore().setState((s) => {
+      if (s.pendingQuestions.some((q) => q.reqId === payload.reqId)) return s
+      return { pendingQuestions: [...s.pendingQuestions, payload] }
+    })
   })
   window.electronAPI.chat.onQuestionExpired?.(({ reqId }: { reqId: string }) => {
     if (!reqId) return
     getStore().setState((s) => ({
       pendingQuestions: s.pendingQuestions.filter((q) => q.reqId !== reqId),
+    }))
+  })
+}
+
+let _permissionListenerInstalled = false
+export function ensurePermissionListener() {
+  if (_permissionListenerInstalled) return
+  _permissionListenerInstalled = true
+  window.electronAPI.chat.onPermissionRequest?.((payload: any) => {
+    if (!payload || !payload.reqId) return
+    getStore().setState((s) => {
+      if (s.permissionRequests.some((r) => r.reqId === payload.reqId)) return s
+      return { permissionRequests: [...s.permissionRequests, payload] }
+    })
+  })
+  window.electronAPI.chat.onPermissionExpired?.(({ reqId }: { reqId: string }) => {
+    if (!reqId) return
+    getStore().setState((s) => ({
+      permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId),
     }))
   })
 }
@@ -676,4 +696,5 @@ export function ensureAllListeners() {
   ensureSkillPatchedListener()
   ensureTaskListeners()
   ensureQuestionListener()
+  ensurePermissionListener()
 }

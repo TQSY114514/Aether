@@ -5,6 +5,7 @@ import InputReference from '@/components/chat/InputReference'
 import { Send, Square, Paperclip, Zap, Leaf, HelpCircle, ListPlus, Folder, FolderOpen, ExternalLink } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
 import QueueDock from './QueueDock'
+import QuestionDialog from './QuestionDialog'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -612,6 +613,7 @@ export default function ChatInput() {
         />
 
         <AgentTaskDeck sessionId={currentSessionId} />
+        <QuestionDialog />
 
         {/* Unified Floating Composer Card */}
         <div

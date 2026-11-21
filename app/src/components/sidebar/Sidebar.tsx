@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, Settings, ChevronLeft, Trash2, Search, Pin, Brain, Download, Loader2, TerminalSquare, PanelLeft, FlaskConical } from 'lucide-react'
+import { MessageSquare, Plus, Settings, ChevronLeft, Trash2, Search, Pin, Download, Loader2, TerminalSquare, PanelLeft, FlaskConical, Folder } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import { stripChannelMarkers } from '@/utils/markdown'
@@ -10,6 +10,14 @@ import QuickControlDeck from './QuickControlDeck'
 
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
+
+function getDirTag(cwd: string | null | undefined): string {
+  if (!cwd) return ''
+  const clean = String(cwd).replace(/[\\/]+$/, '')
+  if (!clean) return cwd
+  const parts = clean.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || clean
+}
 
 function relativeTime(iso: string | undefined): string {
   if (!iso) return ''
@@ -27,19 +35,21 @@ function relativeTime(iso: string | undefined): string {
   return new Date(then).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
 }
 
-function getSessionGroups(sessions: Session[]) {
+function getSessionGroups(sessions: Session[], needsInputIds: Set<number>) {
   const now = Date.now()
   const todayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime()
   const yesterdayStart = todayStart - 86400000
   const weekStart = todayStart - 7 * 86400000
+  const needsInput: Session[] = []
   const pinned: Session[] = []
-  const groups: { label: string; sessions: Session[]; count: number }[] = [
+  const groups: { label: string; sessions: Session[]; count: number; kind?: 'needs_input' }[] = [
     { label: t('sidebar.group.today'), sessions: [], count: 0 },
     { label: t('sidebar.group.yesterday'), sessions: [], count: 0 },
     { label: t('sidebar.group.week'), sessions: [], count: 0 },
     { label: t('sidebar.group.older'), sessions: [], count: 0 },
   ]
   for (const s of sessions) {
+    if (needsInputIds.has(s.id)) { needsInput.push(s); continue }
     if (s.pinned) { pinned.push(s); continue }
     const raw = s.updated_at || s.created_at || ''
     const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
@@ -49,8 +59,12 @@ function getSessionGroups(sessions: Session[]) {
     if (date >= weekStart) { groups[2].sessions.push(s); groups[2].count++; continue }
     groups[3].sessions.push(s); groups[3].count++
   }
-  // Pinned group first, then date groups (sorted by updated_at DESC within each).
-  const result: { label: string; sessions: Session[]; count: number }[] = []
+  // Needs Input first (highest attention priority), then Pinned, then date groups.
+  const result: { label: string; sessions: Session[]; count: number; kind?: 'needs_input' }[] = []
+  if (needsInput.length > 0) {
+    needsInput.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+    result.push({ label: t('sidebar.group.needs_input'), sessions: needsInput, count: needsInput.length, kind: 'needs_input' })
+  }
   if (pinned.length > 0) {
     pinned.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
     result.push({ label: t('sidebar.group.pinned'), sessions: pinned, count: pinned.length })
@@ -65,6 +79,8 @@ export default function Sidebar() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const language = useStore((s) => s.language)
+  const pendingQuestions = useStore((s) => s.pendingQuestions)
+  const permissionRequests = useStore((s) => s.permissionRequests)
   const activeStreamingIds = useStore((s) => {
     const keys = Object.keys(s.streamingBySession)
     return keys.length > 0 ? keys.filter(id => Boolean(s.streamingBySession[Number(id)])).join(',') : ''
@@ -72,7 +88,6 @@ export default function Sidebar() {
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
   const selectSession = useStore((s) => s.selectSession)
-  const createSession = useStore((s) => s.createSession)
   const deleteSession = useStore((s) => s.deleteSession)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
@@ -82,20 +97,67 @@ export default function Sidebar() {
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [cwdFilter, setCwdFilter] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; session: Session } | null>(null)
   const lowerQuery = searchQuery.toLowerCase()
 
-  const filteredSessions = useMemo(() => {
-    // Show sessions that have had at least one message.
-    // Sessions with placeholder titles are kept visible if they have messages —
-    // the auto-title generation happens asynchronously after the first response,
-    // so hiding them would make the chat disappear mid-conversation.
+  const needsInputIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const q of pendingQuestions) {
+      if (typeof q.sessionId === 'number') ids.add(q.sessionId)
+    }
+    for (const r of permissionRequests) {
+      if (typeof r.sessionId === 'number') ids.add(r.sessionId)
+    }
+    return ids
+  }, [pendingQuestions, permissionRequests])
+
+  const visibleSessions = useMemo(() => {
+    // Show sessions that have had at least one message or active state.
     const streamingSet = new Set(activeStreamingIds ? activeStreamingIds.split(',') : [])
-    const withMessages = sessions.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingSet.has(String(s.id)))
-    if (!lowerQuery) return withMessages
-    return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
-  }, [sessions, lowerQuery, activeStreamingIds])
-  const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
+    return sessions.filter(
+      (s) =>
+        s.last_message ||
+        (s.title && !PLACEHOLDER_TITLES.has(s.title)) ||
+        streamingSet.has(String(s.id)) ||
+        needsInputIds.has(s.id)
+    )
+  }, [sessions, activeStreamingIds, needsInputIds])
+
+  const cwdOptions = useMemo(() => {
+    const map = new Map<string, { cwd: string; label: string; count: number }>()
+    for (const s of visibleSessions) {
+      if (!s.cwd) continue
+      const key = s.cwd.replace(/[\\/]+$/, '').toLowerCase()
+      if (!key) continue
+      const existing = map.get(key)
+      if (existing) {
+        existing.count += 1
+      } else {
+        map.set(key, { cwd: key, label: getDirTag(s.cwd), count: 1 })
+      }
+    }
+    return Array.from(map.values())
+  }, [visibleSessions])
+
+  useEffect(() => {
+    if (cwdFilter && !cwdOptions.some((o) => o.cwd === cwdFilter)) {
+      setCwdFilter(null)
+    }
+  }, [cwdFilter, cwdOptions])
+
+  const filteredSessions = useMemo(() => {
+    return visibleSessions.filter((s) => {
+      if (cwdFilter) {
+        const key = (s.cwd || '').replace(/[\\/]+$/, '').toLowerCase()
+        if (key !== cwdFilter) return false
+      }
+      if (lowerQuery && !(s.title || '').toLowerCase().includes(lowerQuery)) return false
+      return true
+    })
+  }, [visibleSessions, cwdFilter, lowerQuery])
+
+  const groups = useMemo(() => getSessionGroups(filteredSessions, needsInputIds), [filteredSessions, needsInputIds, language])
 
   const handleDoubleClick = (session: Session) => {
     setRenamingId(session.id); setRenameValue(session.title || '')
@@ -211,7 +273,7 @@ export default function Sidebar() {
           <span>{t('chat.new')}</span>
         </button>
       </div>
-      <div className="px-2 pb-2 shrink-0">
+      <div className="px-2 pb-2 shrink-0 space-y-1.5">
         <div className="flex items-center gap-2 px-2.5 py-1 rounded-[6px] border bg-[var(--content-bg)] text-xs transition-colors input-ring" style={{ borderColor: 'var(--border)' }}>
           <Search size={13} className="text-[var(--text-muted)] shrink-0" />
           <input
@@ -226,29 +288,83 @@ export default function Sidebar() {
             </span>
           )}
         </div>
+        {cwdOptions.length >= 2 && (
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setCwdFilter(null)}
+              className="shrink-0 h-5 px-2 rounded-[5px] border text-[10.5px] font-mono transition-colors hover:bg-[var(--content-bg)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+              style={
+                cwdFilter === null
+                  ? { borderColor: 'var(--accent)', backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }
+                  : { borderColor: 'var(--border)', backgroundColor: 'transparent', color: 'var(--text-muted)' }
+              }
+            >
+              {t('sidebar.filter.all')}
+            </button>
+            {cwdOptions.map((opt) => {
+              const active = cwdFilter === opt.cwd
+              return (
+                <button
+                  key={opt.cwd}
+                  type="button"
+                  onClick={() => setCwdFilter(active ? null : opt.cwd)}
+                  title={opt.cwd}
+                  className="shrink-0 h-5 px-1.5 rounded-[5px] border text-[10.5px] font-mono flex items-center gap-1 transition-colors hover:bg-[var(--content-bg)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer max-w-[110px]"
+                  style={
+                    active
+                      ? { borderColor: 'var(--accent)', backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }
+                      : { borderColor: 'var(--border)', backgroundColor: 'transparent', color: 'var(--text-muted)' }
+                  }
+                >
+                  <Folder size={9.5} className="shrink-0" style={{ color: active ? 'var(--accent)' : 'var(--text-muted)' }} />
+                  <span className="truncate">{opt.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
         {groups.length === 0 && (
           <div className="text-center py-8 text-xs" style={{ color: 'var(--text-muted)' }}>
-            {searchQuery ? t('sidebar.no_match') : t('sidebar.no_sessions')}
+            {searchQuery || cwdFilter ? t('sidebar.no_match') : t('sidebar.no_sessions')}
           </div>
         )}
         {groups.map((group) => (
           <div key={group.label} className="mb-1">
             <div className="session-date flex items-center justify-between">
-              <span>{group.label}</span>
+              <span className="flex items-center gap-1.5" style={group.kind === 'needs_input' ? { color: 'var(--warning)' } : undefined}>
+                {group.kind === 'needs_input' && (
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse motion-reduce:animate-none" style={{ backgroundColor: 'var(--warning)' }} />
+                )}
+                {group.label}
+              </span>
               <span className="text-[10px] font-normal" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>{group.count}</span>
             </div>
-            {group.sessions.map((session) => (
+            {group.sessions.map((session) => {
+              const isNeedsInput = needsInputIds.has(session.id)
+              const isStreaming = Boolean(activeStreamingIds && activeStreamingIds.split(',').includes(String(session.id)))
+              const dirTag = getDirTag(session.cwd)
+              return (
               <div key={session.id}
                 onClick={() => { selectSession(session.id); setCurrentView('chat') }}
                 onDoubleClick={() => handleDoubleClick(session)}
                 onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
                 className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm mb-px session-item-interactive ${currentSessionId === session.id ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
                 style={currentSessionId === session.id ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
-                {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
-                  : <MessageSquare size={14} className="text-[var(--text-muted)] shrink-0" />}
-                {Boolean(activeStreamingIds && activeStreamingIds.split(',').includes(String(session.id))) && (
+                {isNeedsInput ? (
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0 animate-pulse motion-reduce:animate-none"
+                    style={{ backgroundColor: 'var(--warning)' }}
+                    title={t('sidebar.badge.needs_input')}
+                  />
+                ) : session.pinned ? (
+                  <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
+                ) : (
+                  <MessageSquare size={14} className="text-[var(--text-muted)] shrink-0" />
+                )}
+                {!isNeedsInput && isStreaming && (
                   <Loader2 size={11} className="shrink-0 animate-spin" style={{ color: 'var(--accent)' }} />
                 )}
                 {renamingId === session.id ? (
@@ -265,16 +381,39 @@ export default function Sidebar() {
                         className="flex-1 min-w-0 text-[13px]"
                         style={{ color: 'var(--text-primary)' }}
                       />
-                      <span className="text-[10px] shrink-0 tabular-nums group-hover:hidden" style={{ color: 'var(--text-muted)' }}>
-                        {relativeTime(session.updated_at || session.created_at)}
-                      </span>
+                      {isNeedsInput ? (
+                        <span
+                          className="text-[9.5px] font-mono px-1 py-0.2 rounded-[4px] border shrink-0 group-hover:hidden"
+                          style={{ borderColor: 'var(--warning)', color: 'var(--warning)', backgroundColor: 'var(--bg-primary)' }}
+                        >
+                          {t('sidebar.badge.needs_input')}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] shrink-0 tabular-nums group-hover:hidden" style={{ color: 'var(--text-muted)' }}>
+                          {relativeTime(session.updated_at || session.created_at)}
+                        </span>
+                      )}
                     </div>
-                    {session.last_message && (
-                      <HoverMarquee
-                        text={previewOf(session.last_message)}
-                        className="w-full text-[11px] leading-tight mt-0.5"
-                        style={{ color: 'var(--text-muted)' }}
-                      />
+                    {(session.last_message || dirTag) && (
+                      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                        {dirTag && (
+                          <span
+                            title={session.cwd || dirTag}
+                            className="inline-flex items-center gap-0.5 text-[9.5px] font-mono px-1 rounded-[4px] border shrink-0 max-w-[78px]"
+                            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)', backgroundColor: 'var(--bg-primary)' }}
+                          >
+                            <Folder size={8.5} className="shrink-0 opacity-75" />
+                            <span className="truncate">{dirTag}</span>
+                          </span>
+                        )}
+                        {session.last_message && (
+                          <HoverMarquee
+                            text={previewOf(session.last_message)}
+                            className="flex-1 min-w-0 text-[11px] leading-tight"
+                            style={{ color: 'var(--text-muted)' }}
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -299,7 +438,8 @@ export default function Sidebar() {
                   </button>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         ))}
         {ctxMenu && (
