@@ -1329,5 +1329,21 @@
   "chat.handoff_commit_failed": "Failed to create handoff session",
   "chat.handoff_send_failed": "Session created, but auto-send failed",
   "slash.handoff": "Handoff Session",
-  "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+  "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+  "chat.attachment.double_click_zoom": "Double-click to expand image",
+  "chat.lightbox.zoom_in": "Zoom in (+)",
+  "chat.lightbox.zoom_out": "Zoom out (-)",
+  "chat.lightbox.reset": "Reset to Fit (0)",
+  "chat.lightbox.fit": "Fit",
+  "chat.lightbox.fit_to_window": "Fit to window (0)",
+  "chat.lightbox.actual_size": "1:1 Actual Size (1)",
+  "chat.lightbox.fullscreen": "Fullscreen (F)",
+  "chat.lightbox.exit_fullscreen": "Exit Fullscreen (F)",
+  "chat.lightbox.rotate": "Rotate 90° (R)",
+  "chat.lightbox.copy": "Copy image",
+  "chat.lightbox.copied": "Copied to clipboard",
+  "chat.lightbox.download": "Download image",
+  "chat.lightbox.close": "Close (Esc)",
+  "chat.lightbox.prev": "Previous image (← / h)",
+  "chat.lightbox.next": "Next image (→ / l)"
 }

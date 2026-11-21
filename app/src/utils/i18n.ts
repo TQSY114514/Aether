@@ -1422,7 +1422,23 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Session created, but auto-send failed",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "chat.attachment.double_click_zoom": "Double-click to expand image",
+    "chat.lightbox.zoom_in": "Zoom in (+)",
+    "chat.lightbox.zoom_out": "Zoom out (-)",
+    "chat.lightbox.reset": "Reset to Fit (0)",
+    "chat.lightbox.fit": "Fit",
+    "chat.lightbox.fit_to_window": "Fit to window (0)",
+    "chat.lightbox.actual_size": "1:1 Actual Size (1)",
+    "chat.lightbox.fullscreen": "Fullscreen (F)",
+    "chat.lightbox.exit_fullscreen": "Exit Fullscreen (F)",
+    "chat.lightbox.rotate": "Rotate 90° (R)",
+    "chat.lightbox.copy": "Copy image",
+    "chat.lightbox.copied": "Copied to clipboard",
+    "chat.lightbox.download": "Download image",
+    "chat.lightbox.close": "Close (Esc)",
+    "chat.lightbox.prev": "Previous image (← / h)",
+    "chat.lightbox.next": "Next image (→ / l)"
   },
   "zh-CN": {
     "common.browse": "浏览...",
@@ -2754,7 +2770,23 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "创建交接会话失败",
     "chat.handoff_send_failed": "会话已创建，但自动发送失败",
     "slash.handoff": "交接新会话",
-    "slash.handoff_desc": "提炼当前进展并编辑交接简报，创建干净的新会话"
+    "slash.handoff_desc": "提炼当前进展并编辑交接简报，创建干净的新会话",
+    "chat.attachment.double_click_zoom": "双击放大图片",
+    "chat.lightbox.zoom_in": "放大 (+)",
+    "chat.lightbox.zoom_out": "缩小 (-)",
+    "chat.lightbox.reset": "重置缩放 (0)",
+    "chat.lightbox.fit": "适应窗口",
+    "chat.lightbox.fit_to_window": "适应窗口 (0)",
+    "chat.lightbox.actual_size": "1:1 原图物理像素 (1)",
+    "chat.lightbox.fullscreen": "全屏检视 (F)",
+    "chat.lightbox.exit_fullscreen": "退出全屏 (F)",
+    "chat.lightbox.rotate": "顺时针旋转 90° (R)",
+    "chat.lightbox.copy": "复制图片",
+    "chat.lightbox.copied": "已复制到剪贴板",
+    "chat.lightbox.download": "下载图片",
+    "chat.lightbox.close": "关闭 (Esc)",
+    "chat.lightbox.prev": "上一张 (← / h)",
+    "chat.lightbox.next": "下一张 (→ / l)"
   },
   "es": {
     "app.name": "Aether",
@@ -3922,7 +3954,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Sesión creada, pero falló el envío automático",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "ja": {
     "app.name": "Aether",
@@ -5090,7 +5132,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "セッションは作成されましたが、自動送信に失敗しました",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -6271,7 +6323,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "新齋已立，然傳書未果",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "上下文已用 {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "壓縮上下文",
+    "hud.compacting": "壓縮中...",
+    "hud.open_outputs": "改動集與快照",
+    "chat.outputs_title": "改動集",
+    "chat.outputs_tooltip": "檢視本會話改動檔案與寫前快照",
+    "sidebar.group.needs_input": "待處理",
+    "sidebar.filter.all": "全部",
+    "sidebar.badge.needs_input": "待確認",
+    "agent.question.kbd_hint": "按數字鍵 1-{0} 快速選擇"
   },
   "fr": {
     "app.name": "Aether",
@@ -7439,7 +7501,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Session créée, mais l'envoi automatique a échoué",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "de": {
     "app.name": "Aether",
@@ -8607,7 +8679,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Sitzung erstellt, aber automatisches Senden fehlgeschlagen",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "pt": {
     "app.name": "Aether",
@@ -9775,7 +9857,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Sessão criada, mas o envio automático falhou",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "ru": {
     "app.name": "Aether",
@@ -10943,7 +11035,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Сессия создана, но автоотправка не удалась",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -12124,7 +12226,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "建立交接會話失敗",
     "chat.handoff_send_failed": "會話已建立，但自動發送失敗",
     "slash.handoff": "交接新會話",
-    "slash.handoff_desc": "提煉當前進展並編輯交接簡報，建立乾淨的新會話"
+    "slash.handoff_desc": "提煉當前進展並編輯交接簡報，建立乾淨的新會話",
+    "hud.context_usage": "上下文已用 {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "壓縮上下文",
+    "hud.compacting": "壓縮中...",
+    "hud.open_outputs": "改動集與快照",
+    "chat.outputs_title": "改動集",
+    "chat.outputs_tooltip": "檢視本會話改動檔案與寫前快照",
+    "sidebar.group.needs_input": "待處理",
+    "sidebar.filter.all": "全部",
+    "sidebar.badge.needs_input": "待確認",
+    "agent.question.kbd_hint": "按數字鍵 1-{0} 快速選擇"
   },
   "ar": {
     "app.name": "Aether",
@@ -13292,7 +13404,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "تم إنشاء الجلسة، لكن الإرسال التلقائي فشل",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "uk": {
     "app.name": "Aether",
@@ -14460,7 +14582,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Сесію створено, але автовідправка не вдалася",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "ko": {
     "app.name": "Aether",
@@ -15628,7 +15760,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "세션이 생성되었지만 자동 전송에 실패했습니다",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   },
   "hi": {
     "app.name": "Aether",
@@ -16796,7 +16938,17 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "सत्र बनाया गया, लेकिन स्वतः भेजना विफल रहा",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "hud.context_usage": "Context: {0} / {1} tokens ({2}%)",
+    "hud.compact_now": "Compact Context",
+    "hud.compacting": "Compacting...",
+    "hud.open_outputs": "Outputs & Checkpoints",
+    "chat.outputs_title": "Outputs",
+    "chat.outputs_tooltip": "View modified files and snapshots in this session",
+    "sidebar.group.needs_input": "Needs Input",
+    "sidebar.filter.all": "All",
+    "sidebar.badge.needs_input": "Needs you",
+    "agent.question.kbd_hint": "Press 1-{0} to select"
   }
 }
 

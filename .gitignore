@@ -87,6 +87,7 @@ fix_test.js
 .obsidian/
 
 # ── Agent tooling runtime state (auto-generated, never commit) ──
+MEMORY.md
 /.evolver/
 /evolution-skills/
 
