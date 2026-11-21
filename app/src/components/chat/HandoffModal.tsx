@@ -168,7 +168,9 @@ export default function HandoffModal() {
       await store.loadSessions()
       await store.selectSession(res.id)
       setHandoffOpen(false)
-      store.triggerToast(t('chat.handoff_success'), 'success')
+      if (!willAutoSend) {
+        store.triggerToast(t('chat.handoff_success'), 'success')
+      }
     } catch (err: any) {
       setError(err?.message || t('chat.handoff_commit_failed'))
     } finally {
@@ -177,10 +179,13 @@ export default function HandoffModal() {
     }
     if (shouldAutoSend && committedSessionId != null) {
       void useStore.getState()
-        .sendMessage(cleanPrompt, undefined, { targetSessionId: committedSessionId })
+        .sendMessage(cleanPrompt, undefined, { targetSessionId: committedSessionId, throwOnError: true })
+        .then(() => {
+          useStore.getState().triggerToast(t('chat.handoff_success'), 'success')
+        })
         .catch((err: unknown) => {
-          const msg = err instanceof Error && err.message ? err.message : t('chat.handoff_commit_failed')
-          useStore.getState().triggerToast(msg, 'error')
+          const detail = err instanceof Error && err.message ? `: ${err.message}` : ''
+          useStore.getState().triggerToast(`${t('chat.handoff_send_failed')}${detail}`, 'error')
         })
     }
   }

@@ -77,9 +77,18 @@ const write = (msg) => {
 const handle = (msg) => {
   if (LOG_FILE && msg.method) {
     try {
+      const text = msg.method === 'textDocument/didOpen'
+        ? (msg.params?.textDocument?.text ?? null)
+        : msg.method === 'textDocument/didChange'
+          ? (msg.params?.contentChanges?.[0]?.text ?? null)
+          : null
       require('fs').appendFileSync(
         LOG_FILE,
-        JSON.stringify({ method: msg.method, version: msg.params?.textDocument?.version ?? null }) + '\n'
+        JSON.stringify({
+          method: msg.method,
+          version: msg.params?.textDocument?.version ?? null,
+          ...(text !== null ? { text } : {}),
+        }) + '\n'
       )
     } catch {}
   }
@@ -168,27 +177,24 @@ const handle = (msg) => {
       return
     }
     const uri = msg.params?.textDocument?.uri
-    const sendPull = () => {
-      if (EMPTY_PULL_ON_CLEAN && uri && docTexts.has(uri)) {
-        const text = docTexts.get(uri) || ''
-        const items = text.includes('BAD_SYNTAX')
-          ? [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' }]
-          : []
-        write({ jsonrpc: '2.0', id: msg.id, result: { kind: 'full', items } })
-        return
+    // Snapshot document contents upon receiving the pull request, delaying only the reply.
+    let result
+    if (EMPTY_PULL_ON_CLEAN && uri && docTexts.has(uri)) {
+      const text = docTexts.get(uri) || ''
+      const items = text.includes('BAD_SYNTAX')
+        ? [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' }]
+        : []
+      result = { kind: 'full', items }
+    } else {
+      result = {
+        kind: 'full',
+        items: [
+          { severity: 1, message: 'Type X is not assignable to Y', range: { start: { line: 12, character: 0 } } },
+          { severity: 2, message: 'Unused variable foo', range: { start: { line: 30, character: 2 } } },
+        ],
       }
-      write({
-        jsonrpc: '2.0',
-        id: msg.id,
-        result: {
-          kind: 'full',
-          items: [
-            { severity: 1, message: 'Type X is not assignable to Y', range: { start: { line: 12, character: 0 } } },
-            { severity: 2, message: 'Unused variable foo', range: { start: { line: 30, character: 2 } } },
-          ],
-        },
-      })
     }
+    const sendPull = () => write({ jsonrpc: '2.0', id: msg.id, result })
     if (SLOW_PULL_MS > 0) setTimeout(sendPull, SLOW_PULL_MS)
     else sendPull()
     return

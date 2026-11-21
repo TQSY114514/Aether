@@ -164,7 +164,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
   },
 
-  sendMessage: async (content, attachments, overrides?: { agentMode?: AgentMode; targetSessionId?: number }) => {
+  sendMessage: async (content, attachments, overrides?: { agentMode?: AgentMode; targetSessionId?: number; throwOnError?: boolean }) => {
     const { currentSessionId, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
     const targetSessionId = overrides?.targetSessionId ?? currentSessionId
     const effMode = overrides?.agentMode ?? agentMode
@@ -187,6 +187,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
     if (!targetSessionId || !modelId) {
       log.warn("sendMessage: no session or model configured")
+      if (overrides?.throwOnError) {
+        throw new Error(!targetSessionId ? "No active session selected" : "No model configured")
+      }
       return
     }
 
@@ -251,6 +254,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       log.error("[Aether] chat.send FAILED:", err)
       set(clearStreaming(targetSessionId))
       log.error("chat error", err)
+      if (overrides?.throwOnError) {
+        throw err
+      }
     }
   },
 

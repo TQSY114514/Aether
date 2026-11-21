@@ -491,4 +491,65 @@ describe('scriptRunner isolated batch execution', () => {
     expect(epipeRes.ok).toBe(false)
     expect(epipeRes.error).toMatch(/stdin error|exited unexpectedly/i)
   }, 20000)
+
+  it('deterministically reports Script worker stdin error when child.stdin emits an async error', async () => {
+    const { EventEmitter } = require('events')
+    const { PassThrough } = require('stream')
+    const Module = require('module')
+
+    const runnerResolved = require.resolve('../electron/tools/scriptRunner')
+    const prevCached = require.cache[runnerResolved]
+    const origLoad = Module._load
+    const origChildProcess = require('child_process')
+
+    const fakeChild = new EventEmitter()
+    fakeChild.killed = false
+    fakeChild.stdin = new EventEmitter()
+    fakeChild.stdin.destroyed = false
+    fakeChild.stdin.write = () => {
+      process.nextTick(() => {
+        fakeChild.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
+      })
+      return false
+    }
+    fakeChild.stdout = new PassThrough()
+    fakeChild.stderr = new PassThrough()
+    fakeChild.kill = () => {
+      fakeChild.killed = true
+      fakeChild.stdout.end()
+      fakeChild.stderr.end()
+      process.nextTick(() => fakeChild.emit('close', null, 'SIGKILL'))
+      return true
+    }
+
+    let isolatedRunner
+    try {
+      delete require.cache[runnerResolved]
+      Module._load = function (request, parent, isMain) {
+        if (parent && parent.filename === runnerResolved) {
+          if (request === 'child_process') {
+            return { ...origChildProcess, spawn: () => fakeChild }
+          }
+          if (request === '../exec/winJobObject') {
+            return { isSupported: () => false }
+          }
+        }
+        return origLoad.apply(this, arguments)
+      }
+      isolatedRunner = require(runnerResolved)
+    } finally {
+      Module._load = origLoad
+      if (prevCached) require.cache[runnerResolved] = prevCached
+      else delete require.cache[runnerResolved]
+    }
+
+    const res = await isolatedRunner.runScript({
+      code: 'return 1;',
+      ctx: { agentMode: 'act' },
+    })
+
+    expect(res.ok).toBe(false)
+    expect(res.error).toBe('Script worker stdin error: write EPIPE')
+    expect(fakeChild.killed).toBe(true)
+  })
 })

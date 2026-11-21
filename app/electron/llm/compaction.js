@@ -750,4 +750,4 @@ function foldStaleToolOutputs(messages, options = {}) {
   return result
 }
 
-module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, buildSummarizerSystemPrompt, buildSummarizeUserContent, buildSummarizeMessages, clearCompactionState, applyTieredTruncation, foldStaleToolOutputs, extractErrorAnchors, SUMMARY_SECTIONS, COMPACT_AT_RATIO }
+module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, buildSummarizerSystemPrompt, buildSummarizeUserContent, buildSummarizeMessages, clearCompactionState, applyTieredTruncation, foldStaleToolOutputs, extractErrorAnchors, ERROR_ANCHOR_RE, SUMMARY_SECTIONS, COMPACT_AT_RATIO }

@@ -56,11 +56,8 @@ function getPlanForSession(db, sessionId) {
 function getAuditToolErrorAnchors(db, sessionId, maxItems = 4) {
   if (!db) return []
   try {
-    let errorRe = /(?:error|exception|failed|enoent|eperm|eacces|typeerror|syntaxerror|referenceerror|sqlite_error)/i
-    try {
-      const { ERROR_ANCHOR_RE } = require('./compaction')
-      if (ERROR_ANCHOR_RE instanceof RegExp) errorRe = ERROR_ANCHOR_RE
-    } catch { /* fallback regex */ }
+    const { ERROR_ANCHOR_RE } = require('./compaction')
+    const errorRe = ERROR_ANCHOR_RE
     const rows = db.prepare(
       'SELECT payload FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT 10'
     ).all(sessionId)

@@ -19,6 +19,7 @@ import {
   resolveCommandOnPath,
   isCommandOnPath,
   resolveWindowsCmdShim,
+  buildSpawnInvocation,
   isLanguageUnavailable,
   createClient,
   searchWorkspace,
@@ -605,6 +606,36 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     )
     expect(resolveWindowsCmdShim(unsafeShim, ['--stdio'])).toBeNull()
 
+    // 4. ELECTRON_RUN_AS_NODE=1 on process.execPath invocations (and omitted on normal binaries)
+    expect(resolvedNpm.options.env?.ELECTRON_RUN_AS_NODE).toBe('1')
+    const selfExecInv = buildSpawnInvocation(process.execPath, [FIXTURE, '--stdio'])
+    expect(selfExecInv.options.env?.ELECTRON_RUN_AS_NODE).toBe('1')
+    const otherBinInv = buildSpawnInvocation('gopls', [])
+    expect(otherBinInv.options.env).toBeUndefined()
+
+    // 5. npm shim preserves --require/--enable-source-maps interpreter args and rejects unexpandable %VAR%
+    const bootJs = path.join(nestedDir, 'bootstrap.cjs')
+    fs.writeFileSync(bootJs, '', 'utf8')
+    const interpFlagsShim = path.join(shimDir, 'interp-flags.cmd')
+    fs.writeFileSync(
+      interpFlagsShim,
+      `@ECHO off\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%" --enable-source-maps --require "%dp0%\\node_modules\\pkg\\bootstrap.cjs" "%dp0%\\node_modules\\pkg\\server.js" --stdio %*\r\n`,
+      'utf8'
+    )
+    const resolvedInterp = resolveWindowsCmdShim(interpFlagsShim, ['--extra'])
+    expect(resolvedInterp).not.toBeNull()
+    expect(resolvedInterp.file).toBe(process.execPath)
+    expect(resolvedInterp.args).toEqual(['--enable-source-maps', '--require', bootJs, targetJs, '--stdio', '--extra'])
+    expect(resolvedInterp.options.env?.ELECTRON_RUN_AS_NODE).toBe('1')
+
+    const unexpandedVarShim = path.join(shimDir, 'unexpanded-var.cmd')
+    fs.writeFileSync(
+      unexpandedVarShim,
+      `@ECHO off\r\n"%_prog%" --require "%UNEXPANDED_NODE_OPT%" "%dp0%\\node_modules\\pkg\\server.js" %*\r\n`,
+      'utf8'
+    )
+    expect(resolveWindowsCmdShim(unexpandedVarShim, ['--stdio'])).toBeNull()
+
     if (process.platform === 'win32') {
       configureServer('javascript', { command: unsafeShim, args: [] })
       const target = path.join(tmpDir, 'unsafe-target.js')
@@ -612,6 +643,97 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       const res = await diagnosticsAfterEdit(tmpDir, target, { content: 'const x = 1\n', waitMs: 300 })
       expect(res).toBeNull()
     }
+  })
+
+  it('syncs pending writes once slow init completes and preserves last write B over A during startup', async () => {
+    // 1. Single write during slow init: returns null at deadline yet auto-syncs didOpen once startup finishes
+    const log1 = path.join(tmpDir, 'slow-single-sync.jsonl')
+    configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag', '--slow-init=500', `--log-file=${log1}`],
+    })
+    const singleFile = path.join(tmpDir, 'single-slow.js')
+    const singleText = 'const onlyWrite = 42\n'
+    fs.writeFileSync(singleFile, singleText, 'utf8')
+    const singleRes = await diagnosticsAfterEdit(tmpDir, singleFile, {
+      content: singleText,
+      waitMs: 50,
+      deadlineMs: 150,
+    })
+    expect(singleRes).toBeNull()
+    await new Promise((r) => setTimeout(r, 650))
+    const log1Entries = fs.readFileSync(log1, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    const singleOpen = log1Entries.find((e) => e.method === 'textDocument/didOpen')
+    expect(singleOpen).toBeTruthy()
+    expect(singleOpen.text).toBe(singleText)
+    disposeAll()
+
+    // 2. Write A (BAD_SYNTAX) during slow init followed by debounced write B (clean) keeps B
+    const lspCjs = require('../electron/context/lspClient')
+    const log2 = path.join(tmpDir, 'slow-ab-sync.jsonl')
+    lspCjs.configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag', '--slow-init=500', `--log-file=${log2}`],
+    })
+    const { getTool } = require('../electron/tools/registry')
+    const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
+    const sid = 'lsp-ab-startup-sess'
+    setWorkspaceRootForSession(sid, tmpDir)
+    try {
+      const abFile = path.join(tmpDir, 'ab-order.ts')
+      const textA = 'export const v = 1 // BAD_SYNTAX\n'
+      const textB = 'export const v = 2 // CLEAN\n'
+      const pA = getTool('write_file').run(
+        { path: abFile, content: textA },
+        { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 50, lspDeadlineMs: 150 }
+      )
+      await new Promise((r) => setTimeout(r, 30))
+      const pB = getTool('write_file').run(
+        { path: abFile, content: textB },
+        { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 50, lspDeadlineMs: 150 }
+      )
+      await Promise.all([pA, pB])
+      await new Promise((r) => setTimeout(r, 700))
+      const log2Entries = fs.readFileSync(log2, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      const docSyncs = log2Entries.filter((e) => e.method === 'textDocument/didOpen' || e.method === 'textDocument/didChange')
+      expect(docSyncs.length).toBeGreaterThanOrEqual(1)
+      expect(docSyncs[docSyncs.length - 1].text).toBe(textB)
+    } finally {
+      lspCjs.disposeAll()
+      clearSessionWorkspaces(sid)
+    }
+  })
+
+  it('ignores late stdout data from an exited process after client restart', () => {
+    const client = createClient({ command: process.execPath, args: [FIXTURE], root: tmpDir })
+    const fakeProc1 = { pid: 1001 }
+    const fakeProc2 = { pid: 1002 }
+    const parser1 = new MessageParser()
+    const targetUri = `file:///${path.join(tmpDir, 'stale-proc.js').replace(/\\/g, '/')}`
+
+    client._proc = fakeProc2
+    client._initialized = true
+
+    const frame = encodeMessage({
+      jsonrpc: '2.0',
+      method: 'textDocument/publishDiagnostics',
+      params: {
+        uri: targetUri,
+        version: 1,
+        diagnostics: [{ severity: 1, message: 'LATE_EXITED_PROC_ERR', range: { start: { line: 0, character: 0 } } }],
+      },
+    })
+    // Simulate trailing chunk emitted by exited fakeProc1 when client._proc is already fakeProc2
+    const deliverFromProc1 = (chunk) => {
+      if (client._proc !== fakeProc1) return
+      for (const msg of parser1.push(chunk)) {
+        if (client._proc !== fakeProc1) return
+        client._handleMessage(msg)
+      }
+    }
+    deliverFromProc1(frame)
+    expect(client._diagnosticsByUri.size).toBe(0)
+    expect(client._unversionedPushByUri.size).toBe(0)
   })
 
   it('reports and clears diagnostics for unversioned-only push servers', async () => {
@@ -722,9 +844,10 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
 
   it('viaScript debounce skips wait/pull but still syncs latest document text to active LSP', async () => {
     const lspCjs = require('../electron/context/lspClient')
+    const logFile = path.join(tmpDir, 'via-script-debounce.jsonl')
     lspCjs.configureServer('javascript', {
       command: process.execPath,
-      args: [FIXTURE, '--push-diag', '--empty-pull-on-clean'],
+      args: [FIXTURE, '--push-diag', '--empty-pull-on-clean', `--log-file=${logFile}`],
     })
     const { getTool } = require('../electron/tools/registry')
     const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
@@ -738,6 +861,8 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
         { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 1500, lspDeadlineMs: 1800 }
       )
       expect(out1).toContain('[LSP Diagnostics] script-debounced.ts')
+      const postWrite1Entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      const pullsAfterWrite1 = postWrite1Entries.filter((e) => e.method === 'textDocument/diagnostic').length
 
       // 2nd rapid write fixes it within <200ms debounce window: debounced wait skips suffix,
       // yet syncDocumentAfterEdit still sends clean buffer to the active server.
@@ -749,6 +874,12 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       expect(out2).not.toContain('[LSP Diagnostics]')
 
       await new Promise((r) => setTimeout(r, 80))
+      // Before explicit diagnosticsWorkspace, fixture log must show didChange from 2nd write
+      // and ZERO additional textDocument/diagnostic pull requests caused by the 2nd write.
+      const preEntries = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      expect(preEntries.filter((e) => e.method === 'textDocument/didChange')).toHaveLength(1)
+      expect(preEntries.filter((e) => e.method === 'textDocument/diagnostic')).toHaveLength(pullsAfterWrite1)
+
       const diags = await lspCjs.diagnosticsWorkspace(tmpDir, target)
       expect(diags).toEqual([])
     } finally {

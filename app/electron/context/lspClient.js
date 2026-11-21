@@ -144,6 +144,26 @@ function tokenizeBatchLine(line) {
   return tokens
 }
 
+function makeSpawnOptions(file) {
+  const opts = { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }
+  if (file === process.execPath) {
+    opts.env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+  }
+  return opts
+}
+
+function expandDp0AndCheckVars(tok, cmdDir) {
+  const expanded = tok.replace(/%~?dp0%?[\\/]?([^"']*)/gi, (_, rest) => {
+    const parts = String(rest || '').split(/[\\/]+/).filter(Boolean)
+    return parts.length ? path.resolve(cmdDir, ...parts) : `${cmdDir}${path.sep}`
+  })
+  // Reject unexpanded batch env variables (e.g. %CUSTOM_OPT%, %~1) instead of silently dropping/corrupting args.
+  if (/%[^%\s]+%/.test(expanded) || /%~[a-z0-9_*]+/i.test(expanded) || /%[0-9*]/.test(expanded)) {
+    return null
+  }
+  return assertNoControlChars(expanded)
+}
+
 function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
   try {
     const fs = require('fs')
@@ -151,23 +171,57 @@ function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
     if (!stat.isFile() || stat.size > 16384) return null
     const body = fs.readFileSync(cmdPath, 'utf8')
     const cmdDir = path.dirname(cmdPath)
+    const lines = body.split(/\r?\n/)
 
     // Pattern 1: npm / pnpm / yarn `.cmd` shims targeting a JS entrypoint via %dp0%.
-    const npmMatch = /["']?%~?dp0%?(?:\\|\/)([^"'\r\n]+?\.(?:mjs|cjs|js))["']?/i.exec(body)
-    if (npmMatch) {
-      const relSegments = npmMatch[1].split(/[\\/]+/).filter(Boolean)
-      const target = path.resolve(cmdDir, ...relSegments)
-      if (fs.statSync(target).isFile()) {
-        return {
-          file: process.execPath,
-          args: [target, ...safeArgs],
-          options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
-        }
+    // Preserve interpreter flags (e.g. --require, --enable-source-maps) and static post-args.
+    const npmBoilerplateRe = /^endLocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&\s*/i
+    for (const rawLine of lines) {
+      let line = rawLine.trim().replace(/^@+/, '').trim()
+      if (!line) continue
+      line = line.replace(npmBoilerplateRe, '').trim()
+      if (!/%~?dp0%?(?:\\|\/)[^"'\r\n]+?\.(?:mjs|cjs|js)/i.test(line)) continue
+      if (/^(?:echo|rem|::|setlocal|endlocal|set|if|:)/i.test(line)) continue
+
+      if (hasUnquotedShellOperator(line)) return null
+      const tokens = tokenizeBatchLine(line)
+      if (!tokens || tokens.length < 2) return null
+      if (!/^(?:%_prog%|(?:%~?dp0%?[\\/]?)?node(?:\.exe)?)$/i.test(tokens[0])) continue
+
+      const entryIdx = tokens.findIndex(
+        (t, idx) => idx >= 1 && /%~?dp0%?(?:\\|\/).+?\.(?:mjs|cjs|js)$/i.test(t)
+      )
+      if (entryIdx < 1) return null
+
+      const interpArgs = []
+      for (const tok of tokens.slice(1, entryIdx)) {
+        if (/^%~?(?:\*|[0-9])$/.test(tok)) return null
+        const expanded = expandDp0AndCheckVars(tok, cmdDir)
+        if (expanded === null) return null
+        interpArgs.push(expanded)
+      }
+
+      const relMatch = /%~?dp0%?(?:\\|\/)(.+?\.(?:mjs|cjs|js))$/i.exec(tokens[entryIdx])
+      if (!relMatch) return null
+      const target = path.resolve(cmdDir, ...relMatch[1].split(/[\\/]+/).filter(Boolean))
+      if (!fs.statSync(target).isFile()) return null
+
+      const postArgs = []
+      for (const tok of tokens.slice(entryIdx + 1)) {
+        if (/^%~?(?:\*|[0-9])$/.test(tok)) continue
+        const expanded = expandDp0AndCheckVars(tok, cmdDir)
+        if (expanded === null) return null
+        postArgs.push(expanded)
+      }
+
+      return {
+        file: process.execPath,
+        args: [...interpArgs, target, ...postArgs, ...safeArgs],
+        options: makeSpawnOptions(process.execPath),
       }
     }
 
     // Pattern 2: direct-executable batch wrapper without shell operators.
-    const lines = body.split(/\r?\n/)
     const candidateLines = []
     for (const rawLine of lines) {
       const trimmed = rawLine.trim()
@@ -188,11 +242,9 @@ function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
     const expandedTokens = []
     for (const tok of rawTokens) {
       if (/^%~?(?:\*|[0-9])$/.test(tok)) continue
-      const expanded = tok.replace(/%~?dp0%?[\\/]?([^"']*)/gi, (_, rest) => {
-        const parts = String(rest || '').split(/[\\/]+/).filter(Boolean)
-        return parts.length ? path.resolve(cmdDir, ...parts) : `${cmdDir}${path.sep}`
-      })
-      expandedTokens.push(assertNoControlChars(expanded))
+      const expanded = expandDp0AndCheckVars(tok, cmdDir)
+      if (expanded === null) return null
+      expandedTokens.push(expanded)
     }
     if (expandedTokens.length === 0) return null
 
@@ -209,7 +261,7 @@ function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
     return {
       file: exe,
       args: [...staticArgs, ...safeArgs],
-      options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
+      options: makeSpawnOptions(exe),
     }
   } catch {
     return null
@@ -230,7 +282,7 @@ function buildSpawnInvocation(command, args) {
   return {
     file: resolvedCmd,
     args: safeArgs,
-    options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
+    options: makeSpawnOptions(resolvedCmd),
   }
 }
 
@@ -389,13 +441,15 @@ class LspClient {
     this.root = root
     this.timeoutMs = timeoutMs
     this._proc = null
-    this._parser = new MessageParser()
     this._pending = new Map() // id -> { resolve, reject, timer }
     this._diagnosticsByUri = new Map() // normalizedUri -> { version: number|null, diagnostics: Diagnostic[] }
     this._unversionedPushByUri = new Map() // normalizedUri -> { diagnostics: Diagnostic[], receivedAt: number }
     this._serverSupportsPushVersions = false
     this._diagnosticWaiters = new Map() // normalizedUri -> Set<{ resolve, timer, minVersion: number|null }>
     this._docVersions = new Map() // normalizedUri -> version number
+    this._pendingSyncByUri = new Map() // normalizedUri -> { uri, text, languageId, seq }
+    this._syncSeq = 0
+    this._wiredStartPromise = null
     this._id = 0
     this._disposed = false
     this._initialized = false
@@ -445,6 +499,8 @@ class LspClient {
     this._docVersions.clear()
     this._diagnosticsByUri.clear()
     this._unversionedPushByUri.clear()
+    this._pendingSyncByUri.clear()
+    this._wiredStartPromise = null
     for (const waiters of this._diagnosticWaiters.values()) {
       for (const w of waiters) {
         clearTimeout(w.timer)
@@ -553,27 +609,34 @@ class LspClient {
         this._lastErrorMessage = `Cannot directly execute batch shim without a shell: ${this.command}`
         return false
       }
+      const parser = new MessageParser()
       const proc = spawn(invocation.file, invocation.args, invocation.options)
       this._proc = proc
       proc.stdout.on('data', (chunk) => {
-        for (const msg of this._parser.push(chunk)) this._handleMessage(msg)
+        if (this._proc !== proc) return
+        for (const msg of parser.push(chunk)) {
+          if (this._proc !== proc) return
+          this._handleMessage(msg)
+        }
       })
       proc.stderr.on('data', () => { /* server diagnostics — ignore */ })
       proc.on('error', (err) => {
+        if (this._proc !== proc) return
         this._startFailed = true
         this._startErrorCode = err && err.code ? err.code : null
         this._lastErrorMessage = err && err.message ? err.message : 'LSP server failed to start'
         this._fail(`LSP server failed to start: ${err.message}`)
       })
       proc.on('exit', (code, signal) => {
-        if (this._proc === proc) {
-          this._proc = null
-          this._initialized = false
-          this._serverSupportsPushVersions = false
-          this._docVersions.clear()
-          this._diagnosticsByUri.clear()
-          this._unversionedPushByUri.clear()
-        }
+        if (this._proc !== proc) return
+        this._proc = null
+        this._initialized = false
+        this._serverSupportsPushVersions = false
+        this._docVersions.clear()
+        this._diagnosticsByUri.clear()
+        this._unversionedPushByUri.clear()
+        this._pendingSyncByUri.clear()
+        this._wiredStartPromise = null
         if (this._pending.size) this._fail(`LSP server exited (code=${code}, signal=${signal})`)
       })
       try {
@@ -727,6 +790,33 @@ class LspClient {
     })
   }
 
+  queuePendingSync(uri, text, languageId = 'plaintext', { activeWaiter = false } = {}) {
+    const key = normalizeUriKey(uri)
+    const seq = ++this._syncSeq
+    this._pendingSyncByUri.set(key, { uri, text, languageId, seq, activeWaiter })
+    return seq
+  }
+
+  _wirePendingSyncFlush(startPromise) {
+    if (!startPromise || this._wiredStartPromise === startPromise) return
+    this._wiredStartPromise = startPromise
+    Promise.resolve(startPromise).then((ok) => {
+      if (this._wiredStartPromise === startPromise) this._wiredStartPromise = null
+      if (!ok || this._disposed || !this._proc || !this._initialized) {
+        this._pendingSyncByUri.clear()
+        return
+      }
+      if (this._pendingSyncByUri.size === 0) return
+      const entries = Array.from(this._pendingSyncByUri.entries())
+      for (const [k, item] of entries) {
+        const cur = this._pendingSyncByUri.get(k)
+        if (!cur || cur.seq !== item.seq || cur.activeWaiter) continue
+        this._pendingSyncByUri.delete(k)
+        this._syncDocumentSync(item.uri, item.text, item.languageId)
+      }
+    }).catch(() => {})
+  }
+
   /**
    * Sync document content and collect diagnostics using push first, falling
    * back to LSP 3.17 pull (`textDocument/diagnostic`) if no push arrives,
@@ -742,6 +832,8 @@ class LspClient {
       ? deadlineMs
       : Math.max(waitMs + this.timeoutMs, 3000)
     const deadlineAt = Date.now() + effectiveDeadlineMs
+    const key = normalizeUriKey(uri)
+    const syncSeq = this.queuePendingSync(uri, text, languageId, { activeWaiter: true })
 
     // Never pass the short optional write deadline as the server's initialize
     // timeout; otherwise slow healthy servers are killed and put in cooldown.
@@ -759,7 +851,19 @@ class LspClient {
             if (waitTimer.unref) waitTimer.unref()
           }),
         ])
-        if (res === waitTimeoutSentinel || !res) return null
+        if (res === waitTimeoutSentinel) {
+          const cur = this._pendingSyncByUri.get(key)
+          if (cur && cur.seq === syncSeq) {
+            cur.activeWaiter = false
+            this._wirePendingSyncFlush(startPromise)
+          }
+          return null
+        }
+        if (!res) {
+          const cur = this._pendingSyncByUri.get(key)
+          if (cur && cur.seq === syncSeq) this._pendingSyncByUri.delete(key)
+          return null
+        }
         started = true
       } finally {
         if (waitTimer) clearTimeout(waitTimer)
@@ -767,7 +871,14 @@ class LspClient {
     }
     if (!started) return null
 
-    const key = normalizeUriKey(uri)
+    // If a newer write (e.g. debounced script write B) superseded this call during
+    // startup, do not overwrite B with stale text A.
+    const pending = this._pendingSyncByUri.get(key)
+    if (!pending || pending.seq !== syncSeq) {
+      return []
+    }
+    this._pendingSyncByUri.delete(key)
+
     const expectedVersion = (this._docVersions.get(key) || 0) + 1
     const remainingBudget = Math.max(0, deadlineAt - Date.now())
     const remainingForPush = Math.min(waitMs, remainingBudget)
@@ -961,6 +1072,8 @@ class LspClient {
     this._diagnosticWaiters.clear()
     this._diagnosticsByUri.clear()
     this._unversionedPushByUri.clear()
+    this._pendingSyncByUri.clear()
+    this._wiredStartPromise = null
     this._serverSupportsPushVersions = false
     this._docVersions.clear()
     if (!proc) return
@@ -1243,24 +1356,14 @@ function syncDocumentAfterEdit(root, file, { content, language } = {}) {
     }
   }
   if (client._proc && client._initialized) {
+    client._pendingSyncByUri.delete(normalizeUriKey(uri))
+    client._syncSeq++
     client._syncDocumentSync(uri, text, languageId)
     return true
   }
   if (client._startPromise) {
-    if (!client._pendingSyncs) client._pendingSyncs = new Map()
-    const normKey = normalizeUriKey(uri)
-    const hadPending = client._pendingSyncs.size > 0
-    client._pendingSyncs.set(normKey, { uri, text, languageId })
-    if (!hadPending) {
-      Promise.resolve(client._startPromise).then((ok) => {
-        const pending = client._pendingSyncs
-        client._pendingSyncs = null
-        if (!ok || client._disposed || !pending) return
-        for (const item of pending.values()) {
-          client._syncDocumentSync(item.uri, item.text, item.languageId)
-        }
-      }).catch(() => {})
-    }
+    client.queuePendingSync(uri, text, languageId)
+    client._wirePendingSyncFlush(client._startPromise)
     return true
   }
   return false

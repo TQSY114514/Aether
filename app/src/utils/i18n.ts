@@ -1412,6 +1412,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "Session created, but auto-send failed",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -2735,6 +2736,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "已交接至新会话",
     "chat.handoff_draft_failed": "生成交接草稿失败",
     "chat.handoff_commit_failed": "创建交接会话失败",
+    "chat.handoff_send_failed": "会话已创建，但自动发送失败",
     "slash.handoff": "交接新会话",
     "slash.handoff_desc": "提炼当前进展并编辑交接简报，创建干净的新会话"
   },
@@ -3902,6 +3904,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "Sesión creada, pero falló el envío automático",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -5069,6 +5072,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "セッションは作成されましたが、自動送信に失敗しました",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -6241,6 +6245,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "新齋已立，然傳書未果",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -7408,6 +7413,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "Session créée, mais l'envoi automatique a échoué",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -8575,6 +8581,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "Sitzung erstellt, aber automatisches Senden fehlgeschlagen",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -9742,6 +9749,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "Sessão criada, mas o envio automático falhou",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -10909,6 +10917,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "Сессия создана, но автоотправка не удалась",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -12089,6 +12098,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "已交接至新會話",
     "chat.handoff_draft_failed": "產生交接草稿失敗",
     "chat.handoff_commit_failed": "建立交接會話失敗",
+    "chat.handoff_send_failed": "會話已建立，但自動發送失敗",
     "slash.handoff": "交接新會話",
     "slash.handoff_desc": "提煉當前進展並編輯交接簡報，建立乾淨的新會話"
   },
@@ -13256,6 +13266,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "تم إنشاء الجلسة، لكن الإرسال التلقائي فشل",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -14423,6 +14434,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "Сесію створено, але автовідправка не вдалася",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -15590,6 +15602,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "세션이 생성되었지만 자동 전송에 실패했습니다",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -16757,6 +16770,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_success": "Handed off to new session",
     "chat.handoff_draft_failed": "Failed to generate handoff draft",
     "chat.handoff_commit_failed": "Failed to create handoff session",
+    "chat.handoff_send_failed": "सत्र बनाया गया, लेकिन स्वतः भेजना विफल रहा",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   }

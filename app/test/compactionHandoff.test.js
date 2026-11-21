@@ -449,18 +449,18 @@ describe('Amp-style 2-step Editable Handoff', () => {
     try {
       const { port } = server.address()
       const sid = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('LLM ApiUrl Compaction').lastInsertRowid)
-      // Total tokens > 85% of budget (2600 -> threshold 2210), while kept tail + SUMMARIZATION_OVERHEAD <= 2600
-      for (let i = 0; i < 6; i++) {
+      // Exceeds historyBudget (~6000 for 16k window after tools + reserve) so maybeCompact triggers LLM summarization
+      for (let i = 0; i < 12; i++) {
         db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
           sid,
           i % 2 === 0 ? 'user' : 'assistant',
-          `message ${i}: ` + 'alpha beta gamma delta epsilon '.repeat(55),
+          `message ${i}: ` + 'alpha beta gamma delta epsilon '.repeat(85),
           'success'
         )
       }
 
       let capturedOpts = null
-      const budget = 2600
+      const budget = 16000
       await runSession({
         dbPath,
         dbSessionId: sid,
@@ -490,6 +490,95 @@ describe('Amp-style 2-step Editable Handoff', () => {
       )).toBe(true)
     } finally {
       await new Promise((resolve) => server.close(resolve))
+      cleanup()
+    }
+  })
+
+  it('extracts timed out / FAIL / exited with code 1 tool results via shared ERROR_ANCHOR_RE', async () => {
+    const { db, cleanup } = createRealTestDb()
+    try {
+      const { ERROR_ANCHOR_RE } = require('../electron/llm/compaction')
+      expect(ERROR_ANCHOR_RE).toBeInstanceOf(RegExp)
+      const parentId = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('Shared Regex Session').lastInsertRowid)
+      db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
+        parentId,
+        'user',
+        'Run verification suite',
+        'success'
+      )
+      db.prepare('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)').run(
+        parentId,
+        'turn-shared-re',
+        JSON.stringify({
+          toolCalls: [
+            { name: 'run_command', error: '', result: 'Process timed out' },
+            { name: 'vitest', error: null, result: 'FAIL test/x.test.js' },
+            { name: 'shell', error: '', result: 'exited with code 1' },
+          ],
+        })
+      )
+      const draft = await generateHandoffDraft({ db, sessionId: parentId, goal: 'fix failures' })
+      expect(draft.draftPrompt).toContain('[tool:run_command] Process timed out')
+      expect(draft.draftPrompt).toContain('[tool:vitest] FAIL test/x.test.js')
+      expect(draft.draftPrompt).toContain('[tool:shell] exited with code 1')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('runSession reserves prefix, tools, and response headroom so full request stays within effectiveBudget', async () => {
+    const { db, dbPath, cleanup } = createRealTestDb()
+    try {
+      const { estimateMessagesTokens, estimateTextTokens } = require('../electron/llm/compaction')
+      const { buildSessionContext } = require('../electron/llm/sessionContext')
+      const { toolsPayload } = require('../electron/tools/registry')
+
+      const personaId = Number(
+        db.prepare('INSERT INTO persona (name, prompt) VALUES (?, ?)').run(
+          'Headroom Persona',
+          'You are a careful engineer. '.repeat(40)
+        ).lastInsertRowid
+      )
+      const sid = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('Full Request Budget').lastInsertRowid)
+      for (let i = 0; i < 16; i++) {
+        db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
+          sid,
+          i % 2 === 0 ? 'user' : 'assistant',
+          `history ${i}: ` + 'module dependency analysis context '.repeat(45),
+          'success'
+        )
+      }
+
+      const effectiveBudget = 16000
+      const prompt = 'Summarize next action cleanly'
+      let capturedOpts = null
+      await runSession({
+        dbPath,
+        dbSessionId: sid,
+        personaId,
+        agentMode: 'auto',
+        prompt,
+        apiKey: 'sk-test',
+        dispatch: () => {},
+        resolveImpl: () => ({
+          provider: { id: 1, name: 'mock', api_format: 'openai' },
+          model: { id: 1, model_name: 'mock-model', context_window: effectiveBudget },
+          db,
+        }),
+        runAgentImpl: async (opts) => {
+          capturedOpts = opts
+          return { text: 'ok', messages: [] }
+        },
+      })
+
+      expect(capturedOpts?.model?.context_window).toBe(effectiveBudget)
+      const { prefix } = buildSessionContext({ db, sessionId: 'tui', personaId, userMessage: prompt })
+      const prefixTokens = estimateMessagesTokens(prefix, capturedOpts.provider, capturedOpts.model)
+      const toolsTokens = estimateTextTokens(JSON.stringify(toolsPayload('auto', { db }) || []))
+      const systemAndResponseReserve = Math.min(6000, Math.max(2500, Math.floor(effectiveBudget * 0.25)))
+      const boundedTokens = estimateMessagesTokens(capturedOpts.messages, capturedOpts.provider, capturedOpts.model)
+      expect(prefixTokens + toolsTokens + systemAndResponseReserve + boundedTokens).toBeLessThanOrEqual(effectiveBudget)
+    } finally {
       cleanup()
     }
   })

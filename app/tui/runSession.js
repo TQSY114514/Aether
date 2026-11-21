@@ -354,6 +354,16 @@ export async function runSession({
   try { require('../electron/tools/sandbox').setWorkspaceRoot(ws) } catch {}
   try { await connectMcpServers({ db }) } catch {}
   try { await runSessionHooks('SessionStart', { sessionId, timestamp: new Date().toISOString() }) } catch {}
+  let effectiveBudget = Number(model?.context_window) > 0 ? Number(model.context_window) : 0
+  if (!effectiveBudget && db && model?.id != null) {
+    try {
+      const mRow = db.prepare('SELECT context_window FROM model WHERE id = ?').get(model.id)
+      if (Number(mRow?.context_window) > 0) effectiveBudget = Number(mRow.context_window)
+    } catch { /* ignore */ }
+  }
+  if (!effectiveBudget) effectiveBudget = 32000
+  const effectiveModel = model && typeof model === 'object' ? { ...model, context_window: effectiveBudget } : model
+
   let initialMessagesOption = {}
   if (priorMessages.length > 0) {
     let bounded = [...priorMessages, { role: 'user', content: String(prompt || '') }]
@@ -361,22 +371,46 @@ export async function runSession({
       const compMod = await import('../electron/llm/compaction.js')
       const maybeCompact = compMod.maybeCompact || compMod.default?.maybeCompact
       const estimateMessagesTokens = compMod.estimateMessagesTokens || compMod.default?.estimateMessagesTokens
-      let effectiveBudget = Number(model?.context_window) > 0 ? Number(model.context_window) : 0
-      if (!effectiveBudget && db && model?.id != null) {
+      const estimateTextTokens = compMod.estimateTextTokens || compMod.default?.estimateTextTokens
+
+      let prefixTokens = 0
+      if (db) {
         try {
-          const mRow = db.prepare('SELECT context_window FROM model WHERE id = ?').get(model.id)
-          if (Number(mRow?.context_window) > 0) effectiveBudget = Number(mRow.context_window)
-        } catch { /* ignore */ }
+          const scMod = await import('../electron/llm/sessionContext.js')
+          const buildSessionContext = scMod.buildSessionContext || scMod.default?.buildSessionContext
+          if (typeof buildSessionContext === 'function') {
+            const { prefix } = buildSessionContext({ db, sessionId, personaId, userMessage: String(prompt || '') })
+            if (Array.isArray(prefix) && prefix.length > 0 && typeof estimateMessagesTokens === 'function') {
+              prefixTokens = estimateMessagesTokens(prefix, effectiveProvider, effectiveModel)
+            }
+          }
+        } catch { prefixTokens = 0 }
       }
-      if (!effectiveBudget) effectiveBudget = 32000
+
+      let toolsTokens = 3000
+      try {
+        const regMod = await import('../electron/tools/registry.js')
+        const toolsPayload = regMod.toolsPayload || regMod.default?.toolsPayload
+        if (typeof toolsPayload === 'function' && typeof estimateTextTokens === 'function') {
+          const payload = toolsPayload(agentMode, { db })
+          const measured = estimateTextTokens(JSON.stringify(payload || []))
+          if (Number.isFinite(measured) && measured > 0) toolsTokens = measured
+        }
+      } catch { toolsTokens = 3000 }
+
+      const systemAndResponseReserve = Math.min(6000, Math.max(2500, Math.floor(effectiveBudget * 0.25)))
+      const historyBudget = Math.min(
+        effectiveBudget,
+        Math.max(1024, effectiveBudget - prefixTokens - toolsTokens - systemAndResponseReserve)
+      )
 
       if (typeof maybeCompact === 'function') {
         const canCallLlm = Boolean(effectiveProvider && (effectiveProvider.api_url || effectiveProvider.base_url))
         const compacted = await maybeCompact({
           provider: canCallLlm ? effectiveProvider : null,
-          model,
+          model: effectiveModel,
           messages: bounded,
-          budget: effectiveBudget,
+          budget: historyBudget,
           sessionId: sessionRowId,
           db,
           wsRoot: ws,
@@ -385,15 +419,25 @@ export async function runSession({
           bounded = compacted
         }
       }
-      if (typeof estimateMessagesTokens === 'function' && estimateMessagesTokens(bounded, effectiveProvider, model) > effectiveBudget) {
+      if (typeof estimateMessagesTokens === 'function' && estimateMessagesTokens(bounded, effectiveProvider, effectiveModel) > historyBudget) {
         const newest = bounded[bounded.length - 1]
-        const kept = newest ? [newest] : []
-        for (let i = bounded.length - 2; i >= 0; i--) {
-          const candidate = [bounded[i], ...kept]
-          if (estimateMessagesTokens(candidate, effectiveProvider, model) > effectiveBudget) break
-          kept.unshift(bounded[i])
+        const summaryHead = bounded.length > 1
+          && bounded[0]?.role === 'system'
+          && typeof bounded[0]?.content === 'string'
+          && bounded[0].content.includes('[context compaction]')
+          ? bounded[0]
+          : null
+        const base = summaryHead && estimateMessagesTokens([summaryHead, ...(newest ? [newest] : [])], effectiveProvider, effectiveModel) <= historyBudget
+          ? [summaryHead, ...(newest ? [newest] : [])]
+          : (newest ? [newest] : [])
+        const insertAt = summaryHead && base[0] === summaryHead ? 1 : 0
+        const startIdx = summaryHead ? 1 : 0
+        for (let i = bounded.length - 2; i >= startIdx; i--) {
+          const candidate = [...base.slice(0, insertAt), bounded[i], ...base.slice(insertAt)]
+          if (estimateMessagesTokens(candidate, effectiveProvider, effectiveModel) > historyBudget) break
+          base.splice(insertAt, 0, bounded[i])
         }
-        bounded = kept
+        bounded = base
       }
     } catch { /* best-effort context cap; keep bounded priorMessages + current prompt */ }
     initialMessagesOption = { messages: bounded }
@@ -407,7 +451,7 @@ export async function runSession({
       prompt: String(prompt || ''),
       ...initialMessagesOption,
       provider: effectiveProvider,
-      model,
+      model: effectiveModel,
       db,
       personaId,
       workspace: ws,
