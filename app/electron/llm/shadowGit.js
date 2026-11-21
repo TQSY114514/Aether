@@ -44,7 +44,12 @@ function getShadowReposRoot() {
   return path.join(base, 'shadow_repos')
 }
 
-function getShadowRepoDir(sessionId) {
+function getShadowRepoDir(sessionId, workspaceRoot) {
+  if (workspaceRoot) {
+    const crypto = require('crypto')
+    const wsHash = crypto.createHash('sha256').update(path.resolve(workspaceRoot).toLowerCase()).digest('hex').slice(0, 8)
+    return path.join(getShadowReposRoot(), `${sessionId}_${wsHash}.git`)
+  }
   return path.join(getShadowReposRoot(), `${sessionId}.git`)
 }
 
@@ -53,7 +58,7 @@ function ensureShadowRepo(sessionId, workspaceRoot) {
     return { ok: false, error: 'Git not available or invalid workspace' }
   }
 
-  const repoDir = getShadowRepoDir(sessionId)
+  const repoDir = getShadowRepoDir(sessionId, workspaceRoot)
   try {
     const headFile = path.join(repoDir, 'HEAD')
     if (fs.existsSync(headFile)) {
@@ -181,7 +186,7 @@ function commitCheckpoint(sessionId, workspaceRoot, opts = {}) {
  */
 function rollbackCheckpoint(sessionId, workspaceRoot, commitHash, paths = null) {
   if (!commitHash || !workspaceRoot) return { ok: false, error: 'Missing commitHash or workspaceRoot' }
-  const repoDir = getShadowRepoDir(sessionId)
+  const repoDir = getShadowRepoDir(sessionId, workspaceRoot)
   if (!fs.existsSync(repoDir)) return { ok: false, error: 'Shadow repo does not exist' }
 
   try {
@@ -229,7 +234,7 @@ function rollbackCheckpoint(sessionId, workspaceRoot, commitHash, paths = null) 
  * @returns {string} Diff output
  */
 function getDiff(sessionId, workspaceRoot, commitHashA, commitHashB = 'HEAD') {
-  const repoDir = getShadowRepoDir(sessionId)
+  const repoDir = getShadowRepoDir(sessionId, workspaceRoot)
   if (!fs.existsSync(repoDir)) return ''
   try {
     return execFileSync(
@@ -260,10 +265,15 @@ function deleteShadowRepo(sessionId) {
   if (!Number.isInteger(id) || id <= 0) return false
   try {
     const root = path.resolve(getShadowReposRoot())
-    const dir = path.resolve(getShadowRepoDir(id))
-    if (path.dirname(dir) !== root) return false
-    if (fs.existsSync(dir)) {
-      fs.rmSync(dir, { recursive: true, force: true })
+    if (!fs.existsSync(root)) return true
+    const entries = fs.readdirSync(root)
+    for (const name of entries) {
+      if (name === `${id}.git` || name.startsWith(`${id}_`)) {
+        const dir = path.resolve(root, name)
+        if (path.dirname(dir) === root && fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true })
+        }
+      }
     }
     return true
   } catch {

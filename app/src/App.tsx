@@ -7,7 +7,6 @@ import ChatPage from '@/pages/ChatPage'
 import ArenaPage from '@/pages/ArenaPage'
 import SettingPage from '@/pages/SettingPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
-import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
 import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
@@ -301,7 +300,6 @@ export default function App() {
         <BtwDrawer />
         <HandoffModal />
         <PermissionDialog />
-        <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         {showWizard && wizardActive && !onboardingDone && (

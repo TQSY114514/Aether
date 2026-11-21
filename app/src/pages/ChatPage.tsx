@@ -6,8 +6,9 @@ import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
 import HoverMarquee from '@/components/ui/HoverMarquee'
-import { FolderGit2, Folder, ExternalLink, Search, History } from 'lucide-react'
+import { FolderGit2, Folder, ExternalLink, Search, History, FileDiff, Swords } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import SessionReviewDrawer, { aggregateSessionFileChanges } from '@/components/chat/SessionReviewDrawer'
 
 // Trust badge dot color
 const TRUST_DOT: Record<string, string> = {
@@ -36,6 +37,79 @@ export default function ChatPage() {
   const setSessionCwd = useStore((s) => s.setSessionCwd)
   const streamingBySession = useStore((s) => s.streamingBySession)
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
+  const messages = useStore((s) => s.messages)
+  const fileSummariesByMessage = useStore((s) => s.fileSummariesByMessage)
+  const [showReview, setShowReview] = useState(false)
+
+  const reviewSummary = useMemo(
+    () => aggregateSessionFileChanges(messages, fileSummariesByMessage),
+    [messages, fileSummariesByMessage]
+  )
+
+  useEffect(() => {
+    setShowReview(false)
+  }, [currentSessionId])
+  const chatMode = useStore((s) => s.chatMode)
+  const setChatMode = useStore((s) => s.setChatMode)
+  const arenaModelIds = useStore((s) => s.arenaModelIds)
+  const setArenaModelIds = useStore((s) => s.setArenaModelIds)
+  const arenaTemperatures = useStore((s) => s.arenaTemperatures)
+  const setArenaTemperatures = useStore((s) => s.setArenaTemperatures)
+  const providers = useStore((s) => s.providers)
+  const allModels = useStore((s) => s.allModels)
+  const scores = useStore((s) => s.scores)
+  const loadScores = useStore((s) => s.loadScores)
+  useEffect(() => { if (scores.length === 0) loadScores() }, [scores.length, loadScores])
+
+  const scoreByModel = useMemo(() => {
+    const map: Record<number, number> = {}
+    for (const sc of scores) { map[sc.model_id] = Math.round(sc.score) }
+    return map
+  }, [scores])
+
+  const allArenaModels = useMemo(() => {
+    const providerIds = new Set(providers.map((p) => p.id))
+    return allModels
+      .filter((m) => providerIds.has(m.provider_id))
+      .map((m) => ({
+        id: m.id,
+        name: m.display_name || m.model_name,
+      }))
+  }, [providers, allModels])
+
+  const [localArenaIds, setLocalArenaIds] = useState<[number | null, number | null]>([
+    arenaModelIds[0] ?? null,
+    arenaModelIds[1] ?? null,
+  ])
+  useEffect(() => {
+    setLocalArenaIds([arenaModelIds[0] ?? null, arenaModelIds[1] ?? null])
+  }, [arenaModelIds])
+
+  const setModelSlot = useCallback((slot: 0 | 1, modelId: number | null) => {
+    setLocalArenaIds((prev) => {
+      const next: [number | null, number | null] = slot === 0 ? [modelId, prev[1]] : [prev[0], modelId]
+      const valid = next.filter((id): id is number => id !== null && id > 0)
+      setArenaModelIds(valid)
+      return next
+    })
+  }, [setArenaModelIds])
+
+  const handleToggleSplitRun = useCallback(() => {
+    const nextMode = chatMode === 'arena' ? 'normal' : 'arena'
+    if (nextMode === 'arena') {
+      const hasTwo = localArenaIds[0] && localArenaIds[1]
+      if (!hasTwo && allArenaModels.length >= 2) {
+        const m0 = localArenaIds[0] || allArenaModels[0].id
+        const m1 = localArenaIds[1] || (allArenaModels.find((m) => m.id !== m0)?.id ?? allArenaModels[1].id)
+        setLocalArenaIds([m0, m1])
+        setArenaModelIds([m0, m1])
+      } else if (!localArenaIds[0] && allArenaModels.length === 1) {
+        setLocalArenaIds([allArenaModels[0].id, allArenaModels[0].id])
+        setArenaModelIds([allArenaModels[0].id])
+      }
+    }
+    setChatMode(nextMode)
+  }, [chatMode, localArenaIds, allArenaModels, setArenaModelIds, setChatMode])
 
   const currentSession = useMemo(() => sessions.find((s) => s.id === currentSessionId), [sessions, currentSessionId])
   const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(null)
@@ -100,9 +174,98 @@ export default function ChatPage() {
     if (target) window.electronAPI?.system?.openPath?.(target)
   }, [activeCwd, currentSessionId])
 
-  // Consolidated Header Control Group: Unified Workspace/CWD Capsule + On-Demand Search & Timeline
+  // Consolidated Header Control Group: Split Run + Unified Workspace/CWD Capsule + On-Demand Search & Timeline
   const renderHeaderControls = () => (
     <div className="flex items-center gap-1.5 shrink-0 ml-auto app-no-drag">
+      {/* Collapsible Arena Model A vs Model B Selectors (visible only when Split Run is active) */}
+      {chatMode === 'arena' && (
+        <div className="flex items-center gap-1 shrink-0 animate-fade-in">
+          <div
+            className="h-7 flex items-center gap-1 px-1 rounded-[6px] border"
+            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+          >
+            <select
+              value={localArenaIds[0] ?? ''}
+              onChange={(e) => setModelSlot(0, Number(e.target.value) || null)}
+              aria-label={t('chat.arena.model1')}
+              className="h-5.5 text-[11px] font-medium px-1.5 rounded-[4px] border-0 outline-none max-w-[125px] truncate cursor-pointer transition-colors"
+              style={{ backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}
+            >
+              <option value="">{t('chat.arena.model1')}</option>
+              {allArenaModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}
+                </option>
+              ))}
+            </select>
+            <span className="text-[9.5px] font-mono font-semibold px-0.5 select-none" style={{ color: 'var(--text-muted)' }}>
+              VS
+            </span>
+            <select
+              value={localArenaIds[1] ?? ''}
+              onChange={(e) => setModelSlot(1, Number(e.target.value) || null)}
+              aria-label={t('chat.arena.model2')}
+              className="h-5.5 text-[11px] font-medium px-1.5 rounded-[4px] border-0 outline-none max-w-[125px] truncate cursor-pointer transition-colors"
+              style={{ backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}
+            >
+              <option value="">{t('chat.arena.model2')}</option>
+              {allArenaModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <select
+            value={arenaTemperatures ? arenaTemperatures.join(',') : ''}
+            onChange={(e) => {
+              const v = e.target.value
+              setArenaTemperatures(v ? v.split(',').map(Number) : null)
+            }}
+            title={t('chat.arena.temp_title')}
+            className="hidden lg:block h-7 text-[11px] font-medium px-1.5 rounded-[6px] border outline-none max-w-[95px] transition-colors cursor-pointer"
+            style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          >
+            <option value="">{t('chat.arena.single')}</option>
+            <option value="0.2,0.8">{t('chat.arena.temp_pair')}</option>
+            <option value="0.2,0.5,0.8">{t('chat.arena.temp_triple')}</option>
+          </select>
+        </div>
+      )}
+
+      {/* One-Click Split Run Toggle (In-Chat Dual-Model Code Patch Comparison) */}
+      <Tooltip
+        text={
+          chatMode === 'arena'
+            ? t('chat.split_run.exit')
+            : t('chat.split_run.desc')
+        }
+      >
+        <button
+          type="button"
+          onClick={handleToggleSplitRun}
+          className="h-7 flex items-center gap-1 px-2 rounded-[6px] border text-[11px] font-medium transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer select-none"
+          style={
+            chatMode === 'arena'
+              ? {
+                  backgroundColor: 'var(--accent)',
+                  borderColor: 'var(--accent)',
+                  color: 'var(--accent-fg, #FFFFFF)',
+                }
+              : {
+                  backgroundColor: 'var(--content-bg)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--text-secondary)',
+                }
+          }
+          aria-pressed={chatMode === 'arena'}
+        >
+          <Swords size={12} className="shrink-0" style={{ color: chatMode === 'arena' ? 'currentColor' : 'var(--accent)' }} />
+          <span>Split Run</span>
+        </button>
+      </Tooltip>
+
       {/* Unified Workspace / CWD / Git / AGENTS.md Capsule */}
       <div
         className="h-7 flex items-center rounded-[6px] border text-xs overflow-hidden"
@@ -175,6 +338,32 @@ export default function ChatPage() {
             </button>
           </Tooltip>
 
+          <Tooltip text={t('chat.review_tooltip')}>
+            <button
+              type="button"
+              onClick={() => setShowReview((v) => !v)}
+              className="h-7 flex items-center gap-1.5 px-2 rounded-[6px] border text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+              style={{
+                borderColor: showReview ? 'var(--accent)' : 'var(--border)',
+                backgroundColor: showReview ? 'var(--bg-secondary)' : 'var(--content-bg)',
+              }}
+              aria-label={t('chat.review_tooltip')}
+            >
+              <FileDiff size={12} style={{ color: reviewSummary.fileCount > 0 ? 'var(--accent)' : 'var(--text-muted)' }} />
+              <span className="hidden sm:inline">{t('chat.review_btn')}</span>
+              {reviewSummary.fileCount > 0 && (
+                <span className="flex items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
+                  {reviewSummary.totalAdded > 0 && (
+                    <span style={{ color: 'var(--success)' }}>+{reviewSummary.totalAdded}</span>
+                  )}
+                  {reviewSummary.totalRemoved > 0 && (
+                    <span style={{ color: 'var(--error)' }}>-{reviewSummary.totalRemoved}</span>
+                  )}
+                </span>
+              )}
+            </button>
+          </Tooltip>
+
           <Tooltip text={t('agent.timeline.view_toggle', '运行时间线')}>
             <button
               type="button"
@@ -238,6 +427,12 @@ export default function ChatPage() {
       <div className="relative z-20">
         <ChatInput />
       </div>
+      <SessionReviewDrawer
+        sessionId={currentSessionId}
+        isOpen={showReview}
+        onClose={() => setShowReview(false)}
+        summary={reviewSummary}
+      />
     </div>
   )
 }

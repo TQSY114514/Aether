@@ -52,7 +52,7 @@ export default function EffortControl({
         <button
           type="button"
           onClick={() => onToggleThinking(!thinkingEnabled)}
-          className="h-6 flex items-center gap-1 px-1.5 rounded-[5px] border border-transparent hover:border-[var(--border)] text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+          className="h-6.5 flex items-center gap-1 px-1.5 rounded-[6px] border border-transparent hover:border-[var(--border)] text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
           title={t('effort.tooltip')}
           aria-label={t('effort.tooltip')}
         >
@@ -74,7 +74,7 @@ export default function EffortControl({
         <button
           type="button"
           onClick={() => setDropdownOpen(!dropdownOpen)}
-          className="h-6 flex items-center gap-1 px-1.5 rounded-[5px] border border-transparent hover:border-[var(--border)] text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+          className="h-6.5 flex items-center gap-1 px-1.5 rounded-[6px] border border-transparent hover:border-[var(--border)] text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
           title={t('effort.tooltip')}
           aria-label={t('effort.tooltip')}
         >

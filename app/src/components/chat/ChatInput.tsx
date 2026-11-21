@@ -2,9 +2,10 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, Zap, Leaf, HelpCircle, ListPlus, Folder, FolderOpen, ExternalLink } from 'lucide-react'
+import { Send, Square, Paperclip, Zap, Leaf, MessageSquareDashed, ListPlus, Folder, FolderOpen, ExternalLink } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
 import QueueDock from './QueueDock'
+import QuestionDialog from './QuestionDialog'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -97,7 +98,7 @@ export default function ChatInput() {
     thinkingEnabled, setThinkingEnabled,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
-    loopingSessions, toggleBtw, sessions, setSessionCwd,
+    loopingSessions, btwOpen, toggleBtw, sessions, setSessionCwd,
   } = useStore(useShallow((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -112,6 +113,7 @@ export default function ChatInput() {
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
     sessionConfigs: s.sessionConfigs, scores: s.scores,
     loopingSessions: s.loopingSessions,
+    btwOpen: s.btwOpen,
     toggleBtw: s.toggleBtw,
     sessions: s.sessions,
     setSessionCwd: s.setSessionCwd,
@@ -612,6 +614,7 @@ export default function ChatInput() {
         />
 
         <AgentTaskDeck sessionId={currentSessionId} />
+        <QuestionDialog />
 
         {/* Unified Floating Composer Card */}
         <div
@@ -656,9 +659,23 @@ export default function ChatInput() {
           {/* Integrated Bottom Toolbar inside Composer */}
           <div className="flex items-center justify-between gap-1.5 pt-2 mt-1.5 border-t flex-nowrap min-w-0" style={{ borderColor: 'color-mix(in srgb, var(--border) 65%, transparent)' }}>
             <div className="flex items-center gap-1.5 flex-nowrap min-w-0 shrink">
-              {/* 1. Mode: Plan / Act */}
+              {/* 1. File Attachment Trigger (far-left, harness convention) */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming}
+                title={t('chat.upload')}
+                aria-label={t('chat.upload')}
+                className="shrink-0 h-6.5 w-6.5 flex items-center justify-center rounded-[6px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.96] transition-colors disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+              >
+                <Paperclip size={13.5} />
+              </button>
+
+              <div className="h-3.5 w-px shrink-0" style={{ backgroundColor: 'var(--border)' }} />
+
+              {/* 2. Mode: Plan / Act */}
               <AgentModeSelector mode={agentMode} onChange={setAgentMode} compact />
-              {/* 2. Main Model Selector */}
+              {/* 3. Main Model Selector */}
               <ModelSelector
                 providers={providers}
                 allModels={allModels}
@@ -674,7 +691,7 @@ export default function ChatInput() {
                   }
                 }}
               />
-              {/* 3. Thinking Effort Control */}
+              {/* 4. Thinking Effort Control */}
               <EffortControl
                 thinkingEnabled={thinkingEnabled}
                 onToggleThinking={setThinkingEnabled}
@@ -683,30 +700,6 @@ export default function ChatInput() {
                 isBinary={isBinaryReasoning}
                 compact
               />
-
-              <div className="h-3.5 w-px mx-0.5 shrink-0" style={{ backgroundColor: 'var(--border)' }} />
-
-              {/* Attachment & Side Question triggers */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isStreaming}
-                title={t('chat.upload')}
-                aria-label={t('chat.upload')}
-                className="shrink-0 p-1 rounded-[5px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
-              >
-                <Paperclip size={13.5} />
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleBtw}
-                title={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
-                aria-label={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
-                className="shrink-0 p-1 rounded-[5px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
-              >
-                <HelpCircle size={13.5} />
-              </button>
             </div>
 
             <div className="flex items-center gap-1.5 min-w-0 shrink ml-auto flex-nowrap">
@@ -715,6 +708,25 @@ export default function ChatInput() {
               ) : (
                 <SessionUsageRollbackBadge sessionId={currentSessionId} />
               )}
+
+              <div className="h-3.5 w-px shrink-0" style={{ backgroundColor: 'var(--border)' }} />
+
+              {/* Side Question (BTW) trigger */}
+              <button
+                type="button"
+                onClick={toggleBtw}
+                aria-pressed={btwOpen}
+                title={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+                aria-label={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+                className={cn(
+                  'shrink-0 h-6.5 w-6.5 flex items-center justify-center rounded-[6px] border transition-colors active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer',
+                  btwOpen
+                    ? 'border-[var(--accent)] bg-[var(--bg-secondary)] text-[var(--accent)]'
+                    : 'border-transparent bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+                )}
+              >
+                <MessageSquareDashed size={13.5} />
+              </button>
 
               {isArenaRunning || (isStreaming && !input.trim()) ? (
                 <button

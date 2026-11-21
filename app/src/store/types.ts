@@ -306,7 +306,7 @@ export interface AppState {
   // Context budget indicator text (shown in status bar).
   contextBudgetText: string | null
   // Pending AskUserQuestion dialogs awaiting a user answer.
-  pendingQuestions: { reqId: string; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
+  pendingQuestions: { reqId: string; sessionId?: number; messageId?: number; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
   resolveQuestion: (reqId: string, answers: { question: string; answer: string }[]) => void
   // ── Binary Agent Operating Modes (Plan | Act) ───────────────────────────
   // Canonical 2 modes:
