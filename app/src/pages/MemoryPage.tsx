@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
-import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X, Brain, FileText, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X, Brain, FileText, RefreshCw, Layers } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { useUI } from '@/components/ui/feedback'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { parseMemoryImport } from '@/utils/memoryImport'
 
 const TYPE_COLORS: Record<string, string> = {
-  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#0284C7', project: '#0D9488',
+  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#0284C7', project: '#0D9488', digest: 'var(--badge-digest)',
 }
 
 // 记忆来源 → 展示标签/颜色。origin 由自动记忆链路写入：user=手动添加、
@@ -35,7 +35,7 @@ export default function MemoryPage() {
   const [loading, setLoading] = useState(true)
   const [deleted, setDeleted] = useState<{ content: string; type: string; source_session_id: number | null; workspace: string | null } | null>(null)
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { toast } = useUI()
+  const { toast, confirm } = useUI()
 
   // Active session's workspace (session.config `workspace`, falling back to
   // the global agent_workspace_root). memory.list({workspace}) pre-scopes at
@@ -44,6 +44,7 @@ export default function MemoryPage() {
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null)
   const [fileStatus, setFileStatus] = useState<{ exists: boolean; path: string; mtime: number | null; lineCount: number } | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [consolidating, setConsolidating] = useState(false)
 
   const loadFileStatus = async (workspace: string | null) => {
     if (!workspace) {
@@ -200,6 +201,62 @@ export default function MemoryPage() {
     } catch { toast('合并重复失败', { type: 'error' }) }
   }
 
+  const handleConsolidate = async () => {
+    if (consolidating) return
+    setConsolidating(true)
+    try {
+      let consolidateOpts: { scopeKeys?: (string | null)[] } | undefined
+      if (activeWorkspace) {
+        if (scopeFilter === 'global') consolidateOpts = { scopeKeys: [null] }
+        else if (scopeFilter === 'project') consolidateOpts = { scopeKeys: [activeWorkspace] }
+        else consolidateOpts = { scopeKeys: [activeWorkspace, null] }
+      } else if (scopeFilter === 'global') {
+        consolidateOpts = { scopeKeys: [null] }
+      } else if (scopeFilter === 'project') {
+        const projectScopes = Array.from(new Set(entries.map(e => e.workspace || null))).filter((w): w is string => Boolean(w))
+        if (projectScopes.length > 1) {
+          const confirmed = await confirm({
+            title: t('memory.consolidate'),
+            description: t('memory.consolidate_all_confirm', projectScopes.length),
+            confirmText: t('memory.consolidate'),
+          })
+          if (!confirmed) return
+        }
+        consolidateOpts = { scopeKeys: projectScopes }
+      } else {
+        const allScopes = Array.from(new Set(entries.map(e => e.workspace || null)))
+        if (allScopes.length > 1) {
+          const confirmed = await confirm({
+            title: t('memory.consolidate'),
+            description: t('memory.consolidate_all_confirm', allScopes.length),
+            confirmText: t('memory.consolidate'),
+          })
+          if (!confirmed) return
+        }
+      }
+
+      const res = await window.electronAPI.memory.consolidate(consolidateOpts)
+      const errSummary = res?.errors?.length
+        ? res.errors.map(e => `${e.workspace || 'global'}: ${e.error}`).join('; ')
+        : ''
+      if (!res?.ok) {
+        toast(t('memory.consolidate_failed', errSummary || res?.error || res?.skipped || 'error'), { type: 'error' })
+      } else if (res.errors?.length && res.consolidated > 0) {
+        toast(t('memory.consolidate_partial', res.consolidated, res.workspaces, res.errors.length), { type: 'warning' })
+        loadEntries()
+      } else if (res.consolidated > 0) {
+        toast(t('memory.consolidate_done', res.consolidated, res.workspaces), { type: 'success' })
+        loadEntries()
+      } else {
+        toast(t('memory.consolidate_noop'))
+      }
+    } catch (err: any) {
+      toast(t('memory.consolidate_failed', err?.message || 'error'), { type: 'error' })
+    } finally {
+      setConsolidating(false)
+    }
+  }
+
   // Project Brain: 先按作用域筛(all/global/project)，再套搜索关键词。
   const scoped = scopeFilter === 'all' ? entries
     : scopeFilter === 'global' ? entries.filter(e => !e.workspace)
@@ -236,6 +293,15 @@ export default function MemoryPage() {
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>AI 会记住这些信息并在对话中参考 · 来源追踪 · 冲突检测</p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={handleConsolidate}
+              disabled={consolidating}
+              title={t('memory.consolidate_tip')}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              <Layers size={12} />{t('memory.consolidate')}
+            </button>
             <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)]" style={{ borderColor: 'var(--border)' }}>
               <Upload size={12} />导入
             </button>
@@ -352,7 +418,7 @@ export default function MemoryPage() {
         <div className="flex items-center flex-wrap gap-2 mb-4">
           {Object.entries(counts).map(([type, count]) => (
             <span key={type} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: TYPE_COLORS[type] || '#999', color: '#fff' }}>
-              <Tag size={8} />{type} · {count}
+              <Tag size={8} />{type === 'digest' ? t('memory.type_digest') : type} · {count}
             </span>
           ))}
           {Object.entries(originCounts).map(([origin, count]) => {
@@ -433,10 +499,10 @@ export default function MemoryPage() {
               ) : (
                 <div className="flex items-start gap-2">
                   <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 mt-0.5" style={{ backgroundColor: TYPE_COLORS[entry.type] || '#999', color: '#fff' }}>
-                    {entry.type}
+                    {entry.type === 'digest' ? t('memory.type_digest') : entry.type}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{entry.content}</p>
+                    <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{entry.content}</p>
                     <div className="flex items-center flex-wrap gap-2 mt-1">
                       {(entry.origin === 'assistant' || entry.origin === 'external') && ORIGIN_META[entry.origin] && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: ORIGIN_META[entry.origin].color, color: '#fff' }}>

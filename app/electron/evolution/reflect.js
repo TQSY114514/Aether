@@ -265,6 +265,18 @@ async function reflectNow(db, opts = {}) {
 }
 
 async function _reflectInner(db, opts = {}) {
+  let shouldYield = typeof opts.shouldYield === 'function' ? opts.shouldYield : null
+  if (!shouldYield && !opts.force) {
+    try {
+      const scheduler = require('../cron/scheduler')
+      if (typeof scheduler.isSystemBusy === 'function') {
+        shouldYield = () => scheduler.isSystemBusy()
+      }
+    } catch {}
+  }
+  if (shouldYield && shouldYield()) {
+    return { ok: false, reason: 'yielded', yielded: true }
+  }
   setStatus(db, {
     last_attempt_at: new Date().toISOString(),
     last_error: '',
@@ -274,10 +286,16 @@ async function _reflectInner(db, opts = {}) {
     setStatus(db, { last_reason: 'no-provider', last_error: '没有可用的 Provider/Model' })
     return { ok: false, reason: 'no-provider' }
   }
+  if (shouldYield && shouldYield()) {
+    return { ok: false, reason: 'yielded', yielded: true }
+  }
   const { completeChat } = require('../llm/providerAdapter')
 
   const { entries } = strategyStore.load()
   const st = strategyStore.stats()
+  if (shouldYield && shouldYield()) {
+    return { ok: false, reason: 'yielded', yielded: true }
+  }
   // 认领轨迹：读入即清空缓冲（见 claimTraces 注释）。
   const claimedLines = claimTraces()
   let traces = claimedLines
@@ -300,6 +318,12 @@ async function _reflectInner(db, opts = {}) {
     restoreTraces(claimedLines)
     setStatus(db, { last_reason: 'llm-error', last_error: error })
     return { ok: false, reason: 'llm-error', error }
+  }
+
+  if (shouldYield && shouldYield()) {
+    restoreTraces(claimedLines)
+    setStatus(db, { last_reason: 'yielded', last_error: '' })
+    return { ok: false, reason: 'yielded', yielded: true }
   }
 
   const ops = parseOps(text)

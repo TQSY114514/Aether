@@ -76,13 +76,13 @@ function resolveSubagentTools(role, cwd, agentMode, db) {
   try {
     const mcp = require('../mcp/manager')
     if (typeof mcp.getMergedToolsPayload === 'function') {
-      fullPayload = mcp.getMergedToolsPayload(mode, { cacheStable: true, db })
+      fullPayload = mcp.getMergedToolsPayload(mode, { cacheStable: true, db, includeExtendedLedger: true })
     }
   } catch {}
   if (!fullPayload || fullPayload.length === 0) {
     try {
       const registry = require('../tools/registry')
-      fullPayload = registry.toolsPayload(mode, { cacheStable: true, db })
+      fullPayload = registry.toolsPayload(mode, { cacheStable: true, db, includeExtendedLedger: true })
     } catch {}
   }
   if (!Array.isArray(fullPayload)) return true
@@ -277,6 +277,7 @@ function formatSubagentReport(record, systemNotice = '', snapshotOpts = {}) {
     systemNotice,
     output: record.finalOutput,
     finalOutput: record.finalOutput,
+    findings: record.findingsLedger ? record.findingsLedger.all() : [],
     error: record.error,
   }
 }
@@ -366,7 +367,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
   } else if (Array.isArray(resolvedTools) && resolvedTools.length > 0 && typeof resolvedTools[0] === 'string') {
     try {
       const registry = require('../tools/registry')
-      const full = registry.toolsPayload(effectiveAgentMode, { cacheStable: true, db })
+      const full = registry.toolsPayload(effectiveAgentMode, { cacheStable: true, db, includeExtendedLedger: true })
       resolvedTools = full.filter((t) => resolvedTools.includes(t?.function?.name))
     } catch {
       resolvedTools = true
@@ -416,6 +417,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
     swapHistory: [{ providerId, modelId, assignedAt: new Date().toISOString(), reason: 'initial_spawn' }],
     finalOutput: null,
     error: null,
+    findingsLedger: new (require('./findingsLedger').FindingsLedger)({ workspaceRoot: cwd || process.cwd() }),
     startedAt: Date.now(),
     completedAt: null,
     _runGeneration: 0,
@@ -463,6 +465,20 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
     record.completionPromise = (async () => {
       try {
         const targetSessionId = childSessionId || subagentId
+        if (!record.findingsLedger) {
+          const { FindingsLedger } = require('./findingsLedger')
+          record.findingsLedger = new FindingsLedger({ workspaceRoot: record.cwd || process.cwd() })
+        }
+        const guardedLedger = {
+          add(input) {
+            if (record._runGeneration !== runGen) {
+              return { ok: false, reason: 'stale_subagent_generation' }
+            }
+            return record.findingsLedger.add(input)
+          },
+          all() { return record.findingsLedger.all() },
+          formatMarkdown() { return record.findingsLedger.formatMarkdown() },
+        }
         const result = await runToolLoop({
           sessionId: targetSessionId,
           role: record.role,
@@ -477,6 +493,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
           signal: currentController.signal,
           messages: record.completedMessages,
           tools: record.tools,
+          findingsLedger: guardedLedger,
           getPendingInjections: () => {
             try {
               const pending = steering.getPendingInjections(targetSessionId)
@@ -542,9 +559,13 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
 
         record.status = 'completed'
         record.completedAt = Date.now()
-        record.finalOutput = typeof result === 'string'
+        const rawOutput = typeof result === 'string'
           ? result
           : (result?.finalText || result?.output || liveBuffer.accumulatedText)
+        const ledgerMarkdown = record.findingsLedger ? record.findingsLedger.formatMarkdown() : ''
+        record.finalOutput = ledgerMarkdown
+          ? (rawOutput ? `${rawOutput}\n\n${ledgerMarkdown}` : ledgerMarkdown)
+          : rawOutput
         liveBuffer.recordTurnComplete()
       } catch (err) {
         if (record._runGeneration !== runGen) return

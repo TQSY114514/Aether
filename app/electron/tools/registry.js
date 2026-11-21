@@ -1294,6 +1294,33 @@ const TOOLS = [
       return `saved ${t}: ${c.slice(0, 80)}`
     } catch (e) { return `error: ${e.message}` }
   }},
+  {
+    name: 'report_finding',
+    description: 'Record a concise, disk-verified investigation finding backed by real file citations (`path`, `path:line`, or `path:start-end`). Fails if any cited path or line number does not exist on disk.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        claim: { type: 'string', description: 'One concise factual finding (<= 400 chars)' },
+        cites: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Workspace file citations (`path`, `path:line`, or `path:start-end`) verified against disk',
+        },
+      },
+      required: ['claim', 'cites'],
+    },
+    run: async (args, ctx) => {
+      if (!ctx || !ctx.findingsLedger || typeof ctx.findingsLedger.add !== 'function') {
+        throw new Error('report_finding rejected: active subagent FindingsLedger is required')
+      }
+      const res = ctx.findingsLedger.add({ claim: args?.claim, cites: args?.cites })
+      if (!res.ok) {
+        throw new Error(`report_finding rejected: ${res.reason}`)
+      }
+      return `Recorded finding #${res.index}: ${res.finding.claim} [${res.finding.cites.join(', ')}]`
+    },
+  },
 
   // ── Web tools ───────────────────────────────────────────────────────
   { name: 'web_search', description: 'Search the web (DDG).', risk: 'safe', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, run: async (args, ctx) => {
@@ -1745,6 +1772,9 @@ function getTool(name) { return TOOLS.find(t => t.name === name) }
 function toolsPayload(mode, opts = {}) {
   const isExplore = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
   let list = isExplore ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
+  if (!opts?.includeExtendedLedger) {
+    list = list.filter(t => t.name !== 'report_finding')
+  }
   try {
     const featureFlags = require('../featureFlags')
     if (opts?.db && !featureFlags.isEnabled(opts.db, 'agent.browser')) {

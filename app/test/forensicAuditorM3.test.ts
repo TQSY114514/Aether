@@ -346,6 +346,80 @@ describe('Forensic Auditor Independent Verification Suite (Milestone 3)', () => 
       expect(rehydratedMsg.content).toContain('Need mutex lock wrapper.')
       expect(rehydratedMsg.content).toContain('Resume with priority lock implementation')
     })
+
+    it('4.6b: preserves findingsLedger across hot_swap_model and includes findings in final report', async () => {
+      const fs = require('node:fs')
+      const os = require('node:os')
+      const path = require('node:path')
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sup-ledger-'))
+      fs.writeFileSync(path.join(tmpDir, 'target.js'), 'const a = 1\nconst b = 2\n', 'utf8')
+      try {
+        let loopCount = 0
+        let staleOnStreamDelta: ((delta: string) => void) | null = null
+        let staleOnThinkingDelta: ((delta: string) => void) | null = null
+        const mockLoop = async (opts) => {
+          loopCount++
+          if (loopCount === 1) {
+            staleOnStreamDelta = opts.onStreamDelta
+            staleOnThinkingDelta = opts.onThinkingDelta
+            opts.findingsLedger?.add({ claim: 'Initial pre-swap finding', cites: ['target.js:1'] })
+            return new Promise((resolve) => {
+              opts.signal?.addEventListener('abort', () => {
+                resolve('stale abort output')
+              }, { once: true })
+            })
+          }
+          opts.onStreamDelta?.('valid post-swap stream text')
+          opts.findingsLedger?.add({ claim: 'Post-swap verified finding', cites: ['target.js:2'] })
+          return 'Completed analysis after swap'
+        }
+
+        const spawned = await subagentSupervisor.spawnSupervisedSubagent(
+          {
+            taskPrompt: 'Analyze target.js',
+            providerId: 'p_relay',
+            modelId: 'm_slow',
+            cwd: tmpDir,
+            waitMode: 'async_immediate',
+          },
+          { runToolLoop: mockLoop }
+        )
+
+        await new Promise((r) => setTimeout(r, 30))
+        const swapRes = await subagentSupervisor.controlSubagent({
+          subagentId: spawned.subagentId,
+          action: 'hot_swap_model',
+          newProviderId: 'p_direct',
+          newModelId: 'm_flagship',
+        })
+        expect(swapRes.ok).toBe(true)
+
+        // Invoke old generation's actual stream callbacks after hot-swap generation bumped
+        staleOnStreamDelta?.('stale late stream delta')
+        staleOnThinkingDelta?.('stale late thinking delta')
+
+        const rec = subagentSupervisor.activeSubagents.get(spawned.subagentId)
+        await rec.completionPromise
+        const peeks = subagentSupervisor.peekSubagentStream({ subagentIds: [spawned.subagentId] })
+        expect(peeks[0]?.recentTextTail || '').not.toContain('stale late stream delta')
+        expect(peeks[0]?.recentThinkingTail || '').not.toContain('stale late thinking delta')
+        expect(rec.liveBuffer.accumulatedText).not.toContain('stale late stream delta')
+        expect(rec.liveBuffer.accumulatedText).toContain('valid post-swap stream text')
+
+        const finalReport = subagentSupervisor.formatSubagentReport(rec)
+        expect(finalReport.status).toBe('completed')
+        expect(finalReport.finalOutput).toContain('Completed analysis after swap')
+        expect(finalReport.finalOutput).not.toContain('stale late stream delta')
+        expect(finalReport.finalOutput).toContain('## Verified Findings')
+        expect(finalReport.findings?.length).toBe(2)
+        expect(finalReport.findings?.map((f) => f.claim)).toEqual([
+          'Initial pre-swap finding',
+          'Post-swap verified finding',
+        ])
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
   })
 
   // ==========================================================================

@@ -19,6 +19,7 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(255,255,255,0.85)',
     '--content-secondary-trans': 'rgba(244,244,245,0.7)',
     '--shadow-card': '0 1px 3px rgba(0,0,0,0.05)',
+    '--badge-digest': '#475569',
   },
   dark: {
     '--bg-primary': '#09090B',
@@ -38,6 +39,7 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(9,9,11,0.85)',
     '--content-secondary-trans': 'rgba(18,18,21,0.7)',
     '--shadow-card': '0 1px 3px rgba(0,0,0,0.35)',
+    '--badge-digest': '#3F3F46',
   },
   blue: {
     '--bg-primary': '#F8FAFC',
@@ -57,6 +59,7 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(248,250,252,0.85)',
     '--content-secondary-trans': 'rgba(241,245,249,0.7)',
     '--shadow-card': '0 1px 3px rgba(15,23,42,0.06)',
+    '--badge-digest': '#475569',
   },
   retro: {
     '--bg-primary': '#F5F0E8',
@@ -76,6 +79,7 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(245,240,232,0.85)',
     '--content-secondary-trans': 'rgba(237,229,216,0.65)',
     '--shadow-card': '0 1px 3px rgba(61,50,41,0.06)',
+    '--badge-digest': '#6B5E52',
   },
   metalheart: {
     '--bg-primary': '#F5F7FA',
@@ -95,6 +99,7 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(245, 247, 250, 0.88)',
     '--content-secondary-trans': 'rgba(255, 255, 255, 0.82)',
     '--shadow-card': '0 2px 10px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+    '--badge-digest': '#475569',
   },
   postdigital: {
     '--bg-primary': '#F2F2F0',
@@ -114,6 +119,7 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(242, 242, 240, 0.92)',
     '--content-secondary-trans': 'rgba(255, 255, 255, 0.9)',
     '--shadow-card': '2px 2px 0px #111111',
+    '--badge-digest': '#333333',
   },
   auto: {
     '--bg-primary': '#AUTO',
@@ -133,6 +139,7 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(255,255,255,0.85)',
     '--content-secondary-trans': 'rgba(244,244,245,0.7)',
     '--shadow-card': '0 1px 3px rgba(0,0,0,0.05)',
+    '--badge-digest': '#AUTO',
   },
 }
 

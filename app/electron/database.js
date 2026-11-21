@@ -236,6 +236,11 @@ function initDatabase() {
     db.exec("ALTER TABLE memory ADD COLUMN workspace TEXT");
   } catch {}
   try {
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_memory_type_workspace ON memory (type, workspace)",
+    );
+  } catch {}
+  try {
     mergeDuplicateMemories();
   } catch {}
   // Model 去重：历史上 fetch-models 只增不删、且无唯一约束，可能累计出同一
@@ -448,6 +453,7 @@ function initDatabase() {
   // settings 的 agent_workspace_root。NULL = 全局记忆(所有会话注入)；非 NULL =
   // 仅注入到该 workspace 的会话。注入侧只对 type='project' 做作用域过滤。
   addCol("memory", "workspace", "TEXT");
+  addCol("memory", "last_echoed_at", "DATETIME");
   addCol("agent_task", "tool_journal", "TEXT");
   addCol("agent_task", "kind", "TEXT NOT NULL DEFAULT 'task'");
 

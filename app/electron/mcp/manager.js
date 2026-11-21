@@ -229,6 +229,10 @@ function getMergedToolsPayload(mode, opts = {}) {
     ? [...mergedTools.values()].filter(t => t.risk === 'safe')
     : [...mergedTools.values()]
 
+  if (!opts?.includeExtendedLedger) {
+    list = list.filter(t => t.name !== 'report_finding')
+  }
+
   if (isLean) {
     const hasMcpTools = [...mergedTools.values()].some(isMcpTool)
     list = list.filter(t => {
