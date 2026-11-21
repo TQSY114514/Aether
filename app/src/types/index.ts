@@ -77,7 +77,7 @@ export interface Message {
   status: 'success' | 'error' | 'fallback' | 'aborted'
   error_message: string | null
   arena_model?: string | null
-  attachment?: { name: string; mime: string; kind: 'text' | 'image'; preview?: string } | null
+  attachment?: { name: string; mime: string; kind: 'text' | 'image'; preview?: string; all?: Array<{ name: string; preview: string }> } | null
   file_summary?: string | null
   thinking_content?: string | null
   thinking_duration_ms?: number | null

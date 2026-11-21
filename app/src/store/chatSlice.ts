@@ -217,7 +217,13 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       token_count: null, latency_ms: null,
       status: "success", error_message: null,
       created_at: new Date().toISOString(),
-      attachment: firstAttachment ? { name: firstAttachment.name, mime: firstAttachment.mime, kind: firstAttachment.kind, preview: firstAttachment.kind === "image" ? firstAttachment.dataUrl : undefined } : null,
+      attachment: firstAttachment ? {
+        name: firstAttachment.name,
+        mime: firstAttachment.mime,
+        kind: firstAttachment.kind,
+        preview: firstAttachment.kind === "image" ? firstAttachment.dataUrl : undefined,
+        all: imageAttachments.map(img => ({ name: img.name, preview: img.dataUrl })),
+      } : null,
     }
 
     set((s) => ({
@@ -534,6 +540,11 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
             nextSummaries[m.id] = typeof (m as any).file_summary === 'string'
               ? JSON.parse((m as any).file_summary)
               : (m as any).file_summary
+          } catch {}
+        }
+        if ((m as any).attachment && typeof (m as any).attachment === 'string') {
+          try {
+            m.attachment = JSON.parse((m as any).attachment)
           } catch {}
         }
       }

@@ -187,7 +187,22 @@ ipcMain.handle('chat:complete', handleChatComplete)
     }
     // Save user message
     if (!regenerate) {
-      db.addMessage({ session_id: sessionId, role: 'user', content })
+      let attachmentJson = null
+      if (Array.isArray(attachments) && attachments.length > 0) {
+        const first = attachments[0]
+        const all = attachments.map(a => ({
+          name: a.name || 'image.png',
+          preview: a.dataUrl || a.preview || '',
+        }))
+        attachmentJson = JSON.stringify({
+          name: first.name || 'image.png',
+          mime: first.mime || 'image/png',
+          kind: first.kind || 'image',
+          preview: first.dataUrl || first.preview || '',
+          all,
+        })
+      }
+      db.addMessage({ session_id: sessionId, role: 'user', content, attachment: attachmentJson })
     } else {
       // On regenerate, drop any assistant messages after the last user message
       // so the discarded reply doesn't resurface on reload.
