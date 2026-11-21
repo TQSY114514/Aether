@@ -672,10 +672,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
           thinking_content: _thinking?.content || null,
           thinking_duration_ms: _thinking?.durationMs || null,
         })
-        if (!loopError && needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
+        const isSuccess = !wasAborted && !loopError
+        if (isSuccess && needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
-        if (!loopError && autoMemoryOn) {
+        if (isSuccess && autoMemoryOn) {
           autoMemory.sync({
             db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot,
             onMemorySaved: (payload) => {
@@ -692,11 +693,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
         try { db.setSetting('llm.lastProvider', String(provider?.id || provider || '')); db.setSetting('llm.lastModel', String(model?.model_name || model?.id || model || '')) } catch {}
         // Habit learner: detect recurring preferences and promote them to a
         // user-habits skill once they repeat. Also fire-and-forget.
-        if (!loopError && autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
+        if (isSuccess && autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
         // Memory → Skill bridge: every 20 messages, run a memory audit to
         // detect patterns and draft new skills from accumulated memories.
         // Fire-and-forget, never blocks the reply.
-        if (!loopError && autoMemoryOn && sessionId && db) {
+        if (isSuccess && autoMemoryOn && sessionId && db) {
           try {
             const msgCount = (db.allRows('SELECT COUNT(*) as c FROM message WHERE session_id = ?', [sessionId]) || [])[0]?.c || 0
             if (msgCount > 0 && msgCount % 20 === 0) {
@@ -758,6 +759,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
         if (loopError) {
           return { messageId: msgId, error: loopError, modelSuggestion }
+        }
+        if (wasAborted) {
+          return { messageId: msgId, aborted: true, modelSuggestion }
         }
         return { messageId: msgId, modelSuggestion }
       } catch (err) {

@@ -29,7 +29,8 @@ const EXTS_TO_LANG = {
 
 // Which languages get a server and how to launch it.
 const serverOverrides = new Map() // language -> { command, args }
-const unavailableLangs = new Set() // languages whose binary ENOENT'd
+const UNAVAILABLE_LANG_TTL_MS = 60000 // Missing server binary TTL (auto-rechecks after 60s)
+const unavailableLangs = new Map() // language -> expiry timestamp (ms)
 const serverCooldowns = new Map() // `${root}|${language}` -> expiry timestamp (ms)
 const STARTUP_COOLDOWN_MS = 30000
 
@@ -507,6 +508,7 @@ class LspClient {
     this._diagnosticsByUri = new Map() // normalizedUri -> { version: number|null, diagnostics: Diagnostic[] }
     this._unversionedPushByUri = new Map() // normalizedUri -> { diagnostics: Diagnostic[], receivedAt: number }
     this._serverSupportsPushVersions = false
+    this._docSupportsPushVersions = new Map() // normalizedUri -> boolean
     this._diagnosticWaiters = new Map() // normalizedUri -> Set<{ resolve, timer, minVersion: number|null }>
     this._docVersions = new Map() // normalizedUri -> version number
     this._docTexts = new Map() // normalizedUri -> last synced text
@@ -579,6 +581,7 @@ class LspClient {
   _fail(reason) {
     this._initialized = false
     this._serverSupportsPushVersions = false
+    this._docSupportsPushVersions.clear()
     this._syncKind = 1
     this._docVersions.clear()
     this._docTexts.clear()
@@ -620,6 +623,7 @@ class LspClient {
         const existing = this._diagnosticsByUri.get(key)
         if (diagVersion !== null) {
           this._serverSupportsPushVersions = true
+          this._docSupportsPushVersions.set(key, true)
           if (!existing || existing.version == null || diagVersion >= existing.version) {
             this._diagnosticsByUri.set(key, { version: diagVersion, diagnostics: normalized })
           }
@@ -1084,7 +1088,8 @@ class LspClient {
     if (cached && cached.version != null && cached.version >= expectedVersion) {
       return cached.diagnostics
     }
-    if (!this._serverSupportsPushVersions) {
+    const docPushVersionSupport = this._docSupportsPushVersions?.get(key) === true
+    if (!docPushVersionSupport) {
       const unversioned = this._unversionedPushByUri.get(key)
       if (unversioned && unversioned.receivedAt >= syncStartedAt) {
         return unversioned.diagnostics
@@ -1306,7 +1311,7 @@ const clientCache = new Map()
  * @returns {Promise<Array<{ file: string, line: number, name: string }> | null>}
  */
 async function searchWorkspace(root, query, { language = 'javascript', timeoutMs } = {}) {
-  if (unavailableLangs.has(language)) return null
+  if (isLanguageUnavailable(language)) return null
   const server = serverOverrides.get(language) || defaultServerFor(language)
   if (!server) return null
   const key = `${root}|${language}`
@@ -1318,7 +1323,7 @@ async function searchWorkspace(root, query, { language = 'javascript', timeoutMs
   try {
     return await client.searchSymbols(query)
   } catch {
-    if (client._startErrorCode === 'ENOENT') unavailableLangs.add(language)
+    if (client._startErrorCode === 'ENOENT') markLanguageUnavailable(language)
     clientCache.delete(key)
     try { client.dispose() } catch { /* already disposed */ }
     return null
@@ -1330,6 +1335,12 @@ function configureServer(language, config) {
   unavailableLangs.delete(language)
   for (const k of serverCooldowns.keys()) {
     if (k.endsWith(`|${language}`)) serverCooldowns.delete(k)
+  }
+  for (const [k, client] of clientCache.entries()) {
+    if (k.endsWith(`|${language}`)) {
+      clientCache.delete(k)
+      try { client.dispose() } catch {}
+    }
   }
   if (!config) {
     serverOverrides.delete(language)
@@ -1345,7 +1356,7 @@ function configureServer(language, config) {
 
 /** Get a client for a workspace+language (cached), or null when unavailable. */
 function clientFor(root, language = 'javascript') {
-  if (unavailableLangs.has(language)) return null
+  if (isLanguageUnavailable(language)) return null
   const key = `${root}|${language}`
   const cooldownUntil = serverCooldowns.get(key)
   if (cooldownUntil && Date.now() < cooldownUntil) return null
@@ -1360,7 +1371,17 @@ function clientFor(root, language = 'javascript') {
 }
 
 function isLanguageUnavailable(language) {
-  return unavailableLangs.has(language)
+  const expiry = unavailableLangs.get(language)
+  if (!expiry) return false
+  if (Date.now() >= expiry) {
+    unavailableLangs.delete(language)
+    return false
+  }
+  return true
+}
+
+function markLanguageUnavailable(language) {
+  unavailableLangs.set(language, Date.now() + UNAVAILABLE_LANG_TTL_MS)
 }
 
 // One-shot wrapper: run fn on the cached client; on ANY error dispose the
@@ -1372,7 +1393,7 @@ async function withClient(root, language, fn, { onDegraded } = {}) {
     try { onDegraded?.({ reason: 'timeout', language, message: 'LSP server in cooldown after prior failure' }) } catch {}
     return null
   }
-  if (unavailableLangs.has(language)) {
+  if (isLanguageUnavailable(language)) {
     try { onDegraded?.({ reason: 'missing', language, message: 'LSP server binary unavailable' }) } catch {}
     return null
   }
@@ -1384,7 +1405,7 @@ async function withClient(root, language, fn, { onDegraded } = {}) {
   try {
     const res = await fn(client)
     if (client._startErrorCode === 'ENOENT') {
-      unavailableLangs.add(language)
+      markLanguageUnavailable(language)
       clientCache.delete(key)
       try { client.dispose() } catch { /* already disposed */ }
       try { onDegraded?.({ reason: 'missing', language, message: `${client.command} not found (ENOENT)` }) } catch {}
@@ -1411,7 +1432,7 @@ async function withClient(root, language, fn, { onDegraded } = {}) {
         Promise.resolve(client._startPromise).then((ok) => {
           if (ok || client._disposed) return
           if (client._startErrorCode === 'ENOENT') {
-            unavailableLangs.add(language)
+            markLanguageUnavailable(language)
           } else if (client._startFailed) {
             serverCooldowns.set(key, Date.now() + STARTUP_COOLDOWN_MS)
           }
@@ -1432,7 +1453,7 @@ async function withClient(root, language, fn, { onDegraded } = {}) {
   } catch (err) {
     if (client._disposed || clientCache.get(key) !== client) return null
     if (client._startErrorCode === 'ENOENT') {
-      unavailableLangs.add(language)
+      markLanguageUnavailable(language)
       try { onDegraded?.({ reason: 'missing', language, message: `${client.command} not found (ENOENT)` }) } catch {}
     } else {
       serverCooldowns.set(key, Date.now() + STARTUP_COOLDOWN_MS)
@@ -1545,7 +1566,7 @@ async function diagnosticsAfterEdit(root, file, { content, language, waitMs = 45
  */
 function syncDocumentAfterEdit(root, file, { content, language } = {}) {
   const lang = language || extToLanguage(file)
-  if (!lang || unavailableLangs.has(lang)) return false
+  if (!lang || isLanguageUnavailable(lang)) return false
   const key = `${root}|${lang}`
   const cooldownUntil = serverCooldowns.get(key)
   if (cooldownUntil && Date.now() < cooldownUntil) return false
