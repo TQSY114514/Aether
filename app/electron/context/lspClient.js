@@ -16,6 +16,7 @@
 const childProcess = require('child_process')
 const { fileURLToPath, pathToFileURL } = require('url')
 const path = require('path')
+const fs = require('fs')
 
 const DEFAULT_TIMEOUT_MS = 8000
 

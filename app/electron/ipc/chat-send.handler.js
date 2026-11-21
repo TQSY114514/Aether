@@ -644,14 +644,17 @@ ipcMain.handle('chat:complete', handleChatComplete)
           loopReturned = await runWithOverflowHeal()
           finalContent = streamedContent || loopReturned || ''
         }
+        const wasAborted = controller.signal.aborted
         const loopError =
-          orchestrateFailed
-            ? (orchestrateErrorMsg ? `[agent error: ${orchestrateErrorMsg}]` : '[agent error: Orchestration failed]')
-            : (typeof loopReturned === 'string' && /^\[agent error:/i.test(loopReturned.trim()))
-              ? loopReturned.trim()
-              : (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim()))
-                ? finalContent.trim()
-                : null
+          wasAborted
+            ? null
+            : orchestrateFailed
+              ? (orchestrateErrorMsg ? `[agent error: ${orchestrateErrorMsg}]` : '[agent error: Orchestration failed]')
+              : (typeof loopReturned === 'string' && /^\[agent error:/i.test(loopReturned.trim()))
+                ? loopReturned.trim()
+                : (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim()))
+                  ? finalContent.trim()
+                  : null
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
         const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)
@@ -663,7 +666,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         const _thinking = cb.getThinkingData ? cb.getThinkingData() : null
         db.updateMessage(msgId, {
           content: finalContent,
-          status: loopError ? 'error' : 'success',
+          status: wasAborted ? 'aborted' : (loopError ? 'error' : 'success'),
           ...(loopError ? { error_message: loopError } : {}),
           token_count: tokens,
           thinking_content: _thinking?.content || null,

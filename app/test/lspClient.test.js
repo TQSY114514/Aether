@@ -484,7 +484,7 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     fs.mkdirSync(binDir, { recursive: true })
     const posixShim = path.join(binDir, 'fake-lsp')
     const cmdShim = path.join(binDir, 'fake-lsp.cmd')
-    fs.writeFileSync(posixShim, '#!/bin/sh\necho posix\n', 'utf8')
+    fs.writeFileSync(posixShim, '#!/bin/sh\necho posix\n', { encoding: 'utf8', mode: 0o755 })
     fs.writeFileSync(
       cmdShim,
       `@echo off\r\n"${process.execPath}" "${FIXTURE}" --push-diag %*\r\n`,

@@ -415,8 +415,8 @@ textarea, input {
 .mc li.task-item.completed { opacity: 0.6; }
 .mc li.task-item.completed input[type="checkbox"]:checked + * { text-decoration: line-through; }
 .mc del { opacity: 0.6; }
-.mc a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-.mc a:hover { color: var(--accent-hover); }
+.mc a { color: var(--link, var(--accent)); text-decoration: underline; text-underline-offset: 2px; }
+.mc a:hover { color: var(--link-hover, var(--accent-hover)); }
 .mc strong { font-weight: 600; }
 .mc em { font-style: italic; }
 .mc h2 { font-size: 1.2em; font-weight: 700; margin: 12px 0 6px; color: var(--text-primary); }
