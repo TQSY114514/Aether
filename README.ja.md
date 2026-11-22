@@ -113,6 +113,7 @@ Aether の設計とコードベースは、以下のオープンソースプロ�
 - **[Cursor](https://cursor.com) & [Trae](https://trae.ai)** — クリップボード画像の直接貼り付け（`Ctrl+V`）、複数画像のドラッグ＆ドロップ吸着、およびレスポンシブな吹き出し内メディアプレビューの人間工学（`MessageBubble.tsx`）。
 - **[Google DeepMind Antigravity](https://deepmind.google)** — 原生マルチモーダル画像のダブルクリック拡大 Lightbox モーダル表示とスプリング微アニメーション（`MessageBubble.tsx`）、およびエンドツーエンドの自律エージェントワークフロー制御とコードベース継続進化パートナー。
 - **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — マルチ粒度ローカルリポジトリ検索とコンテキスト認識コード検索パイプラインの設計着想（`registry.js`、`repoMap.js`）。
+- **[Warp Agent CLI](https://www.warp.dev/agent-cli)** — 宣言的タスク別モデルルーティングルール（`projectConfig.js` の `routingRules`、`chat-send.handler.js`）とカスタム正規表現による機密情報マスキング（`toolResultMiddleware.js` の `redactPatterns`）。
 
 ### コンテキスト・メモリ・安全機構
 - **[OpenClaw](https://github.com/openclaw/openclaw)** — コンテキスト圧縮アルゴリズム（`compaction.js`）、不正なツール呼び出し自動修復（`toolCallRepair.js`）、読み取り専用ツールキャッシュ（`toolCache.js`）、意味的無限ループハッシュ検知（`toolResultHash.js`）、およびツール結果サニタイズミドルウェア（`toolResultMiddleware.js`）。

@@ -240,6 +240,7 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 - **[Cursor](https://cursor.com) & [Trae](https://trae.ai)** — 剪贴板图片直接粘贴（`Ctrl+V`）、多图拖拽吸附与自适应气泡富媒体预览交互规范（`MessageBubble.tsx`）。
 - **[Google DeepMind Antigravity](https://deepmind.google)** — 原生多模态图片双击全屏 Lightbox 模态放大与无 Slop 弹簧动效（`MessageBubble.tsx`），以及端到端自主 Agent 工作流编排与代码库持续重构协作伙伴。
 - **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — 多粒度本地代码仓库检索与上下文感知搜索管线灵感（`registry.js`、`repoMap.js`）。
+- **[Warp Agent CLI](https://www.warp.dev/agent-cli)** — 声明式任务级模型路由规则（`projectConfig.js` 中的 `routingRules`、`chat-send.handler.js`）与自定义正则敏感信息脱敏（`toolResultMiddleware.js` 中的 `redactPatterns`）。
 
 ### 上下文、记忆与安全机制
 - **[OpenClaw](https://github.com/openclaw/openclaw)** — 上下文分块压缩算法（`compaction.js`）、工具调用损坏自愈（`toolCallRepair.js`）、只读工具结果缓存（`toolCache.js`）、语义死循环哈希检测（`toolResultHash.js`）及工具输出脱敏截断中间件（`toolResultMiddleware.js`）。

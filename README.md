@@ -240,6 +240,7 @@ Aether stands on the shoulders of these open-source projects and engineering pio
 - **[Cursor](https://cursor.com) & [Trae](https://trae.ai)** — Native clipboard image paste (`Ctrl+V`), multi-image drag-and-drop ingestion, and responsive in-bubble media preview ergonomics (`MessageBubble.tsx`).
 - **[Google DeepMind Antigravity](https://deepmind.google)** — Native multimodal double-click zoom lightbox inspection (`MessageBubble.tsx`), end-to-end autonomous agent workflow orchestration, and continuous codebase refactoring.
 - **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — Multi-granularity local repository search & context-aware code retrieval ergonomics (`registry.js`, `repoMap.js`).
+- **[Warp Agent CLI](https://www.warp.dev/agent-cli)** — Declarative task-level model routing rules (`routingRules` in `projectConfig.js`, `chat-send.handler.js`) and user-defined custom regex secret redaction (`redactPatterns` in `toolResultMiddleware.js`).
 
 ### Context, Memory & Safety Mechanisms
 - **[OpenClaw](https://github.com/openclaw/openclaw)** — Context compaction planning (`compaction.js`), malformed tool-call auto-repair (`toolCallRepair.js`), read-only tool caching (`toolCache.js`), semantic loop hash detection (`toolResultHash.js`), and secret-redacting tool result middleware (`toolResultMiddleware.js`).
