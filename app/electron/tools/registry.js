@@ -10,6 +10,7 @@ const {
   getWorkspaceRoot,
   resolveRoamingPath,
   isDangerousRoot,
+  isSystemCriticalDir,
   isSensitivePath,
   _hasSessionWorkspace,
   _isShadowActive,
@@ -1808,7 +1809,7 @@ TOOLS.push(
       if (!resolved || typeof resolved !== 'string') {
         return JSON.stringify({ ok: false, error: 'Invalid directory path' })
       }
-      if (isDangerousRoot(resolved) || isSensitivePath(resolved)) {
+      if (isDangerousRoot(resolved) || isSensitivePath(resolved) || isSystemCriticalDir(resolved)) {
         return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${resolved}` })
       }
       if (!fs.existsSync(resolved)) {
@@ -1825,7 +1826,7 @@ TOOLS.push(
       }
       let canonical = resolved
       try { canonical = fs.realpathSync(resolved) } catch {}
-      if (isDangerousRoot(canonical) || isSensitivePath(canonical)) {
+      if (isDangerousRoot(canonical) || isSensitivePath(canonical) || isSystemCriticalDir(canonical)) {
         return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${canonical}` })
       }
       if (ctx && typeof ctx === 'object') {

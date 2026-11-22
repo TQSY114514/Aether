@@ -57,10 +57,10 @@ export default function PersonaSelector({
       const found = personas.find((p) => p.id === currentPersonaId)
       if (found) return found.name
     }
-    return t('chat.no_persona', '无预设')
+    return t('chat.no_persona')
   }, [isSoulActive, workspaceSoul, currentPersonaId, personas])
 
-  const tooltipText = t('tooltip.persona', '选择角色预设 / SOUL')
+  const tooltipText = t('tooltip.persona')
 
   return (
     <div ref={containerRef} className="relative flex items-center gap-1 shrink-0">
@@ -107,7 +107,7 @@ export default function PersonaSelector({
           }}
         >
           <div className="px-2 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider select-none">
-            {t('sidebar.nav.personas', '角色预设')}
+            {t('sidebar.nav.personas')}
           </div>
 
           {/* Project SOUL.md option if available in workspace */}
@@ -153,7 +153,7 @@ export default function PersonaSelector({
                 className="truncate"
                 style={{ color: !isSoulActive && (!currentPersonaId || currentPersonaId === 0) ? 'var(--accent)' : 'var(--text-primary)' }}
               >
-                {t('chat.no_persona', '无预设 (通用助手)')}
+                {t('chat.no_persona')}
               </span>
             </div>
             {!isSoulActive && (!currentPersonaId || currentPersonaId === 0) && (

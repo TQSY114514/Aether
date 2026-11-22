@@ -57,7 +57,7 @@ function registerSessionHandlers(ipcMain, db) {
     if (!resolved || typeof resolved !== 'string') {
       throw new Error('Invalid path')
     }
-    if (sandbox.isDangerousRoot(resolved) || sandbox.isSensitivePath(resolved)) {
+    if (sandbox.isDangerousRoot(resolved) || sandbox.isSensitivePath(resolved) || sandbox.isSystemCriticalDir(resolved)) {
       throw new Error(`Forbidden working directory: ${resolved}`)
     }
     let st
@@ -67,7 +67,7 @@ function registerSessionHandlers(ipcMain, db) {
     }
     let canonical = resolved
     try { canonical = fs.realpathSync(resolved) } catch {}
-    if (sandbox.isDangerousRoot(canonical) || sandbox.isSensitivePath(canonical)) {
+    if (sandbox.isDangerousRoot(canonical) || sandbox.isSensitivePath(canonical) || sandbox.isSystemCriticalDir(canonical)) {
       throw new Error(`Forbidden working directory: ${canonical}`)
     }
     try {

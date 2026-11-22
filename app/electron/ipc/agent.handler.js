@@ -1,5 +1,5 @@
 const fs = require('fs')
-const { getWorkspaceRoot, setWorkspaceRootForSession, isDangerousRoot, hasUnsafeWindowsPrefix, isSensitivePath, resolveRoamingPath, _isShadowActive } = require('../tools/sandbox')
+const { getWorkspaceRoot, setWorkspaceRootForSession, isDangerousRoot, isSystemCriticalDir, hasUnsafeWindowsPrefix, isSensitivePath, resolveRoamingPath, _isShadowActive } = require('../tools/sandbox')
 const checkpointMgr = require('../llm/checkpointManager')
 const { invalidateCache, hasProjectInstructions, loadProjectInstructions, loadModularRules } = require('../llm/projectInstructions')
 
@@ -29,7 +29,7 @@ function registerAgentHandlers(ipcMain, db) {
     if (raw) {
       const base = (sessionId ? getWorkspaceRoot(sessionId) : null) || db.getSetting('agent_workspace_root') || getWorkspaceRoot() || process.cwd()
       const resolved = resolveRoamingPath(raw, base)
-      if (!resolved || hasUnsafeWindowsPrefix(resolved) || isDangerousRoot(resolved) || isSensitivePath(resolved)) {
+      if (!resolved || hasUnsafeWindowsPrefix(resolved) || isDangerousRoot(resolved) || isSensitivePath(resolved) || isSystemCriticalDir(resolved)) {
         throw new Error(`Forbidden directory: ${resolved || raw} is a system-critical path`)
       }
       let st = null
@@ -39,7 +39,7 @@ function registerAgentHandlers(ipcMain, db) {
       }
       let canonical = resolved
       try { canonical = fs.realpathSync(resolved) } catch {}
-      if (isDangerousRoot(canonical) || isSensitivePath(canonical)) {
+      if (isDangerousRoot(canonical) || isSensitivePath(canonical) || isSystemCriticalDir(canonical)) {
         throw new Error(`Forbidden directory: ${canonical} is a system-critical path`)
       }
       v = canonical
