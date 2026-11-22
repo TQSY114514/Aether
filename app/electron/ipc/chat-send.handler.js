@@ -232,20 +232,34 @@ ipcMain.handle('chat:complete', handleChatComplete)
       let matchedRule = null
       try {
         const sess = db.getSession(sessionId)
-        let wsRoot = sess?.cwd || null
-        if (!wsRoot && sess?.config) { try { wsRoot = JSON.parse(sess.config).workspace || null } catch {} }
+        let wsRoot = null
+        if (sess?.config) { try { wsRoot = JSON.parse(sess.config).workspace || null } catch {} }
+        if (!wsRoot) wsRoot = sess?.cwd || null
         if (wsRoot) {
-          const { loadProjectConfig } = require('../config/projectConfig')
+          const { loadProjectConfig, compileSafeRegex } = require('../config/projectConfig')
           const pCfg = loadProjectConfig(wsRoot)
           if (pCfg && Array.isArray(pCfg.routingRules) && pCfg.routingRules.length > 0) {
-            const msgText = String(content || '')
+            const msgText = String(content || '').slice(0, 4000)
             for (const rule of pCfg.routingRules) {
-              try {
-                if (rule.match.length <= 256 && new RegExp(rule.match, 'i').test(msgText)) {
-                  const target = allModelsForSuggest.find(m => m.model_name === rule.model || String(m.id) === rule.model)
-                  if (target) { matchedRule = { target, rule }; break }
+              const re = compileSafeRegex(rule.match, 'i')
+              if (!re || !re.test(msgText)) continue
+              const spec = rule.model
+              const target = allModelsForSuggest.find(m => {
+                if (String(m.id) === spec) return true
+                if (spec.includes(':')) {
+                  const [pid, mname] = spec.split(':')
+                  if (String(m.provider_id) === pid && m.model_name === mname) return true
                 }
-              } catch {}
+                if (spec.includes('/')) {
+                  const idx = spec.indexOf('/')
+                  const pname = spec.slice(0, idx).toLowerCase()
+                  const mname = spec.slice(idx + 1)
+                  const p = db.getProvider(m.provider_id)
+                  if (p && String(p.name || '').toLowerCase() === pname && m.model_name === mname) return true
+                }
+                return m.model_name === spec
+              })
+              if (target) { matchedRule = { target, rule }; break }
             }
           }
         }
@@ -254,8 +268,28 @@ ipcMain.handle('chat:complete', handleChatComplete)
         modelSuggestion = {
           suggestedModelId: matchedRule.target.id,
           reason: `project routingRule: /${matchedRule.rule.match}/i → ${matchedRule.target.model_name}`,
-          reasonParts: [{ key: 'projectRule', detail: matchedRule.rule.match }],
-          confidence: 'high',
+          reasonParts: {
+            task: 'project_rule',
+            taskLabel: `Rule: ${matchedRule.rule.match}`,
+            confidence: 100,
+            lowConfidence: false,
+            family: matchedRule.target.model_name,
+            heuristic: 100,
+            eloScore: null,
+            eloWins: 0,
+            eloTotal: 0,
+            eloSigma: null,
+            eloReliable: false,
+            arenaElo: null,
+            useTools: true,
+            reasonPickUsed: false,
+            closeRace: false,
+            gap: null,
+            runnerUpName: null,
+            secondary: [],
+            ranked: allModelsForSuggest.length,
+          },
+          confidence: 1,
         }
       } else {
         const intent = db.classifyIntent(content)

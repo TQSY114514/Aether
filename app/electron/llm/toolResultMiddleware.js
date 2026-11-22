@@ -79,70 +79,54 @@ const SECRET_WHOLE_PATTERNS = [
   /\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}(?![A-Za-z0-9_\-])/g,            // SendGrid API key
   /\b(?:xapp|xoxp|xoxa|xoxr)-[0-9A-Za-z\-]{50,}(?![0-9A-Za-z\-])/g,           // Slack OAuth tokens
 ]
-const MAX_CUSTOM_REDACT_PATTERNS = 32
-const MAX_CUSTOM_REDACT_PATTERN_LEN = 256
+const { compileSafeRegex } = require('../config/projectConfig')
+
+const MAX_PATTERNS_PER_SOURCE = 16
 
 /**
  * Compile user/project custom redaction patterns into global RegExp instances.
- * Supports either plain regex body strings or `/body/flags` notation.
- * Invalid, empty, or over-length patterns are silently skipped so one bad rule
- * never breaks tool execution.
+ * Uses compileSafeRegex to reject malformed, over-length, or ReDoS-prone rules.
  * @param {string[]} patterns
  * @returns {RegExp[]}
  */
 function compileCustomRedactPatterns(patterns) {
   if (!Array.isArray(patterns) || patterns.length === 0) return []
   const compiled = []
-  for (const raw of patterns.slice(0, MAX_CUSTOM_REDACT_PATTERNS)) {
-    if (typeof raw !== 'string') continue
-    const trimmed = raw.trim()
-    if (!trimmed || trimmed.length > MAX_CUSTOM_REDACT_PATTERN_LEN) continue
-    try {
-      let body = trimmed
-      let flags = 'g'
-      if (trimmed.startsWith('/') && trimmed.lastIndexOf('/') > 0) {
-        const lastSlash = trimmed.lastIndexOf('/')
-        const maybeBody = trimmed.slice(1, lastSlash)
-        const maybeFlags = trimmed.slice(lastSlash + 1)
-        if (maybeBody && /^[gimsuy]*$/.test(maybeFlags)) {
-          body = maybeBody
-          flags = maybeFlags.includes('g') ? maybeFlags : maybeFlags + 'g'
-        }
-      }
-      const re = new RegExp(body, flags)
-      // Guard against zero-length matches causing infinite loops or noisy replacements
-      if (re.test('')) continue
-      re.lastIndex = 0
-      compiled.push(re)
-    } catch {
-      // Skip malformed regex
-    }
+  for (const raw of patterns) {
+    if (compiled.length >= MAX_PATTERNS_PER_SOURCE) break
+    const re = compileSafeRegex(raw, 'g')
+    if (re) compiled.push(re)
   }
   return compiled
 }
 
 function resolveCustomRedactPatterns(ctx) {
-  const raw = []
-  if (ctx && Array.isArray(ctx.customRedactPatterns)) {
-    raw.push(...ctx.customRedactPatterns)
-  }
-  if (ctx && ctx.workspaceRoot) {
-    try {
-      const { loadProjectConfig } = require('../config/projectConfig')
-      const cfg = loadProjectConfig(ctx.workspaceRoot)
-      if (cfg && Array.isArray(cfg.redactPatterns)) raw.push(...cfg.redactPatterns)
-    } catch {}
-  }
+  const compiled = []
+  // 1. Global DB settings first so project configs cannot crowd them out
   if (ctx && ctx.db && typeof ctx.db.getSetting === 'function') {
     try {
       const val = ctx.db.getSetting('security.custom_redact_patterns')
       if (val) {
         const parsed = JSON.parse(val)
-        if (Array.isArray(parsed)) raw.push(...parsed)
+        if (Array.isArray(parsed)) compiled.push(...compileCustomRedactPatterns(parsed))
       }
     } catch {}
   }
-  return compileCustomRedactPatterns(raw)
+  // 2. Explicit context patterns
+  if (ctx && Array.isArray(ctx.customRedactPatterns)) {
+    compiled.push(...compileCustomRedactPatterns(ctx.customRedactPatterns))
+  }
+  // 3. Project-level .aether/config.json redactPatterns
+  if (ctx && ctx.workspaceRoot) {
+    try {
+      const { loadProjectConfig } = require('../config/projectConfig')
+      const cfg = loadProjectConfig(ctx.workspaceRoot)
+      if (cfg && Array.isArray(cfg.redactPatterns)) {
+        compiled.push(...compileCustomRedactPatterns(cfg.redactPatterns))
+      }
+    } catch {}
+  }
+  return compiled
 }
 
 function redactMiddleware(content, ctx) {
@@ -163,10 +147,10 @@ function redactMiddleware(content, ctx) {
       return '[REDACTED]'
     })
   }
-  // Pass 3: user/project custom redaction patterns.
+  // Pass 3: user/project custom redaction patterns (skip zero-width matches).
   const customPatterns = resolveCustomRedactPatterns(ctx)
   for (const re of customPatterns) {
-    redacted = redacted.replace(re, '[REDACTED]')
+    redacted = redacted.replace(re, (m) => (m && m.length > 0 ? '[REDACTED]' : m))
   }
   return redacted
 }
@@ -251,11 +235,17 @@ function compressionMiddleware(content, ctx) {
 const CHAIN = [redactMiddleware, externalSourceTagMiddleware, externalInjectionMiddleware, compressionMiddleware, truncateMiddleware]
 
 function applyMiddleware(content, ctx) {
-  // Pass multimodal (image) content arrays through unmodified.
-  // Converting them to strings breaks the structure expected by the API adapter.
+  // Pass multimodal (image) content arrays through while still redacting text parts.
   if (Array.isArray(content)) {
     const isMultimodal = content.some(c => c && typeof c === 'object' && (c.type === 'image_url' || c.type === 'image'))
-    if (isMultimodal) return content
+    if (isMultimodal) {
+      return content.map(part => {
+        if (part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string') {
+          try { return { ...part, text: redactMiddleware(part.text, ctx) } } catch { return part }
+        }
+        return part
+      })
+    }
   }
 
   let out = content

@@ -671,7 +671,7 @@ function buildProviderTopologySnapshot(db, { includeInactive = false } = {}) {
         displayName: typeof m === 'object' ? (m.display_name || modelId) : modelId,
         isPrimary: typeof m === 'object' ? Boolean(m.is_primary) : false,
         capabilityHints: inferModelCapabilities(modelId),
-        arenaScores: rawArena.slice(0, 3),
+        arenaScores: rawArena,
         lastProbe: cached
           ? {
               available: cached.available,

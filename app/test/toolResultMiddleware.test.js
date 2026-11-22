@@ -166,28 +166,43 @@ describe('isExternalBySource', () => {
 })
 
 describe('redactMiddleware custom patterns', () => {
-  it('支持 ctx.customRedactPatterns 擦除自定义敏感词，并安全跳过非法正则', () => {
-    const out = applyMiddleware('token=INTERNAL_SECRET_99A and normal_ok', {
+  it('支持 ctx.customRedactPatterns 擦除自定义敏感词（非内置模式），并安全跳过非法/ReDoS/零宽正则', () => {
+    const out = applyMiddleware('prefix=CORP_PRIV_99A and normal_ok', {
       tool: 'run_command',
       customRedactPatterns: [
-        'INTERNAL_SECRET_[A-Z0-9]+',
+        'CORP_PRIV_[A-Z0-9]+',
         '[unclosed_regex', // invalid regex should be ignored safely
+        '(a+)+',           // ReDoS nested quantifier should be rejected
+        '(?=normal)',      // zero-width lookahead must not insert [REDACTED]
         '',                // empty should be ignored
       ],
     })
-    expect(out).toBe('token=[REDACTED] and normal_ok')
+    expect(out).toBe('prefix=[REDACTED] and normal_ok')
   })
 
   it('支持 /pattern/flags 形式与 db settings 中的 security.custom_redact_patterns', () => {
     const mockDb = {
       getSetting: (key) => key === 'security.custom_redact_patterns'
-        ? JSON.stringify(['/corp-token-[a-z0-9]+/i'])
+        ? JSON.stringify(['/corp-badge-[a-z0-9]+/i'])
         : null,
     }
-    const out = applyMiddleware('found CORP-TOKEN-XYZ123 in logs', {
+    const out = applyMiddleware('found CORP-BADGE-XYZ123 in logs', {
       tool: 'run_command',
       db: mockDb,
     })
     expect(out).toBe('found [REDACTED] in logs')
+  })
+
+  it('多模态数组中的 text 片段也会被 redactMiddleware 脱敏', () => {
+    const out = applyMiddleware([
+      { type: 'text', text: 'key is CORP_PRIV_42Z' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
+    ], {
+      tool: 'read_file',
+      customRedactPatterns: ['CORP_PRIV_[A-Z0-9]+'],
+    })
+    expect(Array.isArray(out)).toBe(true)
+    expect(out[0].text).toBe('key is [REDACTED]')
+    expect(out[1].type).toBe('image_url')
   })
 })
