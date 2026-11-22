@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // processTap.js — Structured Crash & Failure Signal Extractor (Phase 3)
 //
-// Electron-free module used by run_command, localBackend, and lintTestRepair.
+// Electron-free module used by run_command and localBackend.
 // Extracts high-signal error location, failure kind, and primary error line
 // from noisy stdout/stderr tails so both the LLM and UI see the root cause.
 // ─────────────────────────────────────────────────────────────────────────────

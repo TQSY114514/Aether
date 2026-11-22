@@ -77,7 +77,7 @@ describe('Harness Phase 3 & 4: Process Tap & ShadowGit Hardening', () => {
     expect(st.crashSignal.primaryError).toContain('lb_boom')
   })
 
-  it.skipIf(process.platform !== 'win32')('run_command prepends [Process Tap] banner and emits process_crash status on non-zero exit', async () => {
+  it('run_command prepends [Process Tap] banner and emits process_crash status on non-zero exit', async () => {
     const { getTool } = require('../electron/tools/registry')
     const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
     const sid = 'p3-runcmd-test'

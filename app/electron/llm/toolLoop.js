@@ -1585,7 +1585,6 @@ Reply ONLY with JSON:
           if (touchedFiles) {
             const repair = await lintTestRepair.runLintAndRepair({ db, sessionId, round: repairRounds + 1, onStatus })
             if (repair.context) {
-              shadowRollbackTriggered = true
               const activeRoot = getWorkspaceRoot(sessionId) || wsRoot
               const shadowGit = require('./shadowGit')
               const byHash = new Map()
@@ -1596,24 +1595,41 @@ Reply ONLY with JSON:
                 byHash.get(hash).push(ap)
               }
               let rolledBackCount = 0
+              let rollbackFailed = 0
               for (const [hash, pathsForHash] of byHash.entries()) {
                 const rb = shadowGit.rollbackCheckpoint(sessionId, activeRoot, hash, pathsForHash)
                 if (rb && rb.ok) rolledBackCount += pathsForHash.length
+                else rollbackFailed++
               }
-              const resolvedRoot = path.resolve(activeRoot)
+              let realRoot = null
+              try { realRoot = fs.realpathSync(path.resolve(activeRoot)) } catch {}
               for (const created of createdFiles) {
                 try {
+                  if (!realRoot) { rollbackFailed++; continue }
                   const abs = path.resolve(created)
-                  const rel = path.relative(resolvedRoot, abs)
-                  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(abs)) {
+                  if (!fs.existsSync(abs)) continue
+                  const st = fs.lstatSync(abs)
+                  if (st.isSymbolicLink()) { rollbackFailed++; continue }
+                  const realParent = fs.realpathSync(path.dirname(abs))
+                  const relParent = path.relative(realRoot, realParent)
+                  const insideRoot = realParent === realRoot || (relParent && !relParent.startsWith('..') && !path.isAbsolute(relParent))
+                  if (insideRoot) {
                     fs.unlinkSync(abs)
                     rolledBackCount++
+                  } else {
+                    rollbackFailed++
                   }
-                } catch {}
+                } catch {
+                  rollbackFailed++
+                }
               }
-              if (rolledBackCount > 0) {
-                try { onStatus?.({ kind: 'info', text: `[Harness Circuit Breaker] Rolled back ${rolledBackCount} file(s) after ${repairRounds} failed repair rounds.` }) } catch {}
+              if (rollbackFailed === 0 && rolledBackCount > 0) {
+                shadowRollbackTriggered = true
+                try { onStatus?.({ kind: 'shadow_workspace', text: `[Harness Circuit Breaker] Rolled back ${rolledBackCount} file(s) after ${repairRounds} failed repair rounds.` }) } catch {}
                 convo.push({ role: 'system', content: `[Harness Circuit Breaker] Consecutive repair attempts (${repairRounds}) failed to resolve lint/test errors. Changes to ${rolledBackCount} file(s) were automatically rolled back to their pre-turn state. Stop editing and summarize the root blocker for the user.` })
+              } else if (rollbackFailed > 0) {
+                try { onStatus?.({ kind: 'warn', text: `[Harness Circuit Breaker] Rollback incomplete (${rolledBackCount} restored, ${rollbackFailed} failed).` }) } catch {}
+                convo.push({ role: 'system', content: `[Harness Circuit Breaker] Repair rounds failed and automatic rollback encountered ${rollbackFailed} error(s) (${rolledBackCount} restored). Stop editing and warn the user about workspace state.` })
               }
             }
           }
