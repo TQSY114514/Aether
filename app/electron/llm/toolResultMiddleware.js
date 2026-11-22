@@ -79,7 +79,73 @@ const SECRET_WHOLE_PATTERNS = [
   /\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}(?![A-Za-z0-9_\-])/g,            // SendGrid API key
   /\b(?:xapp|xoxp|xoxa|xoxr)-[0-9A-Za-z\-]{50,}(?![0-9A-Za-z\-])/g,           // Slack OAuth tokens
 ]
-function redactMiddleware(content) {
+const MAX_CUSTOM_REDACT_PATTERNS = 32
+const MAX_CUSTOM_REDACT_PATTERN_LEN = 256
+
+/**
+ * Compile user/project custom redaction patterns into global RegExp instances.
+ * Supports either plain regex body strings or `/body/flags` notation.
+ * Invalid, empty, or over-length patterns are silently skipped so one bad rule
+ * never breaks tool execution.
+ * @param {string[]} patterns
+ * @returns {RegExp[]}
+ */
+function compileCustomRedactPatterns(patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) return []
+  const compiled = []
+  for (const raw of patterns.slice(0, MAX_CUSTOM_REDACT_PATTERNS)) {
+    if (typeof raw !== 'string') continue
+    const trimmed = raw.trim()
+    if (!trimmed || trimmed.length > MAX_CUSTOM_REDACT_PATTERN_LEN) continue
+    try {
+      let body = trimmed
+      let flags = 'g'
+      if (trimmed.startsWith('/') && trimmed.lastIndexOf('/') > 0) {
+        const lastSlash = trimmed.lastIndexOf('/')
+        const maybeBody = trimmed.slice(1, lastSlash)
+        const maybeFlags = trimmed.slice(lastSlash + 1)
+        if (maybeBody && /^[gimsuy]*$/.test(maybeFlags)) {
+          body = maybeBody
+          flags = maybeFlags.includes('g') ? maybeFlags : maybeFlags + 'g'
+        }
+      }
+      const re = new RegExp(body, flags)
+      // Guard against zero-length matches causing infinite loops or noisy replacements
+      if (re.test('')) continue
+      re.lastIndex = 0
+      compiled.push(re)
+    } catch {
+      // Skip malformed regex
+    }
+  }
+  return compiled
+}
+
+function resolveCustomRedactPatterns(ctx) {
+  const raw = []
+  if (ctx && Array.isArray(ctx.customRedactPatterns)) {
+    raw.push(...ctx.customRedactPatterns)
+  }
+  if (ctx && ctx.workspaceRoot) {
+    try {
+      const { loadProjectConfig } = require('../config/projectConfig')
+      const cfg = loadProjectConfig(ctx.workspaceRoot)
+      if (cfg && Array.isArray(cfg.redactPatterns)) raw.push(...cfg.redactPatterns)
+    } catch {}
+  }
+  if (ctx && ctx.db && typeof ctx.db.getSetting === 'function') {
+    try {
+      const val = ctx.db.getSetting('security.custom_redact_patterns')
+      if (val) {
+        const parsed = JSON.parse(val)
+        if (Array.isArray(parsed)) raw.push(...parsed)
+      }
+    } catch {}
+  }
+  return compileCustomRedactPatterns(raw)
+}
+
+function redactMiddleware(content, ctx) {
   if (typeof content !== 'string') content = String(content ?? '')
   let redacted = content
   // Pass 1: whole-match secrets（先整段吃掉，防止后续标签匹配截出半截泄露）。
@@ -96,6 +162,11 @@ function redactMiddleware(content) {
       if (cut >= 0) return m.slice(0, cut + 1) + '[REDACTED]'
       return '[REDACTED]'
     })
+  }
+  // Pass 3: user/project custom redaction patterns.
+  const customPatterns = resolveCustomRedactPatterns(ctx)
+  for (const re of customPatterns) {
+    redacted = redacted.replace(re, '[REDACTED]')
   }
   return redacted
 }

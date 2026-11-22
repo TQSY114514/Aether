@@ -228,12 +228,43 @@ ipcMain.handle('chat:complete', handleChatComplete)
     let modelSuggestion = null
     try {
       const allModelsForSuggest = db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
-      const intent = db.classifyIntent(content)
-      const scores = db.getModelScores()
-      const eloData = modelAdvisor.buildEloData(scores, intent)
-      const priority = db.getSetting('modelRoutingPriority') || 'quality'
-      const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData, routingContext: { priority } })
-      if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, reasonParts: result.reasonParts, confidence: result.confidence }
+      // Check project-level .aether/config.json routingRules override first
+      let matchedRule = null
+      try {
+        const sess = db.getSession(sessionId)
+        let wsRoot = sess?.cwd || null
+        if (!wsRoot && sess?.config) { try { wsRoot = JSON.parse(sess.config).workspace || null } catch {} }
+        if (wsRoot) {
+          const { loadProjectConfig } = require('../config/projectConfig')
+          const pCfg = loadProjectConfig(wsRoot)
+          if (pCfg && Array.isArray(pCfg.routingRules) && pCfg.routingRules.length > 0) {
+            const msgText = String(content || '')
+            for (const rule of pCfg.routingRules) {
+              try {
+                if (rule.match.length <= 256 && new RegExp(rule.match, 'i').test(msgText)) {
+                  const target = allModelsForSuggest.find(m => m.model_name === rule.model || String(m.id) === rule.model)
+                  if (target) { matchedRule = { target, rule }; break }
+                }
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+      if (matchedRule) {
+        modelSuggestion = {
+          suggestedModelId: matchedRule.target.id,
+          reason: `project routingRule: /${matchedRule.rule.match}/i → ${matchedRule.target.model_name}`,
+          reasonParts: [{ key: 'projectRule', detail: matchedRule.rule.match }],
+          confidence: 'high',
+        }
+      } else {
+        const intent = db.classifyIntent(content)
+        const scores = db.getModelScores()
+        const eloData = modelAdvisor.buildEloData(scores, intent)
+        const priority = db.getSetting('modelRoutingPriority') || 'quality'
+        const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData, routingContext: { priority } })
+        if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, reasonParts: result.reasonParts, confidence: result.confidence }
+      }
     } catch {}
 
     // Build fallback chain — skip providers that are in cooldown or have a

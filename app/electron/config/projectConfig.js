@@ -42,6 +42,11 @@ function invalidateProjectConfigCache(workspaceRoot) {
  */
 function normalizeConfig(raw = {}) {
   const tools = raw.tools || {}
+  const routingRules = Array.isArray(raw.routingRules)
+    ? raw.routingRules
+        .filter(r => r && typeof r === 'object' && typeof r.match === 'string' && typeof r.model === 'string' && r.match.trim() && r.model.trim())
+        .map(r => ({ match: r.match.trim(), model: r.model.trim() }))
+    : []
   return {
     defaultModel: typeof raw.defaultModel === 'string' ? raw.defaultModel.trim() : null,
     mode: ['ask', 'auto', 'plan'].includes(raw.mode) ? raw.mode : null,
@@ -51,6 +56,8 @@ function normalizeConfig(raw = {}) {
       allow: Array.isArray(tools.allow) ? tools.allow.map(String) : [],
     },
     ignorePatterns: Array.isArray(raw.ignorePatterns) ? raw.ignorePatterns.map(String) : [],
+    redactPatterns: Array.isArray(raw.redactPatterns) ? raw.redactPatterns.map(String).filter(Boolean) : [],
+    routingRules,
     rules: Array.isArray(raw.rules) ? raw.rules.map(String) : [],
     customConfigPath: raw._filePath || null,
   }

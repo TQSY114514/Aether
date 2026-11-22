@@ -580,6 +580,65 @@ function getModelsForProvider(db, provider) {
 }
 
 /**
+ * Reads per-model Arena ELO scores (filtering out untested rows where total_count === 0).
+ * Returns a Map keyed by `model:${model_id}` and `name:${provider_id||provider_name}::${model_name}`.
+ * @param {object} db - SQLite database instance or mock db
+ * @returns {Map<string, Array<{ intent: string, score: number, winRate: number, totalCount: number }>>}
+ */
+function getArenaScoresByModel(db) {
+  const map = new Map()
+  if (!db) return map
+
+  let rows = []
+  if (typeof db.getModelScores === 'function') {
+    try {
+      rows = db.getModelScores()
+    } catch {}
+  } else if (typeof db.prepare === 'function') {
+    try {
+      rows = db.prepare(
+        'SELECT ms.*, m.model_name, m.provider_id, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id = m.id JOIN provider p ON m.provider_id = p.id ORDER BY ms.intent, ms.score DESC'
+      ).all()
+    } catch {}
+  }
+
+  if (!Array.isArray(rows) || rows.length === 0) return map
+
+  const addEntry = (key, entry) => {
+    if (!key) return
+    let list = map.get(key)
+    if (!list) {
+      list = []
+      map.set(key, list)
+    }
+    list.push(entry)
+  }
+
+  for (const r of rows) {
+    if (!r) continue
+    const totalCount = Number(r.total_count || 0)
+    if (totalCount <= 0) continue
+    const winCount = Number(r.win_count || 0)
+    const entry = {
+      intent: String(r.intent || 'general'),
+      score: Math.round(Number(r.score ?? 1000)),
+      winRate: Math.round((winCount / totalCount) * 100),
+      totalCount,
+    }
+    if (r.model_id != null) addEntry(`id:${r.model_id}`, entry)
+    if (r.model_name) {
+      if (r.provider_id != null) addEntry(`pid:${r.provider_id}::${r.model_name}`, entry)
+      if (r.provider_name) addEntry(`pname:${String(r.provider_name).toLowerCase()}::${r.model_name}`, entry)
+    }
+  }
+
+  for (const list of map.values()) {
+    list.sort((a, b) => b.score - a.score)
+  }
+  return map
+}
+
+/**
  * Builds a complete provider topology snapshot from database and cached probe metrics.
  * @param {object} db - SQLite database instance or mock db
  * @param {object} [opts]
@@ -590,6 +649,7 @@ function buildProviderTopologySnapshot(db, { includeInactive = false } = {}) {
   const providers = getActiveProviders(db, includeInactive)
   if (!providers || providers.length === 0) return []
 
+  const arenaScoreMap = getArenaScoresByModel(db)
   const snapshot = []
   for (const p of providers) {
     const cleanUrl = (p.api_url || p.baseUrl || p.base_url || '').replace(/\/+$/, '')
@@ -598,13 +658,20 @@ function buildProviderTopologySnapshot(db, { includeInactive = false } = {}) {
 
     const models = rawModels.map(m => {
       const modelId = typeof m === 'string' ? m : (m.model_name || m.id || m.modelId || m.name)
+      const dbModelRowId = typeof m === 'object' && m.id != null ? m.id : null
       const cacheKey = `${p.id}::${modelId}`
       const cached = runtimeProbeCache.get(cacheKey) || null
+      const rawArena =
+        (dbModelRowId != null && arenaScoreMap.get(`id:${dbModelRowId}`)) ||
+        arenaScoreMap.get(`pid:${p.id}::${modelId}`) ||
+        (p.name ? arenaScoreMap.get(`pname:${String(p.name).toLowerCase()}::${modelId}`) : null) ||
+        []
       return {
         modelId,
         displayName: typeof m === 'object' ? (m.display_name || modelId) : modelId,
         isPrimary: typeof m === 'object' ? Boolean(m.is_primary) : false,
         capabilityHints: inferModelCapabilities(modelId),
+        arenaScores: rawArena.slice(0, 3),
         lastProbe: cached
           ? {
               available: cached.available,
@@ -669,6 +736,10 @@ function buildTopologyPromptXml(db) {
       let mAttrs = `id="${escapeXml(m.modelId)}" tier="${tier}" status="${status}"`
       if (m.lastProbe?.ttftMs != null) {
         mAttrs += ` ttft="${m.lastProbe.ttftMs}ms"`
+      }
+      if (Array.isArray(m.arenaScores) && m.arenaScores.length > 0) {
+        const arenaStr = m.arenaScores.map(a => `${a.intent}:${a.score}(${a.winRate}%,n=${a.totalCount})`).join(',')
+        mAttrs += ` arena="${escapeXml(arenaStr)}"`
       }
       lines.push(`    <model ${mAttrs} />`)
     }

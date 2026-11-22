@@ -1087,7 +1087,13 @@ const TOOLS = [
       for (const p of snapshot) {
         lines.push(`- **${p.providerName}** (ID: \`${p.providerId}\`, Kind: \`${p.endpointKind}\`, Stability: \`${p.stabilityHint}\`)\n  URL: \`${p.baseUrl}\``)
         if (p.models && p.models.length > 0) {
-          lines.push(`  Models: ${p.models.map(m => `\`${m.modelId}\` (${(m.capabilityHints || []).join(', ')})`).join(', ')}`)
+          lines.push(`  Models: ${p.models.map(m => {
+            const caps = (m.capabilityHints || []).join(', ')
+            const arena = Array.isArray(m.arenaScores) && m.arenaScores.length > 0
+              ? ` | Arena: ${m.arenaScores.map(a => `${a.intent} ${a.score} (${a.winRate}%, n=${a.totalCount})`).join(', ')}`
+              : ''
+            return `\`${m.modelId}\` (${caps}${arena})`
+          }).join(', ')}`)
         } else {
           lines.push('  Models: (none configured)')
         }

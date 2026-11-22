@@ -1477,7 +1477,7 @@ Reply ONLY with JSON:
           rawContent = `${rawContent}\n[recovery: ${rh.kind || rh.action || 'unknown'}${hintText}]`
         }
         // Middleware chain (redact, truncate) — never let it break the loop.
-        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args, isPoorMode }) } catch {}
+        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args, isPoorMode, db, workspaceRoot: wsRoot }) } catch {}
         // Enrich structured results with a summary line (OpenClaw-inspired).
         try { rawContent = enrichWithSummary(rawContent, (tc.function||{}).name) } catch {}
         // Collect evidence for verification (Codex-inspired).

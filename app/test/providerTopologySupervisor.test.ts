@@ -1218,5 +1218,34 @@ describe('Feature 26: Offline Mock Unit Tests (providerTopology & subagentSuperv
       expect(record.provider.name).toBe('Anthropic Tier 1')
       expect(record.model.display_name).toBe('Claude 3.7 Sonnet')
     })
+
+    it('T5.10: Arena ELO scores are attached to topology snapshot and XML prompt (only total_count > 0)', () => {
+      const baseDb = createMockDb()
+      const dbWithArena = {
+        ...baseDb,
+        getModelScores: () => [
+          { model_id: 1, model_name: 'gpt-4o', provider_id: 1, provider_name: 'OpenAI Official', intent: 'coding', score: 1142.4, win_count: 6, total_count: 8 },
+          { model_id: 1, model_name: 'gpt-4o', provider_id: 1, provider_name: 'OpenAI Official', intent: 'general', score: 1060, win_count: 3, total_count: 5 },
+          // Untested row (total_count === 0) must be filtered out
+          { model_id: 2, model_name: 'claude-3-7-sonnet', provider_id: 2, provider_name: 'Anthropic Tier 1', intent: 'coding', score: 1000, win_count: 0, total_count: 0 },
+        ],
+      }
+
+      const snap = buildProviderTopologySnapshot(dbWithArena)
+      const openai = snap.find((p: any) => p.providerId === 1)
+      const gpt4o = openai.models.find((m: any) => m.modelId === 'gpt-4o')
+      expect(gpt4o.arenaScores).toEqual([
+        { intent: 'coding', score: 1142, winRate: 75, totalCount: 8 },
+        { intent: 'general', score: 1060, winRate: 60, totalCount: 5 },
+      ])
+
+      const anthropic = snap.find((p: any) => p.providerId === 2)
+      const claude = anthropic.models.find((m: any) => m.modelId === 'claude-3-7-sonnet')
+      expect(claude.arenaScores).toEqual([])
+
+      const xml = buildTopologyPromptXml(dbWithArena)
+      expect(xml).toContain('arena="coding:1142(75%,n=8),general:1060(60%,n=5)"')
+      expect(xml).not.toContain('claude-3-7-sonnet" tier="reasoning_flagship" status="untested" arena=')
+    })
   })
 })
