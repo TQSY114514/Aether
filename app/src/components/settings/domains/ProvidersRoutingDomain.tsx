@@ -3,6 +3,7 @@ import { Server, Sparkles, SlidersHorizontal, ChevronDown, ChevronUp } from 'luc
 import { useState } from 'react'
 import { t } from '@/utils/i18n'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
+import PersonaSettings from '@/components/settings/PersonaSettings'
 import ModelPage from '@/pages/ModelPage'
 import type { EffortLevel } from '@/store/types'
 
@@ -55,6 +56,9 @@ export default function ProvidersRoutingDomain() {
 
       {/* Default Chat & Auto-Routing */}
       <DefaultChatSettings />
+
+      {/* Persona & SOUL.md Management */}
+      <PersonaSettings />
 
       {/* Default Reasoning & Thinking Budget */}
       <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>

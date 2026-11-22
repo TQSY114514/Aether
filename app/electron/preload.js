@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getConfig: (id) => ipcRenderer.invoke('session:get-config', id),
     setConfig: (id, config) => ipcRenderer.invoke('session:set-config', id, config),
     setCwd: (id, cwd) => ipcRenderer.invoke('session:set-cwd', id, cwd),
+    onCwdChanged: (cb) => subscribe('session:cwd-changed', cb),
   },
   message: {
     list: (sessionId) => ipcRenderer.invoke('message:list', sessionId),

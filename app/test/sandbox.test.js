@@ -518,4 +518,31 @@ describe('registry 工具接线（读边界 + yolo）', () => {
     const mem = reg.TOOLS.find((t) => t.name === 'memory_save')
     expect(mem.risk).toBe('dangerous')
   })
+
+  it('change_directory 为 dangerous 且按字符串契约解析与校验目录', async () => {
+    const { sb, reg, ws } = await freshRegistry()
+    const resolved = sb.resolveRoamingPath('nested', ws)
+    expect(typeof resolved).toBe('string')
+    const cdTool = reg.TOOLS.find((t) => t.name === 'change_directory')
+    expect(cdTool.risk).toBe('dangerous')
+    expect(typeof cdTool.run).toBe('function')
+
+    const outside = mkdtempSync(join(tmpdir(), 'sbx-cd-'))
+    tmpDirs.push(outside)
+    const ctx = { cwd: ws }
+    const okRes = JSON.parse(await cdTool.run({ path: outside }, ctx))
+    expect(okRes.ok).toBe(true)
+    expect(ctx.cwd.toLowerCase()).toBe(okRes.cwd.toLowerCase())
+
+    const badRoot = process.platform === 'win32' ? 'C:\\Windows' : '/'
+    const badRes = JSON.parse(await cdTool.run({ path: badRoot }, ctx))
+    expect(badRes.ok).toBe(false)
+
+    expect(sb.isForbiddenCwd('/')).toBe(true)
+    if (process.platform !== 'win32') {
+      expect(sb.isForbiddenCwd('/etc')).toBe(true)
+      expect(sb.isForbiddenCwd('/usr/bin')).toBe(true)
+      expect(sb.isForbiddenCwd('/private/etc')).toBe(true)
+    }
+  })
 })

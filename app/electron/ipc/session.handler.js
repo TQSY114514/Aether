@@ -1,3 +1,4 @@
+const fs = require('fs')
 const { clearAllowRules, cleanupSessionControllers } = require('./chat.handler')
 const log = require('../logger')
 
@@ -51,20 +52,43 @@ function registerSessionHandlers(ipcMain, db) {
     if (sandbox._isShadowActive?.(id)) {
       throw new Error('Cannot change working directory (/cd) while a shadow workspace run is active; wait for the current run to finish.')
     }
+    const explicitBase = typeof sandbox.getExplicitSessionCwd === 'function' ? sandbox.getExplicitSessionCwd(db, id) : null
+    const base = explicitBase || (typeof sandbox.getWorkspaceRoot === 'function' ? sandbox.getWorkspaceRoot(id) : null) || process.cwd()
+    const resolved = sandbox.resolveRoamingPath(cwd, base)
+    if (!resolved || typeof resolved !== 'string') {
+      throw new Error('Invalid path')
+    }
+    if (sandbox.isForbiddenCwd(resolved)) {
+      throw new Error(`Forbidden working directory: ${resolved}`)
+    }
+    let st
+    try { st = fs.statSync(resolved) } catch { st = null }
+    if (!st || !st.isDirectory()) {
+      throw new Error(`Directory does not exist: ${resolved}`)
+    }
+    let canonical = resolved
+    try { canonical = fs.realpathSync(resolved) } catch {}
+    if (sandbox.isForbiddenCwd(canonical)) {
+      throw new Error(`Forbidden working directory: ${canonical}`)
+    }
+    // Persist configuration & session CWD first before mutating in-memory workspace pin
+    const cfg = db.getSessionConfig(id) || {}
+    cfg.workspace = canonical
+    db.setSessionConfig(id, cfg)
+
+    if (typeof db.setSessionCwd === 'function') {
+      db.setSessionCwd(id, canonical)
+    } else {
+      db.updateSession(id, { cwd: canonical })
+    }
+
     try {
-      if (typeof sandbox.isInsideWorkspace === 'function' && sandbox.getWorkspaceRoot(id) !== cwd) {
-        // Only update _sessionWorkspaces if this session already had a pinned workspace
-        // (avoids re-enabling containment on unconstrained CWD sessions).
-        if (typeof sandbox.setWorkspaceRootForSession === 'function' && sandbox._hasSessionWorkspace?.(id)) {
-          sandbox.setWorkspaceRootForSession(id, cwd)
-        }
+      if (typeof sandbox.setWorkspaceRootForSession === 'function' && sandbox._hasSessionWorkspace?.(id)) {
+        sandbox.setWorkspaceRootForSession(id, canonical)
       }
     } catch {}
-    if (typeof db.setSessionCwd === 'function') {
-      return db.setSessionCwd(id, cwd)
-    }
-    db.updateSession(id, { cwd })
-    return cwd
+
+    return canonical
   })
   ipcMain.handle('message:list', (_e, sessionId) => db.getMessages(sessionId))
   ipcMain.handle('message:update', (_e, id, data) => db.updateMessage(id, data))

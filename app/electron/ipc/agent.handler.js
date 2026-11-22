@@ -1,4 +1,5 @@
-const { getWorkspaceRoot, setWorkspaceRootForSession, isDangerousRoot, hasUnsafeWindowsPrefix, _isShadowActive } = require('../tools/sandbox')
+const fs = require('fs')
+const { getWorkspaceRoot, setWorkspaceRootForSession, isForbiddenCwd, getExplicitSessionCwd, resolveRoamingPath, _isShadowActive } = require('../tools/sandbox')
 const checkpointMgr = require('../llm/checkpointManager')
 const { invalidateCache, hasProjectInstructions, loadProjectInstructions, loadModularRules } = require('../llm/projectInstructions')
 
@@ -6,12 +7,8 @@ function registerAgentHandlers(ipcMain, db) {
   // Get the current session CWD / fallback default directory without locking sandbox containment.
   ipcMain.handle('agent:workspace:get', (_e, sessionId) => {
     if (sessionId) {
-      try {
-        const sess = typeof db.getSession === 'function' ? db.getSession(sessionId) : null
-        if (sess?.cwd) return sess.cwd
-      } catch {}
-      const cfg = db.getSessionConfig(sessionId)
-      if (cfg?.workspace) return cfg.workspace
+      const explicit = getExplicitSessionCwd(db, sessionId)
+      if (explicit) return explicit
     }
     const saved = db.getSetting('agent_workspace_root')
     if (saved) return saved
@@ -23,9 +20,26 @@ function registerAgentHandlers(ipcMain, db) {
   ipcMain.handle('agent:workspace:set', async (_e, opts) => {
     const dir = typeof opts === 'string' ? opts : opts?.dir
     const sessionId = typeof opts === 'object' ? opts?.sessionId : undefined
-    const v = dir ? String(dir).trim() : null
-    if (v && (hasUnsafeWindowsPrefix(v) || isDangerousRoot(v))) {
-      throw new Error(`Forbidden directory: ${v} is a system-critical path`)
+    const raw = dir ? String(dir).trim() : null
+    let v = null
+    if (raw) {
+      const explicitBase = sessionId ? getExplicitSessionCwd(db, sessionId) : null
+      const base = explicitBase || (sessionId ? getWorkspaceRoot(sessionId) : null) || db.getSetting('agent_workspace_root') || getWorkspaceRoot() || process.cwd()
+      const resolved = resolveRoamingPath(raw, base)
+      if (!resolved || isForbiddenCwd(resolved)) {
+        throw new Error(`Forbidden directory: ${resolved || raw} is a system-critical path`)
+      }
+      let st = null
+      try { st = fs.statSync(resolved) } catch {}
+      if (!st || !st.isDirectory()) {
+        throw new Error(`Directory does not exist: ${resolved}`)
+      }
+      let canonical = resolved
+      try { canonical = fs.realpathSync(resolved) } catch {}
+      if (isForbiddenCwd(canonical)) {
+        throw new Error(`Forbidden directory: ${canonical} is a system-critical path`)
+      }
+      v = canonical
     }
     if (sessionId) {
       if (_isShadowActive?.(sessionId)) {

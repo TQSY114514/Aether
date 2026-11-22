@@ -22,6 +22,7 @@ const POLICY = Object.freeze({ ALLOW: 'allow', ASK: 'ask', DENY: 'deny', ALWAYS_
 const TOOL_AXIS = {
   // filesystem: 文件/目录操作
   read_file: AXES.FILESYSTEM, list_dir: AXES.FILESYSTEM, glob_find: AXES.FILESYSTEM, glob_files: AXES.FILESYSTEM,
+  change_directory: AXES.FILESYSTEM,
   grep_search: AXES.FILESYSTEM, write_file: AXES.FILESYSTEM, edit_file: AXES.FILESYSTEM,
   apply_patch: AXES.FILESYSTEM, get_project_context: AXES.FILESYSTEM,
   codebase_graph: AXES.FILESYSTEM, workspace_files: AXES.FILESYSTEM,

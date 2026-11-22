@@ -163,6 +163,7 @@ interface Window {
       getConfig: (id: number) => Promise<{ providerId: number | null; modelId: number | null; personaId: number | null } | null>
       setConfig: (id: number, config: any) => Promise<void>
       setCwd: (id: number | string, cwd: string) => Promise<string>
+      onCwdChanged: (cb: (payload: { sessionId: number; cwd: string }) => void) => () => void
     }
     message: {
       list: (sessionId: number) => Promise<Message[]>
@@ -371,7 +372,7 @@ interface Window {
       onOpen: (callback: (payload: { action: string; workspace?: string; raw?: string }) => void) => () => void
     }
     fs: {
-      listDir: (dir: string, sessionId?: number | null) => Promise<{ ok: boolean; entries?: { name: string; isDir: boolean }[]; error?: string }>
+      listDir: (dir: string, sessionId?: number | null) => Promise<{ ok: boolean; dir?: string; entries?: { name: string; isDir: boolean }[]; error?: string }>
     },
     agent: {
       getWorkspace: (sessionId?: number) => Promise<string>

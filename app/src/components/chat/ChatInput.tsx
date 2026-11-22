@@ -15,6 +15,7 @@ import { useFeatureFlag } from '@/utils/featureFlags'
 
 import { DEFAULT_COMMANDS, executeTypedSlashCommand, type SlashCommand, type AgentMode } from './slashCommands'
 import ModelSelector from './input/ModelSelector'
+import PersonaSelector from './input/PersonaSelector'
 import EffortControl from './input/EffortControl'
 import AgentModeSelector from './input/AgentModeSelector'
 import StreamingStatusBar from './input/StreamingStatusBar'
@@ -99,6 +100,7 @@ export default function ChatInput() {
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
     loopingSessions, btwOpen, toggleBtw, sessions, setSessionCwd,
+    personas, workspaceSoul, defaultPersonaId,
   } = useStore(useShallow((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -117,6 +119,9 @@ export default function ChatInput() {
     toggleBtw: s.toggleBtw,
     sessions: s.sessions,
     setSessionCwd: s.setSessionCwd,
+    personas: s.personas,
+    workspaceSoul: s.workspaceSoul,
+    defaultPersonaId: s.defaultPersonaId,
   })))
 
   // ELO score map for model selector display
@@ -187,6 +192,10 @@ export default function ChatInput() {
     if (allModels.length > 0) return allModels[0].id
     return null
   }, [currentSessionId, sessionConfigs, allModels])
+
+  const currentPersonaId = currentSessionId
+    ? (sessionConfigs[currentSessionId]?.personaId ?? null)
+    : defaultPersonaId
 
   const isBinaryReasoning = useMemo(() => {
     if (!activeModelId) return false
@@ -437,7 +446,7 @@ export default function ChatInput() {
 
   const handleReferenceSelect = ({ prefix, replacement }: { prefix: string; query: string; replacement: string }) => {
     const before = input.slice(0, refCursor)
-    const match = before.match(/([@#!])[\w\u4e00-\u9fff_-]*$/)
+    const match = before.match(/([@#!])[^\s]*$/)
     if (!match) return
     const start = before.length - match[0].length
     const inserted = prefix + replacement
@@ -691,7 +700,21 @@ export default function ChatInput() {
                   }
                 }}
               />
-              {/* 4. Thinking Effort Control */}
+              {/* 4. Persona & SOUL Selector */}
+              <PersonaSelector
+                currentPersonaId={currentPersonaId}
+                personas={personas}
+                workspaceSoul={workspaceSoul}
+                disabled={isArenaRunning}
+                onSelect={(pid) => {
+                  if (currentSessionId) {
+                    saveSessionConfig(currentSessionId, { personaId: pid })
+                  } else {
+                    useStore.getState().setDefaultPersona(pid)
+                  }
+                }}
+              />
+              {/* 5. Thinking Effort Control */}
               <EffortControl
                 thinkingEnabled={thinkingEnabled}
                 onToggleThinking={setThinkingEnabled}

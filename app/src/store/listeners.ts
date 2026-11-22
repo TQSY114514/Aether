@@ -674,6 +674,32 @@ export function ensurePermissionListener() {
   })
 }
 
+let _sessionCwdListenerInstalled = false
+export function ensureSessionCwdListener() {
+  if (_sessionCwdListenerInstalled) return
+  _sessionCwdListenerInstalled = true
+  window.electronAPI.session?.onCwdChanged?.(({ sessionId, cwd }: { sessionId: number; cwd: string }) => {
+    if (!sessionId || !cwd) return
+    const st = getStore()
+    st.setState((s) => ({
+      sessions: s.sessions.map((sess) => (sess.id === sessionId ? { ...sess, cwd } : sess)),
+      sessionConfigs: {
+        ...s.sessionConfigs,
+        [sessionId]: { ...s.sessionConfigs[sessionId], workspace: cwd },
+      },
+    }))
+    try {
+      const raw = localStorage.getItem('aether:recent_cwds')
+      const prev: string[] = raw ? JSON.parse(raw) : []
+      const next = [cwd, ...prev.filter((p) => p && p.toLowerCase() !== cwd.toLowerCase())].slice(0, 8)
+      localStorage.setItem('aether:recent_cwds', JSON.stringify(next))
+    } catch {}
+    if (st.getState().currentSessionId === sessionId) {
+      st.getState().loadWorkspaceSoul?.(cwd)
+    }
+  })
+}
+
 // All listeners
 
 export function ensureAllListeners() {
@@ -697,4 +723,5 @@ export function ensureAllListeners() {
   ensureTaskListeners()
   ensureQuestionListener()
   ensurePermissionListener()
+  ensureSessionCwdListener()
 }
