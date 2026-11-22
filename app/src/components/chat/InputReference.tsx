@@ -11,7 +11,7 @@ const PREFIXES = {
   '!': { labelKey: 'ref.prefix.bang', color: 'text-purple-400' },
 } as const
 
-type Suggestion = { text: string; desc: string; type: 'file' | 'dir' | 'skill' | 'tool' | 'command' }
+type Suggestion = { text: string; desc: string; type: 'file' | 'dir' | 'skill' | 'tool' | 'command'; replacement?: string }
 
 type InputReferenceProps = {
   value: string
@@ -118,8 +118,11 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
               const filtered = res.entries
                 .filter((e) => !parsed.namePrefix || e.name.toLowerCase().includes(parsed.namePrefix))
                 .slice(0, 10)
+              const rawCanon = res.dir ? res.dir.replace(/\\/g, '/') : ''
+              const canonBase = rawCanon ? (rawCanon.endsWith('/') ? rawCanon : rawCanon + '/') : parsed.displayBase
               items = filtered.map((e) => ({
                 text: `${parsed.displayBase}${e.name}${e.isDir ? parsed.sep : ''}`,
+                replacement: `${canonBase}${e.name}${e.isDir ? '/' : ''}`,
                 desc: e.isDir ? t('ref.type.dir') : t('ref.type.file'),
                 type: e.isDir ? ('dir' as const) : ('file' as const),
               }))
@@ -188,7 +191,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
       e.preventDefault()
       const sel = suggestions[selectedIdx]
       if (sel) {
-        onSelect({ prefix: prefix || '', query, replacement: sel.text })
+        onSelect({ prefix: prefix || '', query, replacement: sel.replacement || sel.text })
       }
     } else if (e.key === 'Escape') {
       setSuggestions([])
@@ -223,7 +226,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
             className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
               i === selectedIdx ? 'bg-[var(--accent)]/15 text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]'
             }`}
-            onClick={() => onSelect({ prefix: prefix || '', query, replacement: s.text })}
+            onClick={() => onSelect({ prefix: prefix || '', query, replacement: s.replacement || s.text })}
             onMouseEnter={() => setSelectedIdx(i)}
           >
             {s.type === 'dir' && <Folder size={13} className="shrink-0" style={{ color: 'var(--accent)' }} />}

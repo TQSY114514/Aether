@@ -116,7 +116,7 @@ export default function PersonaSettings() {
     a.href = url
     a.download = res.fileName || 'SOUL.md'
     a.click()
-    URL.revokeObjectURL(url)
+    setTimeout(() => URL.revokeObjectURL(url), 100)
   }
 
   const handleSaveWorkspaceSoul = async () => {

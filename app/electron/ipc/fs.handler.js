@@ -1,17 +1,13 @@
 const fs = require('fs/promises')
-const { getWorkspaceRoot, resolveRoamingPath, isDangerousRoot, isSystemCriticalDir, isSensitivePath } = require('../tools/sandbox')
+const { getWorkspaceRoot, resolveRoamingPath, isForbiddenCwd, getExplicitSessionCwd } = require('../tools/sandbox')
 
 const MAX_ENTRIES = 500
 const SKIP = new Set(['.git', 'node_modules'])
 
 function resolveRoot(db, sessionId) {
   if (sessionId != null) {
-    try {
-      const sess = typeof db.getSession === 'function' ? db.getSession(sessionId) : null
-      if (sess && sess.cwd) return sess.cwd
-    } catch {}
-    const cfg = db.getSessionConfig(sessionId)
-    if (cfg && cfg.workspace) return cfg.workspace
+    const explicit = getExplicitSessionCwd(db, sessionId)
+    if (explicit) return explicit
   }
   return getWorkspaceRoot(sessionId)
 }
@@ -22,7 +18,7 @@ function registerFsHandlers(ipcMain, db) {
     const root = resolveRoot(db, sessionId) || process.cwd()
     const resolved = resolveRoamingPath(dir, root)
     if (!resolved || typeof resolved !== 'string') return { ok: false, error: 'unsafe_path' }
-    if (isDangerousRoot(resolved) || isSystemCriticalDir(resolved) || isSensitivePath(resolved)) {
+    if (isForbiddenCwd(resolved)) {
       return { ok: false, error: 'restricted_path' }
     }
     let canonicalDir
@@ -31,7 +27,7 @@ function registerFsHandlers(ipcMain, db) {
     } catch {
       return { ok: false, error: 'read_failed' }
     }
-    if (isDangerousRoot(canonicalDir) || isSystemCriticalDir(canonicalDir) || isSensitivePath(canonicalDir)) {
+    if (isForbiddenCwd(canonicalDir)) {
       return { ok: false, error: 'restricted_path' }
     }
     let entries

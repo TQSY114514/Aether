@@ -41,9 +41,44 @@ function isSystemCriticalDir(p) {
   if (norm === progFiles || norm.startsWith(progFiles + path.sep)) return true
   if (norm === progFilesX86 || norm.startsWith(progFilesX86 + path.sep)) return true
   if (process.platform !== 'win32') {
-    if (norm === '/etc' || norm.startsWith('/etc/') || norm === '/system' || norm.startsWith('/system/')) return true
+    const protectedPrefixes = [
+      '/etc', '/private/etc', '/usr', '/bin', '/sbin', '/boot',
+      '/dev', '/proc', '/sys', '/var/run', '/var/db', '/var/root',
+      '/system', '/library',
+    ]
+    for (const prefix of protectedPrefixes) {
+      if (norm === prefix || norm.startsWith(prefix + '/')) return true
+    }
   }
   return false
+}
+
+function isForbiddenCwd(p) {
+  if (!p) return false
+  return hasUnsafeWindowsPrefix(p) || isDangerousRoot(p) || isSystemCriticalDir(p) || isSensitivePath(p)
+}
+
+function getExplicitSessionCwd(db, sessionId) {
+  if (!db || sessionId == null) return null
+  let hasPrepare = false
+  try {
+    if (typeof db.prepare === 'function') {
+      hasPrepare = true
+      const row = db.prepare('SELECT cwd FROM session WHERE id = ?').get(Number(sessionId))
+      if (row && row.cwd) return row.cwd
+    }
+  } catch {}
+  try {
+    const cfg = db.getSessionConfig?.(sessionId)
+    if (cfg && cfg.workspace) return cfg.workspace
+  } catch {}
+  if (!hasPrepare && typeof db.getSession === 'function') {
+    try {
+      const sess = db.getSession(sessionId)
+      if (sess && sess.cwd) return sess.cwd
+    } catch {}
+  }
+  return null
 }
 
 function resolveRoamingPath(inputPath, baseDir) {
@@ -110,16 +145,9 @@ function getWorkspaceRoot(sessionId) {
   if (sessionId) {
     try {
       const db = require('../database')
-      if (db && typeof db.getSession === 'function') {
-        const sess = db.getSession(sessionId)
-        if (sess && sess.cwd && !isDangerousRoot(sess.cwd)) {
-          return path.resolve(sess.cwd)
-        }
-      } else if (db && typeof db.prepare === 'function') {
-        const row = db.prepare('SELECT cwd FROM session WHERE id = ?').get(Number(sessionId))
-        if (row && row.cwd && !isDangerousRoot(row.cwd)) {
-          return path.resolve(row.cwd)
-        }
+      const explicit = getExplicitSessionCwd(db, sessionId)
+      if (explicit && !isForbiddenCwd(explicit)) {
+        return path.resolve(explicit)
       }
     } catch {}
   }
@@ -684,4 +712,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isSystemCriticalDir, resolveRoamingPath, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, _isWorkspaceRootEnforced: (sid) => _workspaceRoot !== null || (sid != null && _sessionWorkspaces.has(sid)), _hasSessionWorkspace: (sid) => _sessionWorkspaces.has(sid), _isShadowActive: (sid) => sid != null && _sessionShadowOrigins.has(sid), DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isSystemCriticalDir, isForbiddenCwd, getExplicitSessionCwd, resolveRoamingPath, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, _isWorkspaceRootEnforced: (sid) => _workspaceRoot !== null || (sid != null && _sessionWorkspaces.has(sid)), _hasSessionWorkspace: (sid) => _sessionWorkspaces.has(sid), _isShadowActive: (sid) => sid != null && _sessionShadowOrigins.has(sid), DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

@@ -537,5 +537,12 @@ describe('registry 工具接线（读边界 + yolo）', () => {
     const badRoot = process.platform === 'win32' ? 'C:\\Windows' : '/'
     const badRes = JSON.parse(await cdTool.run({ path: badRoot }, ctx))
     expect(badRes.ok).toBe(false)
+
+    expect(sb.isForbiddenCwd('/')).toBe(true)
+    if (process.platform !== 'win32') {
+      expect(sb.isForbiddenCwd('/etc')).toBe(true)
+      expect(sb.isForbiddenCwd('/usr/bin')).toBe(true)
+      expect(sb.isForbiddenCwd('/private/etc')).toBe(true)
+    }
   })
 })

@@ -60,6 +60,12 @@ export default function SessionReviewDrawer({
   const asyncGenRef = useRef(0)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    }
+  }, [])
+
   const changesFingerprint = useMemo(() => {
     return `${summary.fileCount}:${summary.totalAdded}:${summary.totalRemoved}:${summary.files
       .map((f) => `${f.path}:${f.added}:${f.removed}`)
@@ -498,9 +504,6 @@ export default function SessionReviewDrawer({
                     onClick={(e) => {
                       e.stopPropagation()
                       handleCopyPath(file.path)
-                    }}
-                    onKeyDown={(e) => {
-                      e.stopPropagation()
                     }}
                     title={copiedPath === file.path ? t('chat.review_path_copied') : t('chat.review_copy_path')}
                     aria-label={copiedPath === file.path ? t('chat.review_path_copied') : t('chat.review_copy_path')}

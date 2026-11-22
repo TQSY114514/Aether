@@ -100,10 +100,14 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     action: async (arg) => {
       const store = useStore.getState()
       if (!arg) {
-        const picked = await window.electronAPI?.system?.pickDirectory?.()
-        if (picked) {
-          await store.setSessionCwd(picked)
-          store.triggerToast(t('slash.cd_success', '已切换工作目录: {0}', picked), 'success')
+        try {
+          const picked = await window.electronAPI?.system?.pickDirectory?.()
+          if (picked) {
+            await store.setSessionCwd(picked)
+            store.triggerToast(t('slash.cd_success', '已切换工作目录: {0}', picked), 'success')
+          }
+        } catch (e: any) {
+          store.triggerToast(t('slash.cd_failed', '切换目录失败: {0}', e?.message || String(e)), 'error')
         }
         return
       }

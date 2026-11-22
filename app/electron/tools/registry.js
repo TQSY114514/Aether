@@ -9,9 +9,8 @@ const {
   isInsideWorkspace,
   getWorkspaceRoot,
   resolveRoamingPath,
-  isDangerousRoot,
-  isSystemCriticalDir,
-  isSensitivePath,
+  isForbiddenCwd,
+  getExplicitSessionCwd,
   _hasSessionWorkspace,
   _isShadowActive,
   setWorkspaceRootForSession,
@@ -1804,12 +1803,13 @@ TOOLS.push(
       if (!rawInput) {
         return JSON.stringify({ ok: false, error: 'path is required' })
       }
-      const baseCwd = ctx?.cwd || (typeof getWorkspaceRoot === 'function' ? getWorkspaceRoot(sid) : null) || process.cwd()
+      const explicitBase = ctx?.db && sid != null ? getExplicitSessionCwd(ctx.db, sid) : null
+      const baseCwd = ctx?.cwd || explicitBase || (typeof getWorkspaceRoot === 'function' ? getWorkspaceRoot(sid) : null) || process.cwd()
       const resolved = resolveRoamingPath(rawInput, baseCwd)
       if (!resolved || typeof resolved !== 'string') {
         return JSON.stringify({ ok: false, error: 'Invalid directory path' })
       }
-      if (isDangerousRoot(resolved) || isSensitivePath(resolved) || isSystemCriticalDir(resolved)) {
+      if (isForbiddenCwd(resolved)) {
         return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${resolved}` })
       }
       if (!fs.existsSync(resolved)) {
@@ -1826,7 +1826,7 @@ TOOLS.push(
       }
       let canonical = resolved
       try { canonical = fs.realpathSync(resolved) } catch {}
-      if (isDangerousRoot(canonical) || isSensitivePath(canonical) || isSystemCriticalDir(canonical)) {
+      if (isForbiddenCwd(canonical)) {
         return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${canonical}` })
       }
       if (ctx && typeof ctx === 'object') {

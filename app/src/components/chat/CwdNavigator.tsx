@@ -127,7 +127,7 @@ export default function CwdNavigator({
     if (!activeCwd) return t('cwd.default_short')
     const clean = activeCwd.replace(/[\\/]+$/, '')
     const parts = clean.replace(/\\/g, '/').split('/').filter(Boolean)
-    return parts[parts.length - 1] || clean
+    return parts[parts.length - 1] || clean || '/'
   }, [activeCwd])
 
   const breadcrumbs = useMemo(() => buildBreadcrumbs(activeCwd), [activeCwd])

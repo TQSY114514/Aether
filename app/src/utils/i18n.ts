@@ -1504,7 +1504,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "zh-CN": {
     "common.browse": "浏览...",
@@ -2919,7 +2920,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "技能",
     "ref.type.tool": "工具",
     "ref.type.command": "指令",
-    "ref.hint": "↑↓ 切换 · Enter/Tab 补全"
+    "ref.hint": "↑↓ 切换 · Enter/Tab 补全",
+    "chat.split_run.label": "双模型对比 (Split Run)"
   },
   "es": {
     "app.name": "Aether",
@@ -4150,7 +4152,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "ja": {
     "app.name": "Aether",
@@ -5381,7 +5384,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -6625,7 +6629,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "方術",
     "ref.type.tool": "器",
     "ref.type.command": "令",
-    "ref.hint": "↑↓ 擇選 · Enter/Tab 補全"
+    "ref.hint": "↑↓ 擇選 · Enter/Tab 補全",
+    "chat.split_run.label": "雙器並較 (Split Run)"
   },
   "fr": {
     "app.name": "Aether",
@@ -7856,7 +7861,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "de": {
     "app.name": "Aether",
@@ -9087,7 +9093,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "pt": {
     "app.name": "Aether",
@@ -10318,7 +10325,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "ru": {
     "app.name": "Aether",
@@ -11549,7 +11557,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -12793,7 +12802,12 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "技能",
     "ref.type.tool": "工具",
     "ref.type.command": "指令",
-    "ref.hint": "↑↓ 切換 · Enter/Tab 補全"
+    "ref.hint": "↑↓ 切換 · Enter/Tab 補全",
+    "chat.split_run.label": "Split Run",
+    "chat.review_expand_all": "展開全部差異",
+    "chat.review_collapse_all": "收合全部差異",
+    "chat.review_copy_path": "複製檔案路徑",
+    "chat.review_path_copied": "路徑已複製"
   },
   "ar": {
     "app.name": "Aether",
@@ -14024,7 +14038,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "uk": {
     "app.name": "Aether",
@@ -15255,7 +15270,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "ko": {
     "app.name": "Aether",
@@ -16486,7 +16502,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   },
   "hi": {
     "app.name": "Aether",
@@ -17717,7 +17734,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.skill": "Skill",
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
-    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+    "chat.split_run.label": "Split Run"
   }
 }
 

@@ -273,7 +273,7 @@ export default function ChatPage() {
                 }
           }
           aria-pressed={chatMode === 'arena'}
-          aria-label="Split Run"
+          aria-label={t('chat.split_run.label')}
         >
           <Swords size={12} style={{ color: chatMode === 'arena' ? 'currentColor' : 'var(--accent)' }} />
         </button>

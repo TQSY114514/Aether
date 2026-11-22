@@ -1411,5 +1411,6 @@
   "ref.type.skill": "Skill",
   "ref.type.tool": "Tool",
   "ref.type.command": "Command",
-  "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
+  "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
+  "chat.split_run.label": "Split Run"
 }
