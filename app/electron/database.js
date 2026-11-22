@@ -1423,7 +1423,7 @@ function markScheduledTaskRun(id) {
 function getModelScores() {
   return db
     .prepare(
-      `SELECT ms.*, m.model_name, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id=m.id JOIN provider p ON m.provider_id=p.id ORDER BY ms.intent, ms.score DESC`,
+      `SELECT ms.*, m.model_name, m.provider_id, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id=m.id JOIN provider p ON m.provider_id=p.id ORDER BY ms.intent, ms.score DESC`,
     )
     .all();
 }

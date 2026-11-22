@@ -1218,5 +1218,58 @@ describe('Feature 26: Offline Mock Unit Tests (providerTopology & subagentSuperv
       expect(record.provider.name).toBe('Anthropic Tier 1')
       expect(record.model.display_name).toBe('Claude 3.7 Sonnet')
     })
+
+    it('T5.10: Arena ELO scores are attached to topology snapshot and XML prompt (only total_count > 0)', () => {
+      const baseDb = createMockDb()
+      const dbWithArena = {
+        ...baseDb,
+        getModelScores: () => [
+          { model_id: 1, model_name: 'gpt-4o', provider_id: 1, provider_name: 'OpenAI Official', intent: 'coding', score: 1142.4, win_count: 6, total_count: 8 },
+          { model_id: 1, model_name: 'gpt-4o', provider_id: 1, provider_name: 'OpenAI Official', intent: 'general', score: 1060, win_count: 3, total_count: 5 },
+          // Untested row (total_count === 0) must be filtered out
+          { model_id: 2, model_name: 'claude-3-7-sonnet', provider_id: 2, provider_name: 'Anthropic Tier 1', intent: 'coding', score: 1000, win_count: 0, total_count: 0 },
+        ],
+      }
+
+      const snap = buildProviderTopologySnapshot(dbWithArena)
+      const openai = snap.find((p: any) => p.providerId === 1)
+      const gpt4o = openai.models.find((m: any) => m.modelId === 'gpt-4o')
+      expect(gpt4o.arenaScores).toEqual([
+        { intent: 'coding', score: 1142, winRate: 75, totalCount: 8 },
+        { intent: 'general', score: 1060, winRate: 60, totalCount: 5 },
+      ])
+
+      const anthropic = snap.find((p: any) => p.providerId === 2)
+      const claude = anthropic.models.find((m: any) => m.modelId === 'claude-3-7-sonnet')
+      expect(claude.arenaScores).toEqual([])
+
+      const xml = buildTopologyPromptXml(dbWithArena)
+      expect(xml).toContain('arena="coding:1142(75%,n=8),general:1060(60%,n=5)"')
+      const claudeTagMatch = xml.match(/<model id="claude-3-7-sonnet"[^>]*\/>/)
+      expect(claudeTagMatch).not.toBeNull()
+      expect(claudeTagMatch![0]).not.toContain('arena=')
+    })
+
+    it('T5.11: Same-named providers with same model_name do not leak Arena scores across model IDs', () => {
+      const dbSameName = {
+        getProvidersDecrypted: () => [
+          { id: 10, name: 'Relay', api_url: 'https://relay-a.example/v1', enabled: 1 },
+          { id: 11, name: 'Relay', api_url: 'https://relay-b.example/v1', enabled: 1 },
+        ],
+        getModels: (pid: number) =>
+          pid === 10
+            ? [{ id: 101, provider_id: 10, model_name: 'gpt-4o', display_name: 'GPT-4o A' }]
+            : [{ id: 102, provider_id: 11, model_name: 'gpt-4o', display_name: 'GPT-4o B' }],
+        getModelScores: () => [
+          { model_id: 101, model_name: 'gpt-4o', provider_id: 10, provider_name: 'Relay', intent: 'coding', score: 1200, win_count: 4, total_count: 5 },
+        ],
+      }
+
+      const snap = buildProviderTopologySnapshot(dbSameName)
+      const p10 = snap.find((p: any) => p.providerId === 10)
+      const p11 = snap.find((p: any) => p.providerId === 11)
+      expect(p10.models[0].arenaScores).toEqual([{ intent: 'coding', score: 1200, winRate: 80, totalCount: 5 }])
+      expect(p11.models[0].arenaScores).toEqual([])
+    })
   })
 })

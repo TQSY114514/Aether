@@ -40,8 +40,99 @@ function invalidateProjectConfigCache(workspaceRoot) {
  * @param {object} [raw={}] - Raw configuration object
  * @returns {object} Normalized configuration object
  */
+const MAX_SAFE_REGEX_LEN = 256
+const MAX_ROUTING_RULES = 32
+
+/**
+ * Compile a user/project-supplied regex pattern with ReDoS & zero-width guards.
+ * Rejects over-length patterns, backreferences, nested quantifiers, and
+ * empty-string matches. Returns null if unsafe or invalid.
+ * @param {string} raw
+ * @param {string} [defaultFlags='']
+ * @returns {RegExp | null}
+ */
+function compileSafeRegex(raw, defaultFlags = '') {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  if (!trimmed || trimmed.length > MAX_SAFE_REGEX_LEN) return null
+
+  let body = trimmed
+  let flags = defaultFlags
+  if (trimmed.startsWith('/') && trimmed.lastIndexOf('/') > 0) {
+    const lastSlash = trimmed.lastIndexOf('/')
+    const maybeBody = trimmed.slice(1, lastSlash)
+    const maybeFlags = trimmed.slice(lastSlash + 1)
+    if (maybeBody && /^[gimsuy]*$/.test(maybeFlags)) {
+      body = maybeBody
+      flags = maybeFlags
+    }
+  }
+  if (defaultFlags) {
+    for (const ch of defaultFlags) {
+      if (!flags.includes(ch)) flags += ch
+    }
+  }
+
+  // Reject backreferences (\1..\9), lookarounds (?= / ?! / ?<= / ?<!), and
+  // any group with an outer quantifier (+, *, {m,n}) that contains an inner
+  // quantifier or alternation (prevents nested-repetition ReDoS like (a+z?)+).
+  if (/\\[1-9]/.test(body)) return null
+  if (/\(\?(?:[=!]|<[=!])/.test(body)) return null
+
+  const groupStack = []
+  let inCharClass = false
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (ch === '\\') { i++; continue }
+    if (inCharClass) {
+      if (ch === ']') inCharClass = false
+      continue
+    }
+    if (ch === '[') { inCharClass = true; continue }
+    if (ch === '(') {
+      groupStack.push({ hasQuantifier: false, hasAlt: false })
+      if (groupStack.length > 8) return null
+      continue
+    }
+    if (ch === ')') {
+      const grp = groupStack.pop()
+      if (!grp) return null
+      const next = body[i + 1]
+      const hasOuterQuantifier = next === '+' || next === '*' || next === '{'
+      if (hasOuterQuantifier && (grp.hasQuantifier || grp.hasAlt)) return null
+      if (hasOuterQuantifier && groupStack.length > 0) {
+        groupStack[groupStack.length - 1].hasQuantifier = true
+      }
+      continue
+    }
+    if (groupStack.length > 0) {
+      if (ch === '+' || ch === '*' || ch === '{') {
+        for (const g of groupStack) g.hasQuantifier = true
+      } else if (ch === '|') {
+        groupStack[groupStack.length - 1].hasAlt = true
+      }
+    }
+  }
+
+  try {
+    const re = new RegExp(body, flags)
+    if (re.test('')) return null
+    re.lastIndex = 0
+    return re
+  } catch {
+    return null
+  }
+}
+
 function normalizeConfig(raw = {}) {
   const tools = raw.tools || {}
+  const routingRules = Array.isArray(raw.routingRules)
+    ? raw.routingRules
+        .filter(r => r && typeof r === 'object' && typeof r.match === 'string' && typeof r.model === 'string' && r.match.trim() && r.model.trim())
+        .filter(r => compileSafeRegex(r.match, 'i') !== null)
+        .slice(0, MAX_ROUTING_RULES)
+        .map(r => ({ match: r.match.trim(), model: r.model.trim() }))
+    : []
   return {
     defaultModel: typeof raw.defaultModel === 'string' ? raw.defaultModel.trim() : null,
     mode: ['ask', 'auto', 'plan'].includes(raw.mode) ? raw.mode : null,
@@ -51,6 +142,8 @@ function normalizeConfig(raw = {}) {
       allow: Array.isArray(tools.allow) ? tools.allow.map(String) : [],
     },
     ignorePatterns: Array.isArray(raw.ignorePatterns) ? raw.ignorePatterns.map(String) : [],
+    redactPatterns: Array.isArray(raw.redactPatterns) ? raw.redactPatterns.map(String).filter(Boolean).slice(0, 32) : [],
+    routingRules,
     rules: Array.isArray(raw.rules) ? raw.rules.map(String) : [],
     customConfigPath: raw._filePath || null,
   }
@@ -217,4 +310,5 @@ module.exports = {
   isToolAllowed,
   isPathIgnored,
   getProjectRules,
+  compileSafeRegex,
 }

@@ -70,6 +70,7 @@
     "electron/cli/",
     "electron/sdk/",
     "electron/llm/",
+    "electron/config/",
     "electron/migrations/",
     "electron/tools/",
     "electron/utils/",

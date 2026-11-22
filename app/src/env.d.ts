@@ -96,6 +96,8 @@ interface ProjectConfig {
     allow: string[]
   }
   ignorePatterns: string[]
+  redactPatterns?: string[]
+  routingRules?: Array<{ match: string; model: string }>
   rules: string[]
   customConfigPath: string | null
 }

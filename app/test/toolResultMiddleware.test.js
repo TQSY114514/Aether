@@ -164,3 +164,56 @@ describe('isExternalBySource', () => {
     expect(isExternalBySource(undefined, 'plain')).toBe(false)
   })
 })
+
+describe('redactMiddleware custom patterns', () => {
+  it('支持 ctx.customRedactPatterns 擦除自定义敏感词（非内置模式），并安全跳过非法/ReDoS/零宽正则', () => {
+    const out = applyMiddleware('prefix=CORP_PRIV_99A and aaaaaaaaaa! normal_ok', {
+      tool: 'run_command',
+      customRedactPatterns: [
+        'CORP_PRIV_[A-Z0-9]+',
+        '[unclosed_regex',                                          // invalid regex should be ignored safely
+        Buffer.from('KGErKSs=', 'base64').toString('utf8'),         // ReDoS nested quantifier should be rejected
+        Buffer.from('Xig/PWEpKGErej8pKyQ=', 'base64').toString('utf8'), // ReDoS lookahead + separated nested quantifier
+        Buffer.from('KGErej8pKw==', 'base64').toString('utf8'),     // separated nested quantifier should be rejected
+        '(?=normal)',                                               // zero-width lookahead must not insert [REDACTED]
+        '',                          // empty should be ignored
+      ],
+    })
+    expect(out).toBe('prefix=[REDACTED] and aaaaaaaaaa! normal_ok')
+  })
+
+  it('支持最多 32 条自定义脱敏模式（验证第 17 条和第 32 条均生效）', () => {
+    const patterns = Array.from({ length: 32 }, (_, i) => `CORP_${String(i).padStart(2, '0')}_[A-Z0-9]+`)
+    const out = applyMiddleware('a=CORP_16_ABC b=CORP_31_XYZ', {
+      tool: 'run_command',
+      customRedactPatterns: patterns,
+    })
+    expect(out).toBe('a=[REDACTED] b=[REDACTED]')
+  })
+
+  it('支持 /pattern/flags 形式与 db settings 中的 security.custom_redact_patterns', () => {
+    const mockDb = {
+      getSetting: (key) => key === 'security.custom_redact_patterns'
+        ? JSON.stringify(['/corp-badge-[a-z0-9]+/i'])
+        : null,
+    }
+    const out = applyMiddleware('found CORP-BADGE-XYZ123 in logs', {
+      tool: 'run_command',
+      db: mockDb,
+    })
+    expect(out).toBe('found [REDACTED] in logs')
+  })
+
+  it('多模态数组中的 text 片段也会被 redactMiddleware 脱敏', () => {
+    const out = applyMiddleware([
+      { type: 'text', text: 'key is CORP_PRIV_42Z' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
+    ], {
+      tool: 'read_file',
+      customRedactPatterns: ['CORP_PRIV_[A-Z0-9]+'],
+    })
+    expect(Array.isArray(out)).toBe(true)
+    expect(out[0].text).toBe('key is [REDACTED]')
+    expect(out[1].type).toBe('image_url')
+  })
+})
