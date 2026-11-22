@@ -1,38 +1,39 @@
-const path = require('path')
 const fs = require('fs/promises')
-const { getWorkspaceRoot } = require('../tools/sandbox')
+const { getWorkspaceRoot, resolveRoamingPath, isSystemCriticalDir, isSensitivePath } = require('../tools/sandbox')
 
 const MAX_ENTRIES = 500
 const SKIP = new Set(['.git', 'node_modules'])
 
 function resolveRoot(db, sessionId) {
   if (sessionId != null) {
+    try {
+      const sess = typeof db.getSession === 'function' ? db.getSession(sessionId) : null
+      if (sess && sess.cwd) return sess.cwd
+    } catch {}
     const cfg = db.getSessionConfig(sessionId)
     if (cfg && cfg.workspace) return cfg.workspace
   }
-  return getWorkspaceRoot()
+  return getWorkspaceRoot(sessionId)
 }
 
 function registerFsHandlers(ipcMain, db) {
   ipcMain.handle('fs:list-dir', async (_event, dir, sessionId) => {
     if (typeof dir !== 'string' || !dir.trim()) return { ok: false, error: 'invalid_dir' }
-    const root = resolveRoot(db, sessionId)
-    if (!root) return { ok: false, error: 'no_workspace' }
-    const resolved = path.resolve(root, dir)
-    const rel = path.relative(root, resolved)
-    if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
-      return { ok: false, error: 'outside_workspace' }
+    const root = resolveRoot(db, sessionId) || process.cwd()
+    const resPath = resolveRoamingPath(dir, root)
+    if (!resPath.ok) return { ok: false, error: 'unsafe_path' }
+    const resolved = resPath.resolved
+    if (isSystemCriticalDir(resolved) || isSensitivePath(resolved)) {
+      return { ok: false, error: 'restricted_path' }
     }
-    let canonicalRoot, canonicalDir
+    let canonicalDir
     try {
-      canonicalRoot = await fs.realpath(root)
       canonicalDir = await fs.realpath(resolved)
     } catch {
       return { ok: false, error: 'read_failed' }
     }
-    const canonicalRel = path.relative(canonicalRoot, canonicalDir)
-    if (canonicalRel === '..' || canonicalRel.startsWith(`..${path.sep}`) || path.isAbsolute(canonicalRel)) {
-      return { ok: false, error: 'outside_workspace' }
+    if (isSystemCriticalDir(canonicalDir) || isSensitivePath(canonicalDir)) {
+      return { ok: false, error: 'restricted_path' }
     }
     let entries
     try {
@@ -45,7 +46,7 @@ function registerFsHandlers(ipcMain, db) {
     } catch {
       return { ok: false, error: 'read_failed' }
     }
-    return { ok: true, entries }
+    return { ok: true, dir: canonicalDir, entries }
   })
 }
 

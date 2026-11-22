@@ -1368,6 +1368,10 @@
       "chat.review_checkpoints_btn": "写前快照",
       "chat.review_no_diff": "此条目暂无 Diff 文本预览。",
       "chat.review_turns_touched": "修改 {0} 次",
+      "chat.review_expand_all": "全部展开",
+      "chat.review_collapse_all": "全部折叠",
+      "chat.review_copy_path": "复制文件路径",
+      "chat.review_path_copied": "路径已复制",
       "sidebar.group.needs_input": "待处理",
       "sidebar.filter.all": "全部",
       "sidebar.badge.needs_input": "待确认",
@@ -1385,7 +1389,21 @@
       "theme.metalheart": "工业银蓝 (Metal)",
       "theme.postdigital": "后数字 (PostDigital)",
       "theme.blue": "冷灰蓝 (Slate)",
-      "chat.subagent_running_tool": "正在运行: {0}"
+      "chat.subagent_running_tool": "正在运行: {0}",
+      "cwd.default_short": "工作目录",
+      "cwd.click_to_navigate": "点击切换或输入路径跳转",
+      "cwd.navigator_title": "工作目录 (CWD)",
+      "cwd.parent_dir": "上一级目录 (..)",
+      "cwd.browse_folder": "选择文件夹",
+      "cwd.input_placeholder": "输入路径 (~, .., 或绝对路径) 回车跳转",
+      "cwd.go": "跳转",
+      "cwd.recent": "最近访问目录",
+      "cwd.empty_recent": "暂无最近跳转记录",
+      "cwd.invalid_path": "目录无效或受系统保护",
+      "persona.manage": "管理人设...",
+      "persona.set_default": "设为新会话默认人设",
+      "persona.default_badge": "默认",
+      "persona.delete_confirm": "确定删除人设「{0}」吗？"
     }
   },
   {
@@ -2594,7 +2612,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -3803,7 +3835,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -5025,7 +5071,21 @@
       "theme.metalheart": "工業銀藍 (Metal)",
       "theme.postdigital": "後數字 (PostDigital)",
       "theme.blue": "冷灰藍 (Slate)",
-      "chat.subagent_running_tool": "正在執行: {0}"
+      "chat.subagent_running_tool": "正在執行: {0}",
+      "cwd.default_short": "所治",
+      "cwd.click_to_navigate": "點擊以遷目錄，或書徑而往",
+      "cwd.navigator_title": "現行目錄 (CWD)",
+      "cwd.parent_dir": "上溯一級 (..)",
+      "cwd.browse_folder": "擇選目錄",
+      "cwd.input_placeholder": "書路徑 (~, .., 或全徑) 按 Enter 往之",
+      "cwd.go": "往之",
+      "cwd.recent": "近來所往",
+      "cwd.empty_recent": "尚無往來目錄之錄",
+      "cwd.invalid_path": "路徑無效，或為系統所護",
+      "persona.manage": "治人設...",
+      "persona.set_default": "立為新談之常設",
+      "persona.default_badge": "常設",
+      "persona.delete_confirm": "確定刪人設「{0}」乎？"
     }
   },
   {
@@ -6234,7 +6294,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -7443,7 +7517,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -8652,7 +8740,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -9861,7 +9963,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -11083,7 +11199,21 @@
       "theme.metalheart": "工業銀藍 (Metal)",
       "theme.postdigital": "後數字 (PostDigital)",
       "theme.blue": "冷灰藍 (Slate)",
-      "chat.subagent_running_tool": "正在執行: {0}"
+      "chat.subagent_running_tool": "正在執行: {0}",
+      "cwd.default_short": "工作目錄",
+      "cwd.click_to_navigate": "點擊切換或輸入路徑跳轉",
+      "cwd.navigator_title": "工作目錄 (CWD)",
+      "cwd.parent_dir": "上一級目錄 (..)",
+      "cwd.browse_folder": "選擇資料夾",
+      "cwd.input_placeholder": "輸入路徑 (~, .., 或絕對路徑) 按 Enter 跳轉",
+      "cwd.go": "跳轉",
+      "cwd.recent": "最近存取目錄",
+      "cwd.empty_recent": "暫無最近跳轉記錄",
+      "cwd.invalid_path": "目錄無效或受系統保護",
+      "persona.manage": "管理人設...",
+      "persona.set_default": "設為新對話預設人設",
+      "persona.default_badge": "預設",
+      "persona.delete_confirm": "確定刪除人設「{0}」嗎？"
     }
   },
   {
@@ -12292,7 +12422,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -13501,7 +13645,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -14710,7 +14868,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   },
   {
@@ -15919,7 +16091,21 @@
       "theme.metalheart": "Metalheart",
       "theme.postdigital": "Post-Digital",
       "theme.blue": "Slate Blue",
-      "chat.subagent_running_tool": "Running: {0}"
+      "chat.subagent_running_tool": "Running: {0}",
+      "cwd.default_short": "CWD",
+      "cwd.click_to_navigate": "Click to switch or jump by path",
+      "cwd.navigator_title": "Working Directory (CWD)",
+      "cwd.parent_dir": "Parent directory (..)",
+      "cwd.browse_folder": "Choose folder",
+      "cwd.input_placeholder": "Enter path (~, .., or full path) and press Enter",
+      "cwd.go": "Go",
+      "cwd.recent": "Recent directories",
+      "cwd.empty_recent": "No recent directories yet",
+      "cwd.invalid_path": "Invalid or protected directory",
+      "persona.manage": "Manage personas...",
+      "persona.set_default": "Set as default for new chats",
+      "persona.default_badge": "Default",
+      "persona.delete_confirm": "Delete persona '{0}'?"
     }
   }
 ]

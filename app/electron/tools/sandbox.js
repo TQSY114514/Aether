@@ -1,5 +1,6 @@
 // sandbox.js with whitelist mode
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 // In headless mode (cli.js) `require('electron')` resolves to a path string,
 // so destructuring `app` yields undefined. Guard the only call site.
@@ -25,6 +26,40 @@ function isDangerousRoot(p) {
   if (norm === progFiles || norm.startsWith(progFiles + path.sep)) return true
   if (norm === progFilesX86 || norm.startsWith(progFilesX86 + path.sep)) return true
   return false
+}
+
+function isSystemCriticalDir(p) {
+  if (!p) return false
+  if (hasUnsafeWindowsPrefix(p)) return true
+  let clean = String(p)
+  if (clean.startsWith('\\\\?\\')) clean = clean.slice(4)
+  const norm = path.resolve(clean).toLowerCase()
+  const winDir = (process.env.WINDIR || 'C:\\Windows').toLowerCase()
+  const progFiles = (process.env.ProgramFiles || 'C:\\Program Files').toLowerCase()
+  const progFilesX86 = (process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)').toLowerCase()
+  if (norm === winDir || norm.startsWith(winDir + path.sep)) return true
+  if (norm === progFiles || norm.startsWith(progFiles + path.sep)) return true
+  if (norm === progFilesX86 || norm.startsWith(progFilesX86 + path.sep)) return true
+  if (process.platform !== 'win32') {
+    if (norm === '/etc' || norm.startsWith('/etc/') || norm === '/system' || norm.startsWith('/system/')) return true
+  }
+  return false
+}
+
+function resolveRoamingPath(inputPath, baseDir) {
+  let raw = String(inputPath || '').trim()
+  if (!raw || raw === '~') return os.homedir()
+  if (raw.startsWith('~/') || raw.startsWith('~\\')) {
+    raw = path.join(os.homedir(), raw.slice(2))
+  }
+  if (/^[a-zA-Z]:$/.test(raw)) {
+    raw = raw + path.sep
+  }
+  if (path.isAbsolute(raw)) {
+    return path.resolve(raw)
+  }
+  const base = baseDir ? resolveRoamingPath(baseDir) : os.homedir()
+  return path.resolve(base, raw)
 }
 
 function setWorkspaceRoot(p) {
@@ -649,4 +684,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, _isWorkspaceRootEnforced: (sid) => _workspaceRoot !== null || (sid != null && _sessionWorkspaces.has(sid)), _hasSessionWorkspace: (sid) => _sessionWorkspaces.has(sid), _isShadowActive: (sid) => sid != null && _sessionShadowOrigins.has(sid), DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isSystemCriticalDir, resolveRoamingPath, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, _isWorkspaceRootEnforced: (sid) => _workspaceRoot !== null || (sid != null && _sessionWorkspaces.has(sid)), _hasSessionWorkspace: (sid) => _sessionWorkspaces.has(sid), _isShadowActive: (sid) => sid != null && _sessionShadowOrigins.has(sid), DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

@@ -3,7 +3,18 @@ const fs = require('fs')
 const path = require('path')
 const { spawn, spawnSync } = require('child_process')
 const { runCommand, runCommandSync } = require('./exec')
-const { checkWritePath, checkCommand, isInsideWorkspace, getWorkspaceRoot } = require('./sandbox')
+const {
+  checkWritePath,
+  checkCommand,
+  isInsideWorkspace,
+  getWorkspaceRoot,
+  resolveRoamingPath,
+  isDangerousRoot,
+  isSensitivePath,
+  _hasSessionWorkspace,
+  _isShadowActive,
+  setWorkspaceRootForSession,
+} = require('./sandbox')
 const { normalizeAgentMode } = require('../llm/toolLoopUtils')
 
 function isWorkspaceAskMode(mode) {
@@ -1766,6 +1777,78 @@ TOOLS.push(
         ctx,
       })
       return res.text
+    },
+  },
+  {
+    name: 'change_directory',
+    description:
+      'Change the active working directory (CWD) for the current session. Supports absolute paths, ~ (home directory), and paths relative to the current CWD. Updates subsequent file/terminal tool paths and the UI directory indicator.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Target directory path (absolute, relative, "..", or "~").',
+        },
+      },
+      required: ['path'],
+    },
+    run: async (args, ctx) => {
+      const sid = ctx?.sessionId
+      if (sid != null && _isShadowActive(sid)) {
+        return JSON.stringify({ ok: false, error: 'Cannot change directory while a shadow workspace is active.' })
+      }
+      const rawInput = String(args?.path || '').trim()
+      if (!rawInput) {
+        return JSON.stringify({ ok: false, error: 'path is required' })
+      }
+      const baseCwd = ctx?.cwd || (ctx?.db && sid != null ? ctx.db.getSessionCwd?.(sid) : null) || getWorkspaceRoot()
+      const resolved = resolveRoamingPath(rawInput, baseCwd)
+      if (!fs.existsSync(resolved)) {
+        return JSON.stringify({ ok: false, error: `Directory does not exist: ${resolved}` })
+      }
+      let stat
+      try {
+        stat = fs.statSync(resolved)
+      } catch (err) {
+        return JSON.stringify({ ok: false, error: err?.message || String(err) })
+      }
+      if (!stat.isDirectory()) {
+        return JSON.stringify({ ok: false, error: `Not a directory: ${resolved}` })
+      }
+      let canonical = resolved
+      try { canonical = fs.realpathSync(resolved) } catch {}
+      if (isDangerousRoot(resolved) || isDangerousRoot(canonical)) {
+        return JSON.stringify({ ok: false, error: `Refusing to set dangerous system/root directory as CWD: ${canonical}` })
+      }
+      if (isSensitivePath(resolved) || isSensitivePath(canonical)) {
+        return JSON.stringify({ ok: false, error: `Refusing to set sensitive directory as CWD: ${canonical}` })
+      }
+      if (ctx && typeof ctx === 'object') {
+        ctx.cwd = canonical
+      }
+      if (ctx?.db && sid != null) {
+        try { ctx.db.setSessionCwd?.(sid, canonical) } catch {}
+        try {
+          const prevCfg = ctx.db.getSessionConfig?.(sid) || {}
+          ctx.db.setSessionConfig?.(sid, { ...prevCfg, workspace: canonical })
+        } catch {}
+      }
+      if (sid != null && _hasSessionWorkspace(sid)) {
+        try { setWorkspaceRootForSession(sid, canonical) } catch {}
+      }
+      try {
+        const { BrowserWindow } = require('electron')
+        if (BrowserWindow && typeof BrowserWindow.getAllWindows === 'function') {
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('session:cwd-changed', { sessionId: sid, cwd: canonical })
+            }
+          }
+        }
+      } catch {}
+      return JSON.stringify({ ok: true, cwd: canonical })
     },
   }
 )

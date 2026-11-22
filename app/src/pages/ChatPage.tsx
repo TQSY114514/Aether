@@ -6,9 +6,10 @@ import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
 import HoverMarquee from '@/components/ui/HoverMarquee'
-import { FolderGit2, Folder, ExternalLink, Search, History, FileDiff, Swords } from 'lucide-react'
+import { Search, History, FileDiff, Swords } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import SessionReviewDrawer, { aggregateSessionFileChanges } from '@/components/chat/SessionReviewDrawer'
+import CwdNavigator from '@/components/chat/CwdNavigator'
 
 // Trust badge dot color
 const TRUST_DOT: Record<string, string> = {
@@ -34,7 +35,6 @@ export default function ChatPage() {
   const backgroundImage = useStore((s) => s.backgroundImage)
   const hasBg = !!backgroundImage
   const sessionConfigs = useStore((s) => s.sessionConfigs)
-  const setSessionCwd = useStore((s) => s.setSessionCwd)
   const streamingBySession = useStore((s) => s.streamingBySession)
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
   const messages = useStore((s) => s.messages)
@@ -115,12 +115,6 @@ export default function ChatPage() {
   const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(null)
   const activeCwd = currentSession?.cwd || (currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null) || defaultWorkspace || null
 
-  const displayFolder = useMemo(() => {
-    if (!activeCwd) return t('workspace.default', '默认工作区')
-    const parts = activeCwd.replace(/\\/g, '/').split('/').filter(Boolean)
-    return parts[parts.length - 1] || activeCwd
-  }, [activeCwd])
-
   const [headerGit, setHeaderGit] = useState<{ branch?: string; isClean?: boolean } | null>(null)
   const [headerRule, setHeaderRule] = useState<{ has: boolean; fileName: string | null } | null>(null)
 
@@ -155,26 +149,7 @@ export default function ChatPage() {
     }).catch(() => {})
   }, [currentSessionId])
 
-  const handlePickCwd = useCallback(async () => {
-    if (isStreaming) return
-    try {
-      const picked = await window.electronAPI?.system?.pickDirectory?.()
-      if (!picked) return
-      if (currentSessionId) {
-        await setSessionCwd(picked)
-      } else {
-        await window.electronAPI?.agent?.setWorkspace?.({ dir: picked })
-      }
-      setDefaultWorkspace(picked)
-    } catch {}
-  }, [currentSessionId, isStreaming, setSessionCwd])
-
-  const handleOpenCwd = useCallback(async () => {
-    const target = activeCwd || (await window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined))
-    if (target) window.electronAPI?.system?.openPath?.(target)
-  }, [activeCwd, currentSessionId])
-
-  // Consolidated Header Control Group: Split Run + Unified Workspace/CWD Capsule + On-Demand Search & Timeline
+  // Consolidated Header Control Group: Reactive Review Pill + CWD Navigator + Compact Tool Cluster
   const renderHeaderControls = () => (
     <div className="flex items-center gap-1.5 shrink-0 ml-auto app-no-drag">
       {/* Collapsible Arena Model A vs Model B Selectors (visible only when Split Run is active) */}
@@ -234,7 +209,45 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* One-Click Split Run Toggle (In-Chat Dual-Model Code Patch Comparison) */}
+      {/* Antigravity-style Reactive Session Review Pill (visible ONLY when files were touched) */}
+      {currentSessionId && reviewSummary.fileCount > 0 && (
+        <Tooltip text={t('chat.review_tooltip')}>
+          <button
+            type="button"
+            onClick={() => setShowReview((v) => !v)}
+            className="h-7 flex items-center gap-1.5 px-2.5 rounded-[6px] border text-[11px] font-medium transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer select-none animate-fade-in"
+            style={{
+              borderColor: showReview ? 'var(--accent)' : 'var(--border)',
+              backgroundColor: showReview ? 'var(--accent)' : 'var(--bg-secondary)',
+              color: showReview ? 'var(--accent-fg, #FFFFFF)' : 'var(--text-primary)',
+            }}
+            aria-label={t('chat.review_tooltip')}
+            aria-expanded={showReview}
+          >
+            <FileDiff size={12} className="shrink-0" style={{ color: showReview ? 'currentColor' : 'var(--accent)' }} />
+            <span>{reviewSummary.fileCount} {reviewSummary.fileCount === 1 ? 'file' : 'files'}</span>
+            <span className="flex items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums ms-0.5">
+              {reviewSummary.totalAdded > 0 && (
+                <span style={{ color: showReview ? 'currentColor' : 'var(--success)' }}>+{reviewSummary.totalAdded}</span>
+              )}
+              {reviewSummary.totalRemoved > 0 && (
+                <span style={{ color: showReview ? 'currentColor' : 'var(--error)' }}>-{reviewSummary.totalRemoved}</span>
+              )}
+            </span>
+          </button>
+        </Tooltip>
+      )}
+
+      {/* Minimal CWD Navigator + Popover */}
+      <CwdNavigator
+        activeCwd={activeCwd}
+        headerGit={headerGit}
+        headerRule={headerRule}
+        isStreaming={isStreaming}
+        onFallbackWorkspaceChange={setDefaultWorkspace}
+      />
+
+      {/* Compact Action Cluster: Split Run · Search · Timeline */}
       <Tooltip
         text={
           chatMode === 'arena'
@@ -245,7 +258,7 @@ export default function ChatPage() {
         <button
           type="button"
           onClick={handleToggleSplitRun}
-          className="h-7 flex items-center gap-1 px-2 rounded-[6px] border text-[11px] font-medium transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer select-none"
+          className="h-7 w-7 flex items-center justify-center rounded-[6px] border text-[11px] font-medium transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer select-none"
           style={
             chatMode === 'arena'
               ? {
@@ -260,70 +273,12 @@ export default function ChatPage() {
                 }
           }
           aria-pressed={chatMode === 'arena'}
+          aria-label="Split Run"
         >
-          <Swords size={12} className="shrink-0" style={{ color: chatMode === 'arena' ? 'currentColor' : 'var(--accent)' }} />
-          <span>Split Run</span>
+          <Swords size={12} style={{ color: chatMode === 'arena' ? 'currentColor' : 'var(--accent)' }} />
         </button>
       </Tooltip>
 
-      {/* Unified Workspace / CWD / Git / AGENTS.md Capsule */}
-      <div
-        className="h-7 flex items-center rounded-[6px] border text-xs overflow-hidden"
-        style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
-      >
-        <Tooltip
-          text={`${t('cwd.browse', '点击切换工作目录')} · ${activeCwd || '~/.aetherai'}${headerGit?.branch ? ` (${headerGit.branch})` : ''}${headerRule?.has ? ` · [${headerRule.fileName || 'Rules'}]` : ''}`}
-        >
-          <button
-            type="button"
-            onClick={handlePickCwd}
-            disabled={isStreaming}
-            className="h-full flex items-center gap-1.5 px-2 text-xs font-medium transition-colors hover:bg-[var(--content-bg)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer"
-            style={{ color: 'var(--text-primary)' }}
-            aria-label="Workspace Directory"
-          >
-            {headerGit ? (
-              <FolderGit2 size={12} className="text-[var(--accent)] shrink-0" />
-            ) : (
-              <Folder size={12} className="text-[var(--accent)] shrink-0" />
-            )}
-            <span className="truncate max-w-[120px] text-[11px] font-medium">
-              {displayFolder}
-            </span>
-            {headerGit?.branch && (
-              <span className="font-mono text-[10px] text-[var(--text-muted)] flex items-center gap-1 pl-0.5">
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: headerGit.isClean ? 'var(--success)' : 'var(--warning)' }}
-                />
-                <span className="truncate max-w-[65px]">{headerGit.branch}</span>
-              </span>
-            )}
-            {headerRule?.has && (
-              <span
-                className="px-1 py-0.2 rounded-[4px] border font-mono text-[9px] text-[var(--accent)] bg-[var(--content-bg)] shrink-0"
-                style={{ borderColor: 'var(--border)' }}
-              >
-                {headerRule.fileName || 'Rules'}
-              </span>
-            )}
-          </button>
-        </Tooltip>
-
-        <Tooltip text={t('cwd.reveal', '在文件资源管理器中打开')}>
-          <button
-            type="button"
-            onClick={handleOpenCwd}
-            className="h-full px-1.5 border-l flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--content-bg)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
-            style={{ borderColor: 'var(--border)' }}
-            aria-label={t('cwd.reveal', '在文件资源管理器中打开')}
-          >
-            <ExternalLink size={11} />
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* Session-level Search & Timeline triggers */}
       {currentSessionId && (
         <>
           <Tooltip text={t('chat.search_placeholder', '搜索对话内容 (Ctrl+F)')}>
@@ -338,42 +293,15 @@ export default function ChatPage() {
             </button>
           </Tooltip>
 
-          <Tooltip text={t('chat.review_tooltip')}>
-            <button
-              type="button"
-              onClick={() => setShowReview((v) => !v)}
-              className="h-7 flex items-center gap-1.5 px-2 rounded-[6px] border text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
-              style={{
-                borderColor: showReview ? 'var(--accent)' : 'var(--border)',
-                backgroundColor: showReview ? 'var(--bg-secondary)' : 'var(--content-bg)',
-              }}
-              aria-label={t('chat.review_tooltip')}
-            >
-              <FileDiff size={12} style={{ color: reviewSummary.fileCount > 0 ? 'var(--accent)' : 'var(--text-muted)' }} />
-              <span className="hidden sm:inline">{t('chat.review_btn')}</span>
-              {reviewSummary.fileCount > 0 && (
-                <span className="flex items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
-                  {reviewSummary.totalAdded > 0 && (
-                    <span style={{ color: 'var(--success)' }}>+{reviewSummary.totalAdded}</span>
-                  )}
-                  {reviewSummary.totalRemoved > 0 && (
-                    <span style={{ color: 'var(--error)' }}>-{reviewSummary.totalRemoved}</span>
-                  )}
-                </span>
-              )}
-            </button>
-          </Tooltip>
-
           <Tooltip text={t('agent.timeline.view_toggle', '运行时间线')}>
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent('aether:toggle-run-timeline'))}
-              className="h-7 flex items-center gap-1 px-2 rounded-[6px] border text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+              className="h-7 w-7 flex items-center justify-center rounded-[6px] border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
               style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
               aria-label={t('agent.timeline.view_toggle', '运行时间线')}
             >
               <History size={12} style={{ color: 'var(--accent)' }} />
-              <span className="hidden sm:inline">{t('agent.timeline.view_toggle', '时间线')}</span>
             </button>
           </Tooltip>
         </>
@@ -385,7 +313,7 @@ export default function ChatPage() {
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
-        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
+        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr relative z-30" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2 min-w-0 mr-3">
             <span className="text-sm font-semibold truncate tracking-tight" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
@@ -406,7 +334,7 @@ export default function ChatPage() {
   // ── Active chat ──
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-transparent relative overflow-hidden">
-      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
+      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr relative z-30" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2.5 min-w-0 flex-1 max-w-[360px] mr-3 app-no-drag">
           {trustBadge && currentSessionId && (
             <Tooltip text={`Trust: ${trustBadge.trust}/100 · ${TRUST_TIP[trustBadge.color] || trustBadge.label}`}>

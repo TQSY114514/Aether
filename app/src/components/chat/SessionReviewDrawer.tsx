@@ -15,16 +15,8 @@ import type { TurnFileSummary } from '@/store/types'
 import { cleanDiffLines } from '@/utils/diff'
 import { t } from '@/utils/i18n'
 import {
-  FileDiff,
-  X,
-  Search,
-  ChevronDown,
-  ChevronRight,
-  GitCommit,
-  Check,
-  History,
-  RotateCcw,
-  FileCode,
+  FileDiff, X, Search, ChevronDown, ChevronRight, GitCommit,
+  Check, History, RotateCcw, FileCode, UnfoldVertical, FoldVertical, Copy,
 } from 'lucide-react'
 
 export interface AggregatedFileChange {
@@ -127,6 +119,7 @@ export default function SessionReviewDrawer({
 
   const [search, setSearch] = useState('')
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({})
+  const [copiedPath, setCopiedPath] = useState<string | null>(null)
   const [commitOpen, setCommitOpen] = useState(false)
   const [commitMsg, setCommitMsg] = useState('')
   const [crafting, setCrafting] = useState(false)
@@ -137,6 +130,7 @@ export default function SessionReviewDrawer({
   const drawerRef = useRef<HTMLElement>(null)
   const prevActiveElementRef = useRef<HTMLElement | null>(null)
   const asyncGenRef = useRef(0)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const changesFingerprint = useMemo(() => {
     return `${summary.fileCount}:${summary.totalAdded}:${summary.totalRemoved}:${summary.files
@@ -221,6 +215,37 @@ export default function SessionReviewDrawer({
 
   const toggleFile = useCallback((p: string) => {
     setExpandedPaths((prev) => ({ ...prev, [p]: !prev[p] }))
+  }, [])
+
+  const allExpanded = filteredFiles.length > 0 && filteredFiles.every((f) => expandedPaths[f.path])
+  const toggleAll = useCallback(() => {
+    if (allExpanded) {
+      setExpandedPaths({})
+    } else {
+      const next: Record<string, boolean> = {}
+      for (const f of filteredFiles) next[f.path] = true
+      setExpandedPaths(next)
+    }
+  }, [allExpanded, filteredFiles])
+
+  const handleCopyPath = useCallback(async (path: string) => {
+    let ok = false
+    try {
+      if (window.electronAPI?.system?.clipboardWrite) {
+        await window.electronAPI.system.clipboardWrite(path)
+        ok = true
+      } else if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(path)
+        ok = true
+      }
+    } catch {
+      ok = false
+    }
+    if (ok) {
+      setCopiedPath(path)
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopiedPath(null), 1800)
+    }
   }, [])
 
   const handleOpenCommit = useCallback(async () => {
@@ -370,37 +395,49 @@ export default function SessionReviewDrawer({
                 className="flex-1 flex items-center gap-2 rounded-[6px] border px-2.5 py-1 text-xs"
                 style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}
               >
-              <Search size={12} className="text-[var(--text-muted)] shrink-0" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t('chat.review_search_placeholder')}
-                className="flex-1 bg-transparent outline-none text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  aria-label={t('common.clear')}
-                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                >
-                  <X size={11} />
-                </button>
-              )}
-            </div>
+                <Search size={12} className="text-[var(--text-muted)] shrink-0" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('chat.review_search_placeholder')}
+                  className="flex-1 bg-transparent outline-none text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    aria-label={t('common.clear')}
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
 
-            <button
-              type="button"
-              onClick={handleOpenCommit}
-              disabled={isCommittedForCurrentChanges}
-              className="h-7 flex items-center gap-1 px-2.5 rounded-[6px] border text-[11px] font-medium hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50 transition-colors cursor-pointer shrink-0"
-              style={{
-                borderColor: isCommittedForCurrentChanges ? 'var(--success)' : 'var(--border)',
-                color: isCommittedForCurrentChanges ? 'var(--success)' : 'var(--text-primary)',
-                backgroundColor: 'var(--content-bg)',
-              }}
-            >
+              <button
+                type="button"
+                onClick={toggleAll}
+                disabled={filteredFiles.length === 0}
+                title={allExpanded ? t('chat.review_collapse_all') : t('chat.review_expand_all')}
+                aria-label={allExpanded ? t('chat.review_collapse_all') : t('chat.review_expand_all')}
+                className="h-7 w-7 flex items-center justify-center rounded-[6px] border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer shrink-0"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
+              >
+                {allExpanded ? <FoldVertical size={12} /> : <UnfoldVertical size={12} />}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenCommit}
+                disabled={isCommittedForCurrentChanges}
+                className="h-7 flex items-center gap-1 px-2.5 rounded-[6px] border text-[11px] font-medium hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+                style={{
+                  borderColor: isCommittedForCurrentChanges ? 'var(--success)' : 'var(--border)',
+                  color: isCommittedForCurrentChanges ? 'var(--success)' : 'var(--text-primary)',
+                  backgroundColor: 'var(--content-bg)',
+                }}
+              >
               {isCommittedForCurrentChanges ? (
                 <>
                   <Check size={11} />
@@ -477,10 +514,18 @@ export default function SessionReviewDrawer({
                 className="rounded-[10px] border overflow-hidden"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
               >
-                <button
-                  type="button"
+                <div
                   onClick={() => toggleFile(file.path)}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleFile(file.path)
+                    }
+                  }}
+                  aria-expanded={expanded}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer group"
                 >
                   {expanded ? (
                     <ChevronDown size={13} className="shrink-0 text-[var(--text-muted)]" />
@@ -517,11 +562,30 @@ export default function SessionReviewDrawer({
                       </div>
                     )}
                   </div>
+
+                  {/* Copy Path Quick Action */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCopyPath(file.path)
+                    }}
+                    title={copiedPath === file.path ? t('chat.review_path_copied') : t('chat.review_copy_path')}
+                    aria-label={copiedPath === file.path ? t('chat.review_path_copied') : t('chat.review_copy_path')}
+                    className="p-1 rounded-[4px] hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 cursor-pointer shrink-0"
+                  >
+                    {copiedPath === file.path ? (
+                      <Check size={11} className="text-[var(--success)]" />
+                    ) : (
+                      <Copy size={11} />
+                    )}
+                  </button>
+
                   <div className="flex items-center gap-1 font-mono text-[11px] font-semibold tabular-nums shrink-0">
                     {file.added > 0 && <span style={{ color: 'var(--success)' }}>+{file.added}</span>}
                     {file.removed > 0 && <span style={{ color: 'var(--error)' }}>-{file.removed}</span>}
                   </div>
-                </button>
+                </div>
 
                 {expanded && (
                   <div className="border-t font-mono text-[11px] max-h-[320px] overflow-y-auto" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>

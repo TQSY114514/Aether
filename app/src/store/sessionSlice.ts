@@ -82,20 +82,31 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     const trimmed = (targetPath || '').trim()
     if (!trimmed) return
     try {
+      let resolved = trimmed
       if (window.electronAPI.session.setCwd) {
-        await window.electronAPI.session.setCwd(currentSessionId, trimmed)
+        const res = await window.electronAPI.session.setCwd(currentSessionId, trimmed)
+        if (typeof res === 'string' && res.trim()) {
+          resolved = res.trim()
+        }
       }
-      await window.electronAPI.session.setConfig(currentSessionId, { ...sessionConfigs[currentSessionId], workspace: trimmed })
+      await window.electronAPI.session.setConfig(currentSessionId, { ...sessionConfigs[currentSessionId], workspace: resolved })
       set((s) => ({
-        sessions: s.sessions.map((sess) => sess.id === currentSessionId ? { ...sess, cwd: trimmed } : sess),
+        sessions: s.sessions.map((sess) => sess.id === currentSessionId ? { ...sess, cwd: resolved } : sess),
         sessionConfigs: {
           ...s.sessionConfigs,
-          [currentSessionId]: { ...s.sessionConfigs[currentSessionId], workspace: trimmed },
+          [currentSessionId]: { ...s.sessionConfigs[currentSessionId], workspace: resolved },
         },
       }))
-      await get().loadWorkspaceSoul(trimmed)
+      try {
+        const raw = localStorage.getItem('aether:recent_cwds')
+        const prev: string[] = raw ? JSON.parse(raw) : []
+        const next = [resolved, ...prev.filter((p) => p && p.toLowerCase() !== resolved.toLowerCase())].slice(0, 8)
+        localStorage.setItem('aether:recent_cwds', JSON.stringify(next))
+      } catch {}
+      await get().loadWorkspaceSoul(resolved)
     } catch (e) {
       log.error("setSessionCwd failed", e)
+      throw e
     }
   },
 
