@@ -122,7 +122,9 @@ function commitCheckpoint(sessionId, workspaceRoot, opts = {}) {
       const relPaths = opts.affectedPaths
         .map((p) => {
           try {
-            return path.relative(workspaceRoot, path.resolve(p)).replace(/\\/g, '/')
+            const abs = path.resolve(p)
+            if (!fs.existsSync(abs)) return null
+            return path.relative(workspaceRoot, abs).replace(/\\/g, '/')
           } catch {
             return null
           }

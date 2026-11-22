@@ -110,6 +110,18 @@ const localBackend = {
       entry.exitCode = code
       entry.finishedAt = Date.now()
       if (signal) entry.stderrTail = capTail(entry.stderrTail, `[terminated by signal ${signal}]\n`)
+      if (!entry.killed && code !== 0) {
+        try {
+          const { extractCrashSignal } = require('../llm/processTap')
+          entry.crashSignal = extractCrashSignal({
+            command: [command, ...(args || [])].join(' '),
+            exitCode: code,
+            stdout: entry.stdoutTail,
+            stderr: entry.stderrTail,
+            cwd: cwd || process.cwd(),
+          })
+        } catch {}
+      }
       // Free the child reference; execute() consumers hold the execId only.
       entry.child = null
     })
@@ -139,6 +151,7 @@ const localBackend = {
       stderrTail: e.stderrTail,
       startedAt: e.startedAt,
       finishedAt: e.finishedAt,
+      crashSignal: e.crashSignal || null,
     }
   },
 

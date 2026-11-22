@@ -492,6 +492,9 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Lint/test auto-repair: tracks how many repair rounds have been injected so
   // the model gets a chance to fix errors without looping forever.
   let repairRounds = 0
+  const shadowTouchedPaths = new Set()
+  let shadowBaselineHash = null
+  let shadowRollbackTriggered = false
 
   // Supervised TDD loop attempts for auto_review mode (bounded to max 3 attempts)
   let autoReviewTddAttempts = 0
@@ -1265,6 +1268,15 @@ Reply ONLY with JSON:
             const isWriteToolCall = WRITE_TOOLS.has(fn.name) || (fn.name === 'call_extended_tool' && WRITE_TOOLS.has(args?.tool_name))
             if (isWriteToolCall || tool.risk === 'dangerous') {
               try {
+                if (isWriteToolCall && wsRoot && sessionId) {
+                  const affected = checkpoints.extractAffectedPaths(fn.name, args, wsRoot)
+                  for (const ap of affected) shadowTouchedPaths.add(ap)
+                  if (!shadowBaselineHash && affected.length > 0 && featureFlags.isEnabled(db, 'agent.shadowWorkspace')) {
+                    const shadowGit = require('./shadowGit')
+                    const snap = shadowGit.commitCheckpoint(sessionId, wsRoot, { affectedPaths: affected, message: `turn_baseline_${Date.now()}` })
+                    if (snap && snap.ok && snap.commitHash) shadowBaselineHash = snap.commitHash
+                  }
+                }
                 entry.checkpointId = checkpoints.createCheckpoint({
                   sessionId,
                   messageId: messageId || tc.id,
@@ -1555,6 +1567,22 @@ Reply ONLY with JSON:
             if (repair.context) {
               repairRounds++
               convo.push({ role: 'system', content: repair.context })
+            }
+          }
+        } catch {}
+      } else if (!isTddAutoReview && !shadowRollbackTriggered && shadowBaselineHash && shadowTouchedPaths.size > 0) {
+        try {
+          const touchedFiles = allExecuted.some(e => e.entry && lintTestRepair.shouldRunOnTool(e.entry.name) && !e.entry.error)
+          if (touchedFiles) {
+            const repair = await lintTestRepair.runLintAndRepair({ db, sessionId, round: repairRounds + 1, onStatus })
+            if (repair.context) {
+              shadowRollbackTriggered = true
+              const shadowGit = require('./shadowGit')
+              const rb = shadowGit.rollbackCheckpoint(sessionId, wsRoot, shadowBaselineHash, [...shadowTouchedPaths])
+              if (rb && rb.ok) {
+                try { onStatus?.({ kind: 'harness_rollback', text: `🛡️ [Harness Circuit Breaker] 连续 ${repairRounds} 轮修复未通过，已自动回滚至修改前快照。` }) } catch {}
+                convo.push({ role: 'system', content: `[Harness Circuit Breaker] Consecutive repair attempts (${repairRounds}) failed to resolve lint/test errors. Changes to ${shadowTouchedPaths.size} file(s) were automatically rolled back to baseline (${shadowBaselineHash.slice(0, 8)}). Stop editing and summarize the root blocker for the user.` })
+              }
             }
           }
         } catch {}

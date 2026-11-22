@@ -3,7 +3,18 @@ const fs = require('fs')
 const path = require('path')
 const { spawn, spawnSync } = require('child_process')
 const { runCommand, runCommandSync } = require('./exec')
-const { checkWritePath, checkCommand, isInsideWorkspace, getWorkspaceRoot } = require('./sandbox')
+const {
+  checkWritePath,
+  checkCommand,
+  isInsideWorkspace,
+  getWorkspaceRoot,
+  resolveRoamingPath,
+  isDangerousRoot,
+  isSensitivePath,
+  _hasSessionWorkspace,
+  _isShadowActive,
+  setWorkspaceRootForSession,
+} = require('./sandbox')
 const { normalizeAgentMode } = require('../llm/toolLoopUtils')
 
 function isWorkspaceAskMode(mode) {
@@ -63,15 +74,66 @@ function reportLspDegradedOnce(ctx, lang, reason, detail) {
   }
 }
 
+/**
+ * Fast in-memory syntax guard (<15ms) for JS/TS/JSON files using Node built-ins.
+ * Acts as an immediate neural reflex when LSP is unavailable or skipped.
+ */
+function fastSyntaxCheck(filePath, content) {
+  try {
+    const ext = path.extname(String(filePath || '')).toLowerCase()
+    const base = path.basename(String(filePath || '')).toLowerCase()
+    const text = typeof content === 'string' ? content : fs.readFileSync(filePath, 'utf8')
+
+    if (ext === '.json') {
+      if (base.startsWith('tsconfig') || base.startsWith('jsconfig')) return ''
+      try {
+        JSON.parse(text)
+        return ''
+      } catch (e) {
+        return `\n[Harness Syntax Guard] ${path.basename(filePath)} (1):\n  - [SyntaxError] ${e.message}`
+      }
+    }
+
+    if (ext === '.ts' || ext === '.mts' || ext === '.cts') {
+      const mod = require('module')
+      if (typeof mod.stripTypeScriptTypes === 'function') {
+        try {
+          mod.stripTypeScriptTypes(text)
+          return ''
+        } catch (e) {
+          return `\n[Harness Syntax Guard] ${path.basename(filePath)} (1):\n  - [SyntaxError] ${String(e.message || e).slice(0, 200)}`
+        }
+      }
+      return ''
+    }
+
+    if (ext === '.js' || ext === '.cjs') {
+      try {
+        new (require('vm').Script)(text, { filename: filePath })
+        return ''
+      } catch (e) {
+        // Ignore ESM import/export syntax errors in .js files
+        if (/Cannot use import statement|Unexpected token 'export'/.test(e.message || '')) return ''
+        const m = String(e.stack || '').match(/:(\d+)\n/)
+        const lineStr = m ? `line ${m[1]}: ` : ''
+        return `\n[Harness Syntax Guard] ${path.basename(filePath)} (1):\n  - [SyntaxError] ${lineStr}${e.message}`
+      }
+    }
+    return ''
+  } catch {
+    return ''
+  }
+}
+
 async function collectPostWriteDiagnostics(filePath, content, ctx) {
   if (ctx?.skipPostWriteDiagnostics) return ''
   let lang = null
   try {
-    const lsp = require('../context/lspClient')
-    lang = lsp.extToLanguage(filePath)
-    if (!lang) return ''
     const featureFlags = require('../featureFlags')
     if (!featureFlags.isEnabled(ctx?.db, 'lsp.autoDiagnostics')) return ''
+    const lsp = require('../context/lspClient')
+    lang = lsp.extToLanguage(filePath)
+    if (!lang) return fastSyntaxCheck(filePath, content)
     let root
     try { root = getWorkspaceRoot(ctx?.sessionId) } catch { /* ignore */ }
     if (!root) root = path.dirname(path.resolve(filePath))
@@ -129,15 +191,21 @@ async function collectPostWriteDiagnostics(filePath, content, ctx) {
 
     if (diags === timedOutSentinel) {
       reportLspDegradedOnce(ctx, lang, 'timeout', `exceeded ${deadlineMs}ms`)
-      return ''
+      return fastSyntaxCheck(filePath, content)
     }
     if (degradedInfo) {
       reportLspDegradedOnce(ctx, lang, degradedInfo.reason, degradedInfo.message)
     }
-    return diags && diags.length ? lsp.formatDiagnosticsSummary(filePath, diags, { maxItems: 15 }) : ''
+    if (diags && diags.length) {
+      return lsp.formatDiagnosticsSummary(filePath, diags, { maxItems: 15 })
+    }
+    if (diags === null) {
+      return fastSyntaxCheck(filePath, content)
+    }
+    return ''
   } catch (err) {
     reportLspDegradedOnce(ctx, lang, 'error', err?.message || String(err))
-    return ''
+    return fastSyntaxCheck(filePath, content)
   }
 }
 
@@ -207,9 +275,9 @@ function grepWithRipgrep({ cwd, glob: globPattern, pattern }) {
   return new Promise((resolve) => {
     const args = ['--line-number', '--no-heading', '--max-count=50']
     if (globPattern) args.push('--glob', globPattern)
-    args.push('.')
+    args.push('--', String(pattern || ''), '.')
     let child
-    try { child = spawn('rg', args, { cwd: cwd || process.cwd(), windowsHide: true }) } catch { resolve(null); return }
+    try { child = spawn('rg', args, { cwd: cwd || process.cwd(), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }) } catch { resolve(null); return }
     let stdout = ''; let stderr = ''; let done = false
     const finish = () => { if (!done) { done = true; resolve(stdout) } }
     child.stdout.on('data', (d) => { stdout += d.toString(); if (stdout.length > MAX_GREP_BYTES) { try { child.kill() } catch {}; finish() } })
@@ -453,7 +521,7 @@ const TOOLS = [
   { name: 'find_symbol', description: 'Find symbol definition (LSP-first, regex fallback).', risk: 'safe', parameters: { type: 'object', properties: { name: { type: 'string' }, cwd: { type: 'string' } }, required: ['name', 'cwd'] }, run: async (args, ctx) => {
     const name = String(args.name || ''); const cwd = String(args.cwd || '')
     if (!name) throw new Error('name is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
-    if (lspFullEnabled(ctx)) { try { const lsp = require('../context/lspClient'); const r = await lsp.findSymbol(name, cwd); if (r && r.length) return JSON.stringify(r) } catch {} }
+    if (lspFullEnabled(ctx)) { try { const lsp = require('../context/lspClient'); const r = await lsp.searchWorkspace(cwd, name); if (r && r.length) return JSON.stringify(r) } catch {} }
     const re = new RegExp(`\\b${name.replace(/[.*+?^${}()[\\]\\]/g, '\\$&')}\\b`)
     const files = await globFiles('**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
     const hits = []; outer: for (const f of files.slice(0, 2000)) {
@@ -657,6 +725,20 @@ const TOOLS = [
         // Stream live stdout/stderr to the renderer when ctx.onStream is wired
         // up (chat/agent turns). Falls back to buffered runCommand for callers
         // without a streaming sink (e.g. headless SDK without onStream).
+        const tapWrap = (stdout, stderr, exitCode, timedOut) => {
+          const base = formatShellResult(stdout, stderr, exitCode, timedOut)
+          if (exitCode && exitCode !== 0 && !timedOut) {
+            try {
+              const { extractCrashSignal, formatCrashTapBanner } = require('../llm/processTap')
+              const sig = extractCrashSignal({ command: cmd, exitCode, stdout, stderr, cwd: effectiveCwd })
+              if (sig && !sig.ok) {
+                try { ctx?.onStatus?.({ kind: 'process_crash', text: sig.summary }) } catch {}
+                return `${formatCrashTapBanner(sig)}\n${base}`
+              }
+            } catch {}
+          }
+          return base
+        }
         const onStream = ctx?.onStream
         if (onStream) {
           return runCommandStreaming(cmd, {
@@ -665,11 +747,11 @@ const TOOLS = [
             onChunk: (text) => { try { onStream({ text, type: 'chunk' }) } catch {} },
           }).then(({ stdout, stderr, exitCode, timedOut }) => {
             try { onStream({ text: '', type: 'done' }) } catch {}
-            return formatShellResult(stdout, stderr, exitCode, timedOut)
+            return tapWrap(stdout, stderr, exitCode, timedOut)
           })
         }
         return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
-          .then(({ stdout, stderr, exitCode, timedOut }) => formatShellResult(stdout, stderr, exitCode, timedOut))
+          .then(({ stdout, stderr, exitCode, timedOut }) => tapWrap(stdout, stderr, exitCode, timedOut))
       }
       return runInDocker(cmd, timeoutMs, ctx?.db)
     })
@@ -1576,21 +1658,117 @@ const TOOLS = [
   }},
 ]
 
-// ── LSP tools (feature-flagged) ──────────────────────────────────────
-function makeLspTool(name, desc, fn) {
-  return { name, description: desc, risk: 'safe', parameters: { type: 'object', properties: { position: { type: 'object' } } }, run: async (args, ctx) => {
-    if (!lspFullEnabled(ctx)) return 'LSP disabled'
-    try { const r = await require('../context/lspClient')[fn](args.position || args); return r ? JSON.stringify(r) : '(no result)' } catch (e) { return `LSP error: ${e.message}` }
-  }}
+// ── LSP tools (feature-flagged, graceful fallback) ─────────────────────
+function _resolveLspTarget(args, ctx) {
+  const pos = (args && typeof args.position === 'object' && args.position) || {}
+  let rawFile = String(args?.file || args?.path || pos.file || pos.uri || '').trim()
+  if (rawFile.startsWith('file://')) {
+    try { rawFile = require('url').fileURLToPath(rawFile) } catch {}
+  }
+  if (!rawFile) throw new Error('file is required')
+  let wsRoot = ''
+  try { wsRoot = getWorkspaceRoot(ctx?.sessionId) || '' } catch {}
+  const absFile = path.isAbsolute(rawFile) ? path.resolve(rawFile) : path.resolve(wsRoot || process.cwd(), rawFile)
+  guardWorkspaceRead(absFile, ctx, 'file')
+  const root = wsRoot || path.dirname(absFile)
+  const line = Math.max(1, Number(args?.line ?? pos.line ?? 1) || 1)
+  const character = Math.max(1, Number(args?.character ?? args?.col ?? pos.character ?? 1) || 1)
+  return { root, absFile, line, character, symbol: args?.symbol ? String(args.symbol) : '' }
 }
-TOOLS.push(makeLspTool('lsp_definition', 'Find symbol definition via LSP', 'getDefinition'))
-TOOLS.push(makeLspTool('lsp_references', 'Find symbol references via LSP', 'getReferences'))
-TOOLS.push(makeLspTool('lsp_diagnostics', 'Get LSP diagnostics', 'getDiagnostics'))
-TOOLS.push(makeLspTool('lsp_code_actions', 'Get LSP code actions', 'getCodeActions'))
-TOOLS.push({ name: 'lsp_rename', description: 'Rename symbol via LSP. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { position: { type: 'object' }, new_name: { type: 'string' } }, required: ['position', 'new_name'] }, run: async (args, ctx) => {
-  if (!lspFullEnabled(ctx)) return 'LSP disabled'
-  try { const r = await require('../context/lspClient').renameSymbol(args.position || {}, args.new_name); return r ? JSON.stringify(r) : '(no result)' } catch (e) { return `LSP error: ${e.message}` }
-}})
+
+function _extractWordAt(absFile, line, character) {
+  try {
+    const lines = fs.readFileSync(absFile, 'utf8').split(/\r?\n/)
+    const row = lines[line - 1]
+    if (!row) return ''
+    const idx = Math.min(Math.max(0, character - 1), Math.max(0, row.length - 1))
+    let start = idx
+    let end = idx
+    while (start > 0 && /[A-Za-z0-9_$]/.test(row[start - 1])) start--
+    while (end < row.length && /[A-Za-z0-9_$]/.test(row[end])) end++
+    return row.slice(start, end)
+  } catch {
+    return ''
+  }
+}
+
+async function _fallbackSymbolSearch(root, sym, defOnly) {
+  if (!sym) return '(no result)'
+  const esc = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = defOnly
+    ? `(function\\s+${esc}\\b|class\\s+${esc}\\b|(const|let|var|type|interface|enum)\\s+${esc}\\b|\\b${esc}\\s*=\\s*(async\\s+)?(\\(|function)|def\\s+${esc}\\b|fn\\s+${esc}\\b)`
+    : `\\b${esc}\\b`
+  if (rgAvailable()) {
+    const o = await grepWithRipgrep({ cwd: root, pattern })
+    if (o !== null) return `[LSP unavailable — regex fallback for "${sym}"]\n${formatRipgrepLines(o, root)}`
+  }
+  return `[LSP unavailable — no fallback matches for "${sym}"]`
+}
+
+const _lspPosParams = {
+  type: 'object',
+  properties: {
+    file: { type: 'string', description: 'Target file path (relative to workspace root or absolute).' },
+    line: { type: 'number', description: '1-based line number.' },
+    character: { type: 'number', description: '1-based column number (defaults to 1).' },
+    symbol: { type: 'string', description: 'Optional symbol name hint for regex fallback.' },
+  },
+  required: ['file', 'line'],
+}
+
+TOOLS.push(
+  { name: 'lsp_definition', description: 'Find symbol definition via LSP (falls back to regex definition scan if LSP server is unavailable).', risk: 'safe', parameters: _lspPosParams, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line, character, symbol } = _resolveLspTarget(args, ctx)
+      const lsp = require('../context/lspClient')
+      const r = await lsp.definitionWorkspace(root, absFile, { line, character })
+      if (r !== null) return r.length ? JSON.stringify(r) : '(no definition found)'
+      const sym = symbol || _extractWordAt(absFile, line, character)
+      return await _fallbackSymbolSearch(root, sym, true)
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_references', description: 'Find all symbol references via LSP (falls back to regex reference scan if LSP server is unavailable).', risk: 'safe', parameters: _lspPosParams, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line, character, symbol } = _resolveLspTarget(args, ctx)
+      const lsp = require('../context/lspClient')
+      const r = await lsp.referencesWorkspace(root, absFile, { line, character })
+      if (r !== null) return r.length ? JSON.stringify(r) : '(no references found)'
+      const sym = symbol || _extractWordAt(absFile, line, character)
+      return await _fallbackSymbolSearch(root, sym, false)
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_diagnostics', description: 'Get diagnostics (errors/warnings) for a file via LSP (falls back to fast syntax check if LSP server is unavailable).', risk: 'safe', parameters: { type: 'object', properties: { file: { type: 'string', description: 'Target file path.' } }, required: ['file'] }, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile } = _resolveLspTarget(args, ctx)
+      const lsp = require('../context/lspClient')
+      const r = await lsp.diagnosticsWorkspace(root, absFile)
+      if (r !== null) return r.length ? lsp.formatDiagnosticsSummary(absFile, r, { maxItems: 30 }) : '(no diagnostics)'
+      const fast = fastSyntaxCheck(absFile)
+      return fast ? fast.trim() : '(no diagnostics — fast syntax check clean)'
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_code_actions', description: 'Get available LSP code actions for a file line.', risk: 'safe', parameters: { type: 'object', properties: { file: { type: 'string' }, line: { type: 'number' } }, required: ['file', 'line'] }, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line } = _resolveLspTarget(args, ctx)
+      const r = await require('../context/lspClient').codeActionsWorkspace(root, absFile, { line })
+      return r && r.length ? JSON.stringify(r) : '(no code actions)'
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_rename', description: 'Prepare symbol rename edits via LSP. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { file: { type: 'string' }, line: { type: 'number' }, character: { type: 'number' }, new_name: { type: 'string' } }, required: ['file', 'line', 'new_name'] }, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line, character } = _resolveLspTarget(args, ctx)
+      const newName = String(args.new_name || '').trim()
+      if (!newName) throw new Error('new_name is required')
+      const r = await require('../context/lspClient').renameWorkspace(root, absFile, newName, { line, character })
+      return r ? JSON.stringify(r) : '(rename unavailable)'
+    } catch (e) { return `LSP error: ${e.message}` }
+  }}
+)
 
 // ── GitHub tools ─────────────────────────────────────────────────────────
 // GitHub tools use the gh CLI when available, and fall back to the GitHub
@@ -1766,6 +1944,79 @@ TOOLS.push(
         ctx,
       })
       return res.text
+    },
+  },
+  {
+    name: 'change_directory',
+    description:
+      'Change the active working directory (CWD) for the current session. Supports absolute paths, ~ (home directory), and paths relative to the current CWD. Updates subsequent file/terminal tool paths and the UI directory indicator.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Target directory path (absolute, relative, "..", or "~").',
+        },
+      },
+      required: ['path'],
+    },
+    execute: async (args, ctx) => {
+      const fs = require('fs')
+      const sid = ctx?.sessionId
+      if (sid != null && _isShadowActive(sid)) {
+        return JSON.stringify({ ok: false, error: 'Cannot change directory while a shadow workspace is active.' })
+      }
+      const rawInput = String(args?.path || '').trim()
+      if (!rawInput) {
+        return JSON.stringify({ ok: false, error: 'path is required' })
+      }
+      const baseCwd = ctx?.cwd || (ctx?.db && sid != null ? ctx.db.getSessionCwd?.(sid) : null) || getWorkspaceRoot()
+      const resolved = resolveRoamingPath(rawInput, baseCwd)
+      if (!fs.existsSync(resolved)) {
+        return JSON.stringify({ ok: false, error: `Directory does not exist: ${resolved}` })
+      }
+      let stat
+      try {
+        stat = fs.statSync(resolved)
+      } catch (err) {
+        return JSON.stringify({ ok: false, error: err?.message || String(err) })
+      }
+      if (!stat.isDirectory()) {
+        return JSON.stringify({ ok: false, error: `Not a directory: ${resolved}` })
+      }
+      let canonical = resolved
+      try { canonical = fs.realpathSync(resolved) } catch {}
+      if (isDangerousRoot(resolved) || isDangerousRoot(canonical)) {
+        return JSON.stringify({ ok: false, error: `Refusing to set dangerous system/root directory as CWD: ${canonical}` })
+      }
+      if (isSensitivePath(resolved) || isSensitivePath(canonical)) {
+        return JSON.stringify({ ok: false, error: `Refusing to set sensitive directory as CWD: ${canonical}` })
+      }
+      if (ctx && typeof ctx === 'object') {
+        ctx.cwd = canonical
+      }
+      if (ctx?.db && sid != null) {
+        try { ctx.db.setSessionCwd?.(sid, canonical) } catch {}
+        try {
+          const prevCfg = ctx.db.getSessionConfig?.(sid) || {}
+          ctx.db.setSessionConfig?.(sid, { ...prevCfg, workspace: canonical })
+        } catch {}
+      }
+      if (sid != null && _hasSessionWorkspace(sid)) {
+        try { setWorkspaceRootForSession(sid, canonical) } catch {}
+      }
+      try {
+        const { BrowserWindow } = require('electron')
+        if (BrowserWindow && typeof BrowserWindow.getAllWindows === 'function') {
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('session:cwd-changed', { sessionId: sid, cwd: canonical })
+            }
+          }
+        }
+      } catch {}
+      return JSON.stringify({ ok: true, cwd: canonical })
     },
   }
 )
