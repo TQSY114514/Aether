@@ -73,10 +73,46 @@ function compileSafeRegex(raw, defaultFlags = '') {
     }
   }
 
-  // Reject backreferences (\1..\9) and nested quantifiers like (a+)+, (a*)*, (a|aa)+
+  // Reject backreferences (\1..\9), lookarounds (?= / ?! / ?<= / ?<!), and
+  // any group with an outer quantifier (+, *, {m,n}) that contains an inner
+  // quantifier or alternation (prevents nested-repetition ReDoS like (a+z?)+).
   if (/\\[1-9]/.test(body)) return null
-  if (/([+*]|\{\d+,?\d*\})\)?\s*(?:[+*]|\{\d+,?\d*\})/.test(body)) return null
-  if (/\([^)]*\|[^)]*\)\s*(?:[+*]|\{\d+,?\d*\})/.test(body)) return null
+  if (/\(\?(?:[=!]|<[=!])/.test(body)) return null
+
+  const groupStack = []
+  let inCharClass = false
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (ch === '\\') { i++; continue }
+    if (inCharClass) {
+      if (ch === ']') inCharClass = false
+      continue
+    }
+    if (ch === '[') { inCharClass = true; continue }
+    if (ch === '(') {
+      groupStack.push({ hasQuantifier: false, hasAlt: false })
+      if (groupStack.length > 8) return null
+      continue
+    }
+    if (ch === ')') {
+      const grp = groupStack.pop()
+      if (!grp) return null
+      const next = body[i + 1]
+      const hasOuterQuantifier = next === '+' || next === '*' || next === '{'
+      if (hasOuterQuantifier && (grp.hasQuantifier || grp.hasAlt)) return null
+      if (hasOuterQuantifier && groupStack.length > 0) {
+        groupStack[groupStack.length - 1].hasQuantifier = true
+      }
+      continue
+    }
+    if (groupStack.length > 0) {
+      if (ch === '+' || ch === '*' || ch === '{') {
+        for (const g of groupStack) g.hasQuantifier = true
+      } else if (ch === '|') {
+        groupStack[groupStack.length - 1].hasAlt = true
+      }
+    }
+  }
 
   try {
     const re = new RegExp(body, flags)

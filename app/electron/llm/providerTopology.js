@@ -626,9 +626,8 @@ function getArenaScoresByModel(db) {
       totalCount,
     }
     if (r.model_id != null) addEntry(`id:${r.model_id}`, entry)
-    if (r.model_name) {
-      if (r.provider_id != null) addEntry(`pid:${r.provider_id}::${r.model_name}`, entry)
-      if (r.provider_name) addEntry(`pname:${String(r.provider_name).toLowerCase()}::${r.model_name}`, entry)
+    if (r.model_name && r.provider_id != null) {
+      addEntry(`pid:${r.provider_id}::${r.model_name}`, entry)
     }
   }
 
@@ -662,9 +661,9 @@ function buildProviderTopologySnapshot(db, { includeInactive = false } = {}) {
       const cacheKey = `${p.id}::${modelId}`
       const cached = runtimeProbeCache.get(cacheKey) || null
       const rawArena =
-        (dbModelRowId != null && arenaScoreMap.get(`id:${dbModelRowId}`)) ||
-        arenaScoreMap.get(`pid:${p.id}::${modelId}`) ||
-        (p.name ? arenaScoreMap.get(`pname:${String(p.name).toLowerCase()}::${modelId}`) : null) ||
+        (dbModelRowId != null
+          ? arenaScoreMap.get(`id:${dbModelRowId}`)
+          : arenaScoreMap.get(`pid:${p.id}::${modelId}`)) ||
         []
       return {
         modelId,

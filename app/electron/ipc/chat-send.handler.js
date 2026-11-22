@@ -247,7 +247,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
               const target = allModelsForSuggest.find(m => {
                 if (String(m.id) === spec) return true
                 if (spec.includes(':')) {
-                  const [pid, mname] = spec.split(':')
+                  const idx = spec.indexOf(':')
+                  const pid = spec.slice(0, idx)
+                  const mname = spec.slice(idx + 1)
                   if (String(m.provider_id) === pid && m.model_name === mname) return true
                 }
                 if (spec.includes('/')) {

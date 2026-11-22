@@ -167,17 +167,28 @@ describe('isExternalBySource', () => {
 
 describe('redactMiddleware custom patterns', () => {
   it('支持 ctx.customRedactPatterns 擦除自定义敏感词（非内置模式），并安全跳过非法/ReDoS/零宽正则', () => {
-    const out = applyMiddleware('prefix=CORP_PRIV_99A and normal_ok', {
+    const out = applyMiddleware('prefix=CORP_PRIV_99A and aaaaaaaaaa! normal_ok', {
       tool: 'run_command',
       customRedactPatterns: [
         'CORP_PRIV_[A-Z0-9]+',
-        '[unclosed_regex', // invalid regex should be ignored safely
-        '(a+)+',           // ReDoS nested quantifier should be rejected
-        '(?=normal)',      // zero-width lookahead must not insert [REDACTED]
-        '',                // empty should be ignored
+        '[unclosed_regex',   // invalid regex should be ignored safely
+        '(a+)+',             // ReDoS nested quantifier should be rejected
+        '^(?=a)(a+z?)+$',    // ReDoS lookahead + separated nested quantifier should be rejected
+        '(a+z?)+',           // separated nested quantifier should be rejected
+        '(?=normal)',        // zero-width lookahead must not insert [REDACTED]
+        '',                  // empty should be ignored
       ],
     })
-    expect(out).toBe('prefix=[REDACTED] and normal_ok')
+    expect(out).toBe('prefix=[REDACTED] and aaaaaaaaaa! normal_ok')
+  })
+
+  it('支持最多 32 条自定义脱敏模式（验证第 17 条和第 32 条均生效）', () => {
+    const patterns = Array.from({ length: 32 }, (_, i) => `CORP_${String(i).padStart(2, '0')}_[A-Z0-9]+`)
+    const out = applyMiddleware('a=CORP_16_ABC b=CORP_31_XYZ', {
+      tool: 'run_command',
+      customRedactPatterns: patterns,
+    })
+    expect(out).toBe('a=[REDACTED] b=[REDACTED]')
   })
 
   it('支持 /pattern/flags 形式与 db settings 中的 security.custom_redact_patterns', () => {

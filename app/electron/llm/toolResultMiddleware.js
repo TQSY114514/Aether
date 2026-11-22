@@ -81,7 +81,7 @@ const SECRET_WHOLE_PATTERNS = [
 ]
 const { compileSafeRegex } = require('../config/projectConfig')
 
-const MAX_PATTERNS_PER_SOURCE = 16
+const MAX_PATTERNS_PER_SOURCE = 32
 
 /**
  * Compile user/project custom redaction patterns into global RegExp instances.

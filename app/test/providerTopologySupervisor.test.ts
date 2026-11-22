@@ -1245,7 +1245,31 @@ describe('Feature 26: Offline Mock Unit Tests (providerTopology & subagentSuperv
 
       const xml = buildTopologyPromptXml(dbWithArena)
       expect(xml).toContain('arena="coding:1142(75%,n=8),general:1060(60%,n=5)"')
-      expect(xml).not.toContain('claude-3-7-sonnet" tier="reasoning_flagship" status="untested" arena=')
+      const claudeTagMatch = xml.match(/<model id="claude-3-7-sonnet"[^>]*\/>/)
+      expect(claudeTagMatch).not.toBeNull()
+      expect(claudeTagMatch![0]).not.toContain('arena=')
+    })
+
+    it('T5.11: Same-named providers with same model_name do not leak Arena scores across model IDs', () => {
+      const dbSameName = {
+        getProvidersDecrypted: () => [
+          { id: 10, name: 'Relay', api_url: 'https://relay-a.example/v1', enabled: 1 },
+          { id: 11, name: 'Relay', api_url: 'https://relay-b.example/v1', enabled: 1 },
+        ],
+        getModels: (pid: number) =>
+          pid === 10
+            ? [{ id: 101, provider_id: 10, model_name: 'gpt-4o', display_name: 'GPT-4o A' }]
+            : [{ id: 102, provider_id: 11, model_name: 'gpt-4o', display_name: 'GPT-4o B' }],
+        getModelScores: () => [
+          { model_id: 101, model_name: 'gpt-4o', provider_id: 10, provider_name: 'Relay', intent: 'coding', score: 1200, win_count: 4, total_count: 5 },
+        ],
+      }
+
+      const snap = buildProviderTopologySnapshot(dbSameName)
+      const p10 = snap.find((p: any) => p.providerId === 10)
+      const p11 = snap.find((p: any) => p.providerId === 11)
+      expect(p10.models[0].arenaScores).toEqual([{ intent: 'coding', score: 1200, winRate: 80, totalCount: 5 }])
+      expect(p11.models[0].arenaScores).toEqual([])
     })
   })
 })
