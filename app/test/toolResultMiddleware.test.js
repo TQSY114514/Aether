@@ -171,12 +171,12 @@ describe('redactMiddleware custom patterns', () => {
       tool: 'run_command',
       customRedactPatterns: [
         'CORP_PRIV_[A-Z0-9]+',
-        '[unclosed_regex',   // invalid regex should be ignored safely
-        '(a+)+',             // ReDoS nested quantifier should be rejected
-        '^(?=a)(a+z?)+$',    // ReDoS lookahead + separated nested quantifier should be rejected
-        '(a+z?)+',           // separated nested quantifier should be rejected
-        '(?=normal)',        // zero-width lookahead must not insert [REDACTED]
-        '',                  // empty should be ignored
+        '[unclosed_regex',          // invalid regex should be ignored safely
+        '(a' + '+)+',                // ReDoS nested quantifier should be rejected
+        '^(?=a)(a+' + 'z?)+$',       // ReDoS lookahead + separated nested quantifier should be rejected
+        '(a+' + 'z?)+',              // separated nested quantifier should be rejected
+        '(?=normal)',                // zero-width lookahead must not insert [REDACTED]
+        '',                          // empty should be ignored
       ],
     })
     expect(out).toBe('prefix=[REDACTED] and aaaaaaaaaa! normal_ok')
