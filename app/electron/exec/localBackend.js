@@ -114,6 +114,21 @@ const localBackend = {
       entry.child = null
     })
 
+    child.on('close', (code) => {
+      if (!entry.killed && code !== 0) {
+        try {
+          const { extractCrashSignal } = require('../llm/processTap')
+          entry.crashSignal = extractCrashSignal({
+            command: [command, ...(args || [])].join(' '),
+            exitCode: code,
+            stdout: entry.stdoutTail,
+            stderr: entry.stderrTail,
+            cwd: cwd || process.cwd(),
+          })
+        } catch {}
+      }
+    })
+
     if (timeout > 0) {
       setTimeout(() => {
         if (entry.state === 'running') {
@@ -139,6 +154,7 @@ const localBackend = {
       stderrTail: e.stderrTail,
       startedAt: e.startedAt,
       finishedAt: e.finishedAt,
+      crashSignal: e.crashSignal || null,
     }
   },
 

@@ -63,15 +63,82 @@ function reportLspDegradedOnce(ctx, lang, reason, detail) {
   }
 }
 
+/**
+ * Fast in-memory syntax guard (<15ms) for JS/TS/JSON files using Node built-ins.
+ * Acts as an immediate neural reflex when LSP is unavailable or skipped.
+ */
+function _stripJsonCommentsAndTrailingCommas(text) {
+  const noComments = text.replace(/"(?:\\.|[^"\\])*"|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g, (m) => (m[0] === '"' ? m : ''))
+  return noComments.replace(/"(?:\\.|[^"\\])*"|,\s*(?=[}\]])/g, (m) => (m[0] === '"' ? m : ''))
+}
+
+function fastSyntaxCheck(filePath, content) {
+  try {
+    const ext = path.extname(String(filePath || '')).toLowerCase()
+    const base = path.basename(String(filePath || '')).toLowerCase()
+    const text = typeof content === 'string' ? content : fs.readFileSync(filePath, 'utf8')
+
+    if (ext === '.json') {
+      const toCheck = (base.startsWith('tsconfig') || base.startsWith('jsconfig'))
+        ? _stripJsonCommentsAndTrailingCommas(text)
+        : text
+      try {
+        JSON.parse(toCheck)
+        return ''
+      } catch (e) {
+        return `\n[Harness Syntax Guard] ${path.basename(filePath)}:\n  - [SyntaxError] ${e.message}`
+      }
+    }
+
+    const runTsOrEsmCheck = () => {
+      const mod = require('module')
+      if (typeof mod.stripTypeScriptTypes !== 'function') return ''
+      try {
+        mod.stripTypeScriptTypes(text)
+        return ''
+      } catch (e) {
+        if (e && e.code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX') return ''
+        return `\n[Harness Syntax Guard] ${path.basename(filePath)}:\n  - [SyntaxError] ${String(e.message || e).slice(0, 200)}`
+      }
+    }
+
+    if (ext === '.ts' || ext === '.mts' || ext === '.cts' || ext === '.mjs') {
+      return runTsOrEsmCheck()
+    }
+
+    // Note: .jsx and .tsx require JSX parsing not supported by Node's stripTypeScriptTypes;
+    // they rely on the workspace LSP diagnostics path when available.
+    if (ext === '.js' || ext === '.cjs') {
+      // Strip leading BOM / shebang line while preserving line numbers (keep trailing newline)
+      const body = text.replace(/^\uFEFF/, '').replace(/^#![^\r\n]*/, '')
+      const wrapped = `(function (exports, require, module, __filename, __dirname) { ${body}\n})`
+      try {
+        new (require('vm').Script)(wrapped, { filename: filePath })
+        return ''
+      } catch (e) {
+        if (ext === '.js' && /Cannot use import statement|Unexpected token 'export'|Cannot use 'import\.meta'|await is only valid/.test(e.message || '')) {
+          return runTsOrEsmCheck()
+        }
+        const m = String(e.stack || '').match(/:(\d+)\n/)
+        const lineStr = m ? `line ${m[1]}: ` : ''
+        return `\n[Harness Syntax Guard] ${path.basename(filePath)}:\n  - [SyntaxError] ${lineStr}${e.message}`
+      }
+    }
+    return ''
+  } catch {
+    return ''
+  }
+}
+
 async function collectPostWriteDiagnostics(filePath, content, ctx) {
   if (ctx?.skipPostWriteDiagnostics) return ''
   let lang = null
   try {
-    const lsp = require('../context/lspClient')
-    lang = lsp.extToLanguage(filePath)
-    if (!lang) return ''
     const featureFlags = require('../featureFlags')
     if (!featureFlags.isEnabled(ctx?.db, 'lsp.autoDiagnostics')) return ''
+    const lsp = require('../context/lspClient')
+    lang = lsp.extToLanguage(filePath)
+    if (!lang) return fastSyntaxCheck(filePath, content)
     let root
     try { root = getWorkspaceRoot(ctx?.sessionId) } catch { /* ignore */ }
     if (!root) root = path.dirname(path.resolve(filePath))
@@ -129,15 +196,21 @@ async function collectPostWriteDiagnostics(filePath, content, ctx) {
 
     if (diags === timedOutSentinel) {
       reportLspDegradedOnce(ctx, lang, 'timeout', `exceeded ${deadlineMs}ms`)
-      return ''
+      return fastSyntaxCheck(filePath, content)
     }
     if (degradedInfo) {
       reportLspDegradedOnce(ctx, lang, degradedInfo.reason, degradedInfo.message)
     }
-    return diags && diags.length ? lsp.formatDiagnosticsSummary(filePath, diags, { maxItems: 15 }) : ''
+    if (diags && diags.length) {
+      return lsp.formatDiagnosticsSummary(filePath, diags, { maxItems: 15 })
+    }
+    if (diags === null) {
+      return fastSyntaxCheck(filePath, content)
+    }
+    return ''
   } catch (err) {
     reportLspDegradedOnce(ctx, lang, 'error', err?.message || String(err))
-    return ''
+    return fastSyntaxCheck(filePath, content)
   }
 }
 
@@ -204,12 +277,14 @@ function rgAvailable() {
 }
 
 function grepWithRipgrep({ cwd, glob: globPattern, pattern }) {
+  const pat = String(pattern || '')
+  if (!pat) return Promise.resolve('')
   return new Promise((resolve) => {
     const args = ['--line-number', '--no-heading', '--max-count=50']
     if (globPattern) args.push('--glob', globPattern)
-    args.push('.')
+    args.push('--', pat, '.')
     let child
-    try { child = spawn('rg', args, { cwd: cwd || process.cwd(), windowsHide: true }) } catch { resolve(null); return }
+    try { child = spawn('rg', args, { cwd: cwd || process.cwd(), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }) } catch { resolve(null); return }
     let stdout = ''; let stderr = ''; let done = false
     const finish = () => { if (!done) { done = true; resolve(stdout) } }
     child.stdout.on('data', (d) => { stdout += d.toString(); if (stdout.length > MAX_GREP_BYTES) { try { child.kill() } catch {}; finish() } })
@@ -228,7 +303,12 @@ function formatRipgrepLines(output, cwd) {
     const rest = line.slice(idx + 1); const idx2 = rest.indexOf(':')
     const lineno = idx2 >= 0 ? rest.slice(0, idx2) : ''; const content = idx2 >= 0 ? rest.slice(idx2 + 1) : ''
     let rel = line.slice(0, idx)
-    if (cwd) { try { rel = path.relative(cwd, rel) || path.basename(rel) } catch {} }
+    if (cwd) {
+      try {
+        const abs = path.isAbsolute(rel) ? rel : path.resolve(cwd, rel)
+        rel = path.relative(cwd, abs) || path.basename(abs)
+      } catch {}
+    }
     hits.push(`${rel}:${lineno}: ${content.trim().slice(0, 200)}`)
     if (hits.length >= 200) break
   }
@@ -269,11 +349,13 @@ function formatShellResult(stdout, stderr, exitCode, timedOut) {
 function runCommandStreaming(cmd, { cwd, timeoutMs, onChunk }) {
   const { spawn } = require('child_process')
   const needsShell = /[|&;`$(){}!\\]/.test(cmd)
-  const command = needsShell ? 'cmd.exe' : cmd
-  const args = needsShell ? ['/c', cmd] : []
+  const shellExe = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
+  const shellArgs = process.platform === 'win32' ? ['/c', cmd] : ['-c', cmd]
+  const command = needsShell ? shellExe : cmd
+  const args = needsShell ? shellArgs : []
   return new Promise((resolve, reject) => {
     let stdout = '', stderr = '', timedOut = false
-    const child = spawn(command, args, { cwd, shell: needsShell, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
     child.stdout.on('data', (d) => { const s = d.toString(); stdout += s; try { onChunk?.(s) } catch {} })
     child.stderr.on('data', (d) => { const s = d.toString(); stderr += s; try { onChunk?.(s) } catch {} })
     const timer = setTimeout(() => {
@@ -453,7 +535,19 @@ const TOOLS = [
   { name: 'find_symbol', description: 'Find symbol definition (LSP-first, regex fallback).', risk: 'safe', parameters: { type: 'object', properties: { name: { type: 'string' }, cwd: { type: 'string' } }, required: ['name', 'cwd'] }, run: async (args, ctx) => {
     const name = String(args.name || ''); const cwd = String(args.cwd || '')
     if (!name) throw new Error('name is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
-    if (lspFullEnabled(ctx)) { try { const lsp = require('../context/lspClient'); const r = await lsp.findSymbol(name, cwd); if (r && r.length) return JSON.stringify(r) } catch {} }
+    if (lspFullEnabled(ctx)) {
+      try {
+        const lsp = require('../context/lspClient')
+        const inferLang = (dir) => {
+          if (fs.existsSync(path.join(dir, 'Cargo.toml'))) return 'rust'
+          if (fs.existsSync(path.join(dir, 'go.mod'))) return 'go'
+          if (fs.existsSync(path.join(dir, 'pyproject.toml')) || fs.existsSync(path.join(dir, 'requirements.txt'))) return 'python'
+          return 'javascript'
+        }
+        const r = await lsp.searchWorkspace(cwd, name, { language: inferLang(cwd) })
+        if (r && r.length) return JSON.stringify(r)
+      } catch {}
+    }
     const re = new RegExp(`\\b${name.replace(/[.*+?^${}()[\\]\\]/g, '\\$&')}\\b`)
     const files = await globFiles('**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
     const hits = []; outer: for (const f of files.slice(0, 2000)) {
@@ -653,6 +747,20 @@ const TOOLS = [
     // in auto/auto_confirm with the flag enabled and a reachable daemon the
     // command runs inside an ephemeral no-network container instead of the host shell.
     return resolveBackendForMode(ctx?.agentMode, { db: ctx?.db, configured }).then((backendId) => {
+      const tapWrap = (stdout, stderr, exitCode, timedOut) => {
+        const base = formatShellResult(stdout, stderr, exitCode, timedOut)
+        if (exitCode !== 0 && !timedOut) {
+          try {
+            const { extractCrashSignal, formatCrashTapBanner } = require('../llm/processTap')
+            const sig = extractCrashSignal({ command: cmd, exitCode, stdout, stderr, cwd: effectiveCwd })
+            if (sig && !sig.ok) {
+              try { ctx?.onStatus?.({ kind: 'process_crash', text: sig.summary }) } catch {}
+              return `${formatCrashTapBanner(sig)}\n${base}`
+            }
+          } catch {}
+        }
+        return base
+      }
       if (backendId !== 'docker') {
         // Stream live stdout/stderr to the renderer when ctx.onStream is wired
         // up (chat/agent turns). Falls back to buffered runCommand for callers
@@ -665,13 +773,29 @@ const TOOLS = [
             onChunk: (text) => { try { onStream({ text, type: 'chunk' }) } catch {} },
           }).then(({ stdout, stderr, exitCode, timedOut }) => {
             try { onStream({ text: '', type: 'done' }) } catch {}
-            return formatShellResult(stdout, stderr, exitCode, timedOut)
+            return tapWrap(stdout, stderr, exitCode, timedOut)
           })
         }
-        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
-          .then(({ stdout, stderr, exitCode, timedOut }) => formatShellResult(stdout, stderr, exitCode, timedOut))
+        const shellExe = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
+        const shellArgs = process.platform === 'win32' ? ['/c', cmd] : ['-c', cmd]
+        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand(shellExe, shellArgs, { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: false }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
+          .then(({ stdout, stderr, exitCode, timedOut }) => tapWrap(stdout, stderr, exitCode, timedOut))
       }
-      return runInDocker(cmd, timeoutMs, ctx?.db)
+      return runInDocker(cmd, timeoutMs, ctx?.db).then((dockerOut) => {
+        if (typeof dockerOut === 'string' && /^\[(FAILED|COMMAND NOT FOUND|KILLED BY SIGNAL)/.test(dockerOut)) {
+          try {
+            const { extractCrashSignal, formatCrashTapBanner } = require('../llm/processTap')
+            const m = dockerOut.match(/exit\s+(-?\d+)/)
+            const code = m ? Number(m[1]) : 1
+            const sig = extractCrashSignal({ command: cmd, exitCode: code, stdout: '', stderr: dockerOut, cwd: effectiveCwd })
+            if (sig && !sig.ok) {
+              try { ctx?.onStatus?.({ kind: 'process_crash', text: sig.summary }) } catch {}
+              return `${formatCrashTapBanner(sig)}\n${dockerOut}`
+            }
+          } catch {}
+        }
+        return dockerOut
+      })
     })
   }},
 
@@ -1582,21 +1706,147 @@ const TOOLS = [
   }},
 ]
 
-// ── LSP tools (feature-flagged) ──────────────────────────────────────
-function makeLspTool(name, desc, fn) {
-  return { name, description: desc, risk: 'safe', parameters: { type: 'object', properties: { position: { type: 'object' } } }, run: async (args, ctx) => {
-    if (!lspFullEnabled(ctx)) return 'LSP disabled'
-    try { const r = await require('../context/lspClient')[fn](args.position || args); return r ? JSON.stringify(r) : '(no result)' } catch (e) { return `LSP error: ${e.message}` }
-  }}
+// ── LSP tools (feature-flagged, graceful fallback) ─────────────────────
+function _resolveLspTarget(args, ctx) {
+  const pos = (args && typeof args.position === 'object' && args.position) || {}
+  let rawFile = String(args?.file || args?.path || pos.file || pos.uri || '').trim()
+  if (rawFile.startsWith('file://')) {
+    try { rawFile = require('url').fileURLToPath(rawFile) } catch {}
+  }
+  if (!rawFile) throw new Error('file is required')
+  let wsRoot = ''
+  try { wsRoot = getWorkspaceRoot(ctx?.sessionId) || '' } catch {}
+  const absFile = path.isAbsolute(rawFile) ? path.resolve(rawFile) : path.resolve(wsRoot || process.cwd(), rawFile)
+  guardWorkspaceRead(absFile, ctx, 'file')
+  const root = wsRoot || path.dirname(absFile)
+  const line = Math.max(1, Number(args?.line ?? pos.line ?? 1) || 1)
+  const character = Math.max(1, Number(args?.character ?? args?.col ?? pos.character ?? 1) || 1)
+  return { root, absFile, line, character, symbol: args?.symbol ? String(args.symbol) : '' }
 }
-TOOLS.push(makeLspTool('lsp_definition', 'Find symbol definition via LSP', 'getDefinition'))
-TOOLS.push(makeLspTool('lsp_references', 'Find symbol references via LSP', 'getReferences'))
-TOOLS.push(makeLspTool('lsp_diagnostics', 'Get LSP diagnostics', 'getDiagnostics'))
-TOOLS.push(makeLspTool('lsp_code_actions', 'Get LSP code actions', 'getCodeActions'))
-TOOLS.push({ name: 'lsp_rename', description: 'Rename symbol via LSP. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { position: { type: 'object' }, new_name: { type: 'string' } }, required: ['position', 'new_name'] }, run: async (args, ctx) => {
-  if (!lspFullEnabled(ctx)) return 'LSP disabled'
-  try { const r = await require('../context/lspClient').renameSymbol(args.position || {}, args.new_name); return r ? JSON.stringify(r) : '(no result)' } catch (e) { return `LSP error: ${e.message}` }
-}})
+
+function _extractWordAt(absFile, line, character) {
+  try {
+    const lines = fs.readFileSync(absFile, 'utf8').split(/\r?\n/)
+    const row = lines[line - 1]
+    if (!row) return ''
+    const idx = Math.min(Math.max(0, character - 1), Math.max(0, row.length - 1))
+    let start = idx
+    let end = idx
+    while (start > 0 && /[A-Za-z0-9_$]/.test(row[start - 1])) start--
+    while (end < row.length && /[A-Za-z0-9_$]/.test(row[end])) end++
+    return row.slice(start, end)
+  } catch {
+    return ''
+  }
+}
+
+async function _fallbackSymbolSearch(root, sym, defOnly) {
+  if (!sym) return '(no result)'
+  const esc = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = defOnly
+    ? `(function\\s+${esc}\\b|class\\s+${esc}\\b|(const|let|var|type|interface|enum)\\s+${esc}\\b|\\b${esc}\\s*=\\s*(async\\s+)?(\\(|function)|def\\s+${esc}\\b|fn\\s+${esc}\\b)`
+    : `\\b${esc}\\b`
+  if (rgAvailable()) {
+    const o = await grepWithRipgrep({ cwd: root, pattern })
+    if (o !== null) return `[LSP unavailable — regex fallback for "${sym}"]\n${formatRipgrepLines(o, root)}`
+  }
+  try {
+    const re = new RegExp(pattern)
+    const files = await globFiles('**/*', { cwd: root, absolute: true, nodir: true })
+    const hits = []
+    outer: for (const f of files.slice(0, 1000)) {
+      try {
+        const lines = fs.readFileSync(f, 'utf8').split('\n')
+        for (let i = 0; i < lines.length; i++) {
+          if (re.test(lines[i])) {
+            hits.push(`${path.relative(root, f)}:${i + 1}: ${lines[i].trim().slice(0, 200)}`)
+            if (hits.length >= 50) break outer
+          }
+        }
+      } catch {}
+    }
+    if (hits.length) return `[LSP unavailable — regex fallback for "${sym}"]\n${hits.join('\n')}`
+  } catch {}
+  return `[LSP unavailable — no fallback matches for "${sym}"]`
+}
+
+const _lspPosParams = {
+  type: 'object',
+  properties: {
+    file: { type: 'string', description: 'Target file path (relative to workspace root or absolute).' },
+    line: { type: 'number', description: '1-based line number.' },
+    character: { type: 'number', description: '1-based column number (defaults to 1).' },
+    symbol: { type: 'string', description: 'Optional symbol name hint for regex fallback.' },
+  },
+  required: ['file', 'line'],
+}
+
+TOOLS.push(
+  { name: 'lsp_definition', description: 'Find symbol definition via LSP (falls back to regex definition scan if LSP server is unavailable).', risk: 'safe', parameters: _lspPosParams, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line, character, symbol } = _resolveLspTarget(args, ctx)
+      const lsp = require('../context/lspClient')
+      const r = await lsp.definitionWorkspace(root, absFile, { line, character })
+      if (r !== null) return r.length ? JSON.stringify(r) : '(no definition found)'
+      reportLspDegradedOnce(ctx, lsp.extToLanguage(absFile) || 'unknown', 'unavailable', 'LSP server unavailable')
+      const sym = symbol || _extractWordAt(absFile, line, character)
+      return await _fallbackSymbolSearch(root, sym, true)
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_references', description: 'Find all symbol references via LSP (falls back to regex reference scan if LSP server is unavailable).', risk: 'safe', parameters: _lspPosParams, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line, character, symbol } = _resolveLspTarget(args, ctx)
+      const lsp = require('../context/lspClient')
+      const r = await lsp.referencesWorkspace(root, absFile, { line, character })
+      if (r !== null) return r.length ? JSON.stringify(r) : '(no references found)'
+      reportLspDegradedOnce(ctx, lsp.extToLanguage(absFile) || 'unknown', 'unavailable', 'LSP server unavailable')
+      const sym = symbol || _extractWordAt(absFile, line, character)
+      return await _fallbackSymbolSearch(root, sym, false)
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_diagnostics', description: 'Get diagnostics (errors/warnings) for a file via LSP (falls back to fast syntax check if LSP server is unavailable).', risk: 'safe', parameters: { type: 'object', properties: { file: { type: 'string', description: 'Target file path.' } }, required: ['file'] }, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile } = _resolveLspTarget(args, ctx)
+      const lsp = require('../context/lspClient')
+      const r = await lsp.diagnosticsWorkspace(root, absFile)
+      if (r !== null) return r.length ? lsp.formatDiagnosticsSummary(absFile, r, { maxItems: 30 }) : '(no diagnostics)'
+      reportLspDegradedOnce(ctx, lsp.extToLanguage(absFile) || 'unknown', 'unavailable', 'LSP server unavailable')
+      const fast = fastSyntaxCheck(absFile)
+      return fast ? fast.trim() : '(no diagnostics — fast syntax check clean)'
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_code_actions', description: 'Get available LSP code actions for a file line.', risk: 'safe', parameters: { type: 'object', properties: { file: { type: 'string' }, line: { type: 'number' } }, required: ['file', 'line'] }, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line } = _resolveLspTarget(args, ctx)
+      const lsp = require('../context/lspClient')
+      const r = await lsp.codeActionsWorkspace(root, absFile, { line })
+      if (r === null) {
+        reportLspDegradedOnce(ctx, lsp.extToLanguage(absFile) || 'unknown', 'unavailable', 'LSP server unavailable')
+        return '(no code actions)'
+      }
+      return r.length ? JSON.stringify(r) : '(no code actions)'
+    } catch (e) { return `LSP error: ${e.message}` }
+  }},
+  { name: 'lsp_rename', description: 'Prepare symbol rename edits via LSP. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { file: { type: 'string' }, line: { type: 'number' }, character: { type: 'number' }, new_name: { type: 'string' } }, required: ['file', 'line', 'new_name'] }, run: async (args, ctx) => {
+    if (!lspFullEnabled(ctx)) return 'LSP disabled'
+    try {
+      const { root, absFile, line, character } = _resolveLspTarget(args, ctx)
+      const newName = String(args.new_name || '').trim()
+      if (!newName) throw new Error('new_name is required')
+      const lsp = require('../context/lspClient')
+      const r = await lsp.renameWorkspace(root, absFile, newName, { line, character })
+      if (r === null) {
+        reportLspDegradedOnce(ctx, lsp.extToLanguage(absFile) || 'unknown', 'unavailable', 'LSP server unavailable')
+        return '(rename unavailable)'
+      }
+      return JSON.stringify(r)
+    } catch (e) { return `LSP error: ${e.message}` }
+  }}
+)
 
 // ── GitHub tools ─────────────────────────────────────────────────────────
 // GitHub tools use the gh CLI when available, and fall back to the GitHub

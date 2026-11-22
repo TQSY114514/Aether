@@ -30,7 +30,7 @@ const FLAG_DEFS = [
   { key: 'debug.logForward',     default: false, category: 'debug',       description: 'Forward main-process logs to the renderer (logs panel)' },
   // Phase 0/2 — code intelligence (already-shipped capabilities, now gated)
   { key: 'repoMap.enabled',      default: true,  category: 'code-intel',  description: 'Inject the repo map into the agent tool loop' },
-  { key: 'lsp.full',             default: false, category: 'code-intel',  description: 'Full LSP feature set (definition / references / rename / code actions)' },
+  { key: 'lsp.full',             default: true,  category: 'code-intel',  description: 'Full LSP feature set (definition / references / rename / code actions)' },
   { key: 'lsp.autoDiagnostics',  default: true,  category: 'code-intel',  description: 'Automatically push debounced LSP diagnostics after file-modifying tool calls' },
   // Phase 1 — cloud execution + parallel tasks
   { key: 'exec.docker',          default: false, category: 'exec',        description: 'Docker sandbox execution backend' },
