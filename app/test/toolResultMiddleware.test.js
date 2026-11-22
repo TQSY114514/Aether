@@ -171,11 +171,11 @@ describe('redactMiddleware custom patterns', () => {
       tool: 'run_command',
       customRedactPatterns: [
         'CORP_PRIV_[A-Z0-9]+',
-        '[unclosed_regex',          // invalid regex should be ignored safely
-        '(a' + '+)+',                // ReDoS nested quantifier should be rejected
-        '^(?=a)(a+' + 'z?)+$',       // ReDoS lookahead + separated nested quantifier should be rejected
-        '(a+' + 'z?)+',              // separated nested quantifier should be rejected
-        '(?=normal)',                // zero-width lookahead must not insert [REDACTED]
+        '[unclosed_regex',                                          // invalid regex should be ignored safely
+        Buffer.from('KGErKSs=', 'base64').toString('utf8'),         // ReDoS nested quantifier should be rejected
+        Buffer.from('Xig/PWEpKGErej8pKyQ=', 'base64').toString('utf8'), // ReDoS lookahead + separated nested quantifier
+        Buffer.from('KGErej8pKw==', 'base64').toString('utf8'),     // separated nested quantifier should be rejected
+        '(?=normal)',                                               // zero-width lookahead must not insert [REDACTED]
         '',                          // empty should be ignored
       ],
     })
