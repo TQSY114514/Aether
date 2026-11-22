@@ -1,4 +1,5 @@
-const { getWorkspaceRoot, setWorkspaceRootForSession, isDangerousRoot, hasUnsafeWindowsPrefix, _isShadowActive } = require('../tools/sandbox')
+const fs = require('fs')
+const { getWorkspaceRoot, setWorkspaceRootForSession, isDangerousRoot, hasUnsafeWindowsPrefix, isSensitivePath, resolveRoamingPath, _isShadowActive } = require('../tools/sandbox')
 const checkpointMgr = require('../llm/checkpointManager')
 const { invalidateCache, hasProjectInstructions, loadProjectInstructions, loadModularRules } = require('../llm/projectInstructions')
 
@@ -23,9 +24,25 @@ function registerAgentHandlers(ipcMain, db) {
   ipcMain.handle('agent:workspace:set', async (_e, opts) => {
     const dir = typeof opts === 'string' ? opts : opts?.dir
     const sessionId = typeof opts === 'object' ? opts?.sessionId : undefined
-    const v = dir ? String(dir).trim() : null
-    if (v && (hasUnsafeWindowsPrefix(v) || isDangerousRoot(v))) {
-      throw new Error(`Forbidden directory: ${v} is a system-critical path`)
+    const raw = dir ? String(dir).trim() : null
+    let v = null
+    if (raw) {
+      const base = (sessionId ? getWorkspaceRoot(sessionId) : null) || db.getSetting('agent_workspace_root') || getWorkspaceRoot() || process.cwd()
+      const resolved = resolveRoamingPath(raw, base)
+      if (!resolved || hasUnsafeWindowsPrefix(resolved) || isDangerousRoot(resolved) || isSensitivePath(resolved)) {
+        throw new Error(`Forbidden directory: ${resolved || raw} is a system-critical path`)
+      }
+      let st = null
+      try { st = fs.statSync(resolved) } catch {}
+      if (!st || !st.isDirectory()) {
+        throw new Error(`Directory does not exist: ${resolved}`)
+      }
+      let canonical = resolved
+      try { canonical = fs.realpathSync(resolved) } catch {}
+      if (isDangerousRoot(canonical) || isSensitivePath(canonical)) {
+        throw new Error(`Forbidden directory: ${canonical} is a system-critical path`)
+      }
+      v = canonical
     }
     if (sessionId) {
       if (_isShadowActive?.(sessionId)) {

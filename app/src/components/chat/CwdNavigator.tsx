@@ -141,9 +141,10 @@ export default function CwdNavigator({
       if (currentSessionId) {
         await setSessionCwd(trimmed)
       } else {
-        await window.electronAPI?.agent?.setWorkspace?.({ dir: trimmed })
-        saveRecentCwd(trimmed)
-        onFallbackWorkspaceChange?.(trimmed)
+        const res = await window.electronAPI?.agent?.setWorkspace?.({ dir: trimmed })
+        const canonical = res?.root || trimmed
+        saveRecentCwd(canonical)
+        onFallbackWorkspaceChange?.(canonical)
       }
       setRecentCwds(loadRecentCwds())
       if (closeOnSuccess) setOpen(false)
@@ -324,7 +325,7 @@ export default function CwdNavigator({
                       type="button"
                       disabled={isStreaming || isLast}
                       onClick={() => applyPath(crumb.fullPath, false)}
-                      className={`px-1 py-0.5 rounded-[4px] font-mono text-[10px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+                      className={`px-1 py-0.5 rounded-[4px] font-mono text-[10px] transition-colors active:scale-[0.98] disabled:opacity-40 disabled:cursor-default focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
                         isLast
                           ? 'text-[var(--text-primary)] font-medium cursor-default'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--content-bg)] cursor-pointer'
@@ -359,7 +360,7 @@ export default function CwdNavigator({
                       type="button"
                       disabled={isStreaming || isCurrent}
                       onClick={() => applyPath(dir)}
-                      className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded-[5px] text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+                      className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded-[5px] text-left transition-colors active:scale-[0.99] disabled:opacity-40 disabled:cursor-default focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
                         isCurrent
                           ? 'bg-[var(--content-bg)] text-[var(--accent)] cursor-default'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--content-bg)] cursor-pointer'

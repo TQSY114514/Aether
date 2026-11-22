@@ -20,9 +20,8 @@ function registerFsHandlers(ipcMain, db) {
   ipcMain.handle('fs:list-dir', async (_event, dir, sessionId) => {
     if (typeof dir !== 'string' || !dir.trim()) return { ok: false, error: 'invalid_dir' }
     const root = resolveRoot(db, sessionId) || process.cwd()
-    const resPath = resolveRoamingPath(dir, root)
-    if (!resPath.ok) return { ok: false, error: 'unsafe_path' }
-    const resolved = resPath.resolved
+    const resolved = resolveRoamingPath(dir, root)
+    if (!resolved || typeof resolved !== 'string') return { ok: false, error: 'unsafe_path' }
     if (isSystemCriticalDir(resolved) || isSensitivePath(resolved)) {
       return { ok: false, error: 'restricted_path' }
     }

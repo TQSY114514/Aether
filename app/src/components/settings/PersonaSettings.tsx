@@ -79,6 +79,11 @@ export default function PersonaSettings() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    const MAX_IMPORT_BYTES = 1024 * 1024 // 1 MB
+    if (file.size > MAX_IMPORT_BYTES) {
+      toast(t('persona.import_failed'), { type: 'error' })
+      return
+    }
     try {
       const text = await file.text()
       let payload: any = { type: 'soul-md', text }
@@ -164,8 +169,8 @@ export default function PersonaSettings() {
           <button
             type="button"
             onClick={startCreate}
-            className="h-7 px-2.5 text-xs rounded-md text-white font-medium flex items-center gap-1 transition-opacity hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
-            style={{ backgroundColor: 'var(--accent)' }}
+            className="h-7 px-2.5 text-xs rounded-md font-medium flex items-center gap-1 transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             <Plus size={12} />
             <span>{t('persona.add')}</span>
@@ -193,7 +198,7 @@ export default function PersonaSettings() {
             setDefaultPersona(val)
           }}
           aria-label={t('settings.default_persona')}
-          className="px-2.5 py-1.5 text-xs rounded-md border outline-none cursor-pointer min-w-[180px]"
+          className="px-2.5 py-1.5 text-xs rounded-md border outline-none hover:border-[var(--accent)] focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.99] disabled:opacity-40 cursor-pointer min-w-[180px]"
           style={{
             borderColor: 'var(--border)',
             backgroundColor: 'var(--bg-secondary)',
@@ -229,7 +234,7 @@ export default function PersonaSettings() {
           <button
             type="button"
             onClick={handleSaveWorkspaceSoul}
-            className="h-7 px-2.5 text-[11px] rounded-md border shrink-0 transition-colors hover:bg-[var(--content-bg)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            className="h-7 px-2.5 text-[11px] rounded-md border shrink-0 transition-colors hover:bg-[var(--content-bg)] active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           >
             {t('persona.save_to_personas')}
@@ -273,7 +278,7 @@ export default function PersonaSettings() {
             <button
               type="button"
               onClick={cancelEdit}
-              className="h-7 px-3 text-xs rounded-md border transition-colors hover:bg-[var(--content-bg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+              className="h-7 px-3 text-xs rounded-md border transition-colors hover:bg-[var(--content-bg)] active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
             >
               {t('common.cancel')}
@@ -281,8 +286,8 @@ export default function PersonaSettings() {
             <button
               type="submit"
               disabled={!draftName.trim() || saving}
-              className="h-7 px-3 text-xs rounded-md text-white font-medium transition-opacity hover:opacity-90 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
-              style={{ backgroundColor: 'var(--accent)' }}
+              className="h-7 px-3 text-xs rounded-md font-medium transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+              style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               {t('common.save')}
             </button>

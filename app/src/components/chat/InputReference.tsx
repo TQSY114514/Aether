@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { FileCode, Folder, Sparkles, Wrench, Terminal } from 'lucide-react'
 import { useStore } from '@/store'
+import { t } from '@/utils/i18n'
 
 const PREFIXES = {
-  '@': { label: '文件、目录与技能 (Files, Paths & Skills)', color: 'text-blue-400' },
-  '#': { label: '内置工具 (Tools)', color: 'text-emerald-400' },
-  '!': { label: '快捷指令 (Commands)', color: 'text-purple-400' },
-}
+  '@': { labelKey: 'ref.prefix.at', color: 'text-blue-400' },
+  '#': { labelKey: 'ref.prefix.hash', color: 'text-emerald-400' },
+  '!': { labelKey: 'ref.prefix.bang', color: 'text-purple-400' },
+} as const
 
 type Suggestion = { text: string; desc: string; type: 'file' | 'dir' | 'skill' | 'tool' | 'command' }
 
@@ -119,7 +120,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
                 .slice(0, 10)
               items = filtered.map((e) => ({
                 text: `${parsed.displayBase}${e.name}${e.isDir ? parsed.sep : ''}`,
-                desc: e.isDir ? 'Dir' : 'File',
+                desc: e.isDir ? t('ref.type.dir') : t('ref.type.file'),
                 type: e.isDir ? ('dir' as const) : ('file' as const),
               }))
             }
@@ -134,7 +135,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
               if (Array.isArray(files)) {
                 fileItems = files.slice(0, 6).map((f: any) => ({
                   text: (f.relPath || f.name || '').replace(/\\/g, '/'),
-                  desc: f.size ? `${Math.ceil(f.size / 1024)}KB` : 'File',
+                  desc: f.size ? `${Math.ceil(f.size / 1024)}KB` : t('ref.type.file'),
                   type: 'file' as const,
                 }))
               }
@@ -145,20 +146,20 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
           const skillItems = skills
             .filter(s => s.name.toLowerCase().includes(q))
             .slice(0, 4)
-            .map(s => ({ text: s.name, desc: s.description || 'Skill', type: 'skill' as const }))
+            .map(s => ({ text: s.name, desc: s.description || t('ref.type.skill'), type: 'skill' as const }))
 
           items = [...fileItems, ...skillItems]
         }
       } else if (p === '#') {
         // Tools
         items = BUILTIN_TOOLS
-          .filter(t => t.toLowerCase().includes(q))
-          .map(t => ({ text: t, desc: 'Tool', type: 'tool' as const }))
+          .filter(toolName => toolName.toLowerCase().includes(q))
+          .map(toolName => ({ text: toolName, desc: t('ref.type.tool'), type: 'tool' as const }))
       } else if (p === '!') {
         // Commands
         items = commands
           .filter(c => (c.name || c.id).toLowerCase().includes(q))
-          .map(c => ({ text: c.name || c.id, desc: c.description || 'Command', type: 'command' as const }))
+          .map(c => ({ text: c.name || c.id, desc: c.description || t('ref.type.command'), type: 'command' as const }))
       }
 
       if (!cancelled) {
@@ -204,7 +205,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
 
   if (!visible || suggestions.length === 0) return null
 
-  const prefixInfo = (prefix && PREFIXES[prefix as keyof typeof PREFIXES]) || { label: '', color: 'text-gray-400' }
+  const prefixInfo = (prefix && PREFIXES[prefix as keyof typeof PREFIXES]) || null
 
   return (
     <div
@@ -212,8 +213,8 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
       className="absolute bottom-full left-0 mb-2 w-80 max-h-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] shadow-xl z-50 p-1 font-sans"
     >
       <div className="px-3 py-1.5 text-[11px] font-medium text-[var(--text-muted)] border-b border-[var(--border)] flex items-center justify-between">
-        <span>{prefixInfo.label}</span>
-        <span className="text-[10px] opacity-60">↑↓ 切换 · Enter/Tab 补全</span>
+        <span>{prefixInfo ? t(prefixInfo.labelKey) : ''}</span>
+        <span className="text-[10px] opacity-60">{t('ref.hint')}</span>
       </div>
       <div className="py-1">
         {suggestions.map((s, i) => (

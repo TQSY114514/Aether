@@ -1782,8 +1782,8 @@ TOOLS.push(
   {
     name: 'change_directory',
     description:
-      'Change the active working directory (CWD) for the current session. Supports absolute paths, ~ (home directory), and paths relative to the current CWD. Updates subsequent file/terminal tool paths and the UI directory indicator.',
-    risk: 'safe',
+      'Change the active working directory (CWD) for the current session. Supports absolute paths, ~ (home directory), and paths relative to the current CWD. Updates subsequent file/terminal tool paths and the UI directory indicator. DANGEROUS.',
+    risk: 'dangerous',
     parameters: {
       type: 'object',
       properties: {
@@ -1803,8 +1803,14 @@ TOOLS.push(
       if (!rawInput) {
         return JSON.stringify({ ok: false, error: 'path is required' })
       }
-      const baseCwd = ctx?.cwd || (ctx?.db && sid != null ? ctx.db.getSessionCwd?.(sid) : null) || getWorkspaceRoot()
+      const baseCwd = ctx?.cwd || (typeof getWorkspaceRoot === 'function' ? getWorkspaceRoot(sid) : null) || process.cwd()
       const resolved = resolveRoamingPath(rawInput, baseCwd)
+      if (!resolved || typeof resolved !== 'string') {
+        return JSON.stringify({ ok: false, error: 'Invalid directory path' })
+      }
+      if (isDangerousRoot(resolved) || isSensitivePath(resolved)) {
+        return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${resolved}` })
+      }
       if (!fs.existsSync(resolved)) {
         return JSON.stringify({ ok: false, error: `Directory does not exist: ${resolved}` })
       }
@@ -1819,11 +1825,8 @@ TOOLS.push(
       }
       let canonical = resolved
       try { canonical = fs.realpathSync(resolved) } catch {}
-      if (isDangerousRoot(resolved) || isDangerousRoot(canonical)) {
-        return JSON.stringify({ ok: false, error: `Refusing to set dangerous system/root directory as CWD: ${canonical}` })
-      }
-      if (isSensitivePath(resolved) || isSensitivePath(canonical)) {
-        return JSON.stringify({ ok: false, error: `Refusing to set sensitive directory as CWD: ${canonical}` })
+      if (isDangerousRoot(canonical) || isSensitivePath(canonical)) {
+        return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${canonical}` })
       }
       if (ctx && typeof ctx === 'object') {
         ctx.cwd = canonical

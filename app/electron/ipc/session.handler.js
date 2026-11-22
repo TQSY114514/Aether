@@ -53,12 +53,11 @@ function registerSessionHandlers(ipcMain, db) {
       throw new Error('Cannot change working directory (/cd) while a shadow workspace run is active; wait for the current run to finish.')
     }
     const base = (typeof sandbox.getWorkspaceRoot === 'function' ? sandbox.getWorkspaceRoot(id) : null) || process.cwd()
-    const resPath = sandbox.resolveRoamingPath(cwd, base)
-    if (!resPath.ok) {
-      throw new Error(resPath.reason || 'Invalid path')
+    const resolved = sandbox.resolveRoamingPath(cwd, base)
+    if (!resolved || typeof resolved !== 'string') {
+      throw new Error('Invalid path')
     }
-    const resolved = resPath.resolved
-    if (sandbox.isDangerousRoot(resolved)) {
+    if (sandbox.isDangerousRoot(resolved) || sandbox.isSensitivePath(resolved)) {
       throw new Error(`Forbidden working directory: ${resolved}`)
     }
     let st
@@ -68,7 +67,7 @@ function registerSessionHandlers(ipcMain, db) {
     }
     let canonical = resolved
     try { canonical = fs.realpathSync(resolved) } catch {}
-    if (sandbox.isDangerousRoot(canonical)) {
+    if (sandbox.isDangerousRoot(canonical) || sandbox.isSensitivePath(canonical)) {
       throw new Error(`Forbidden working directory: ${canonical}`)
     }
     try {
