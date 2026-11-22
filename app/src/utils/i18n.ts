@@ -1493,7 +1493,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "zh-CN": {
     "common.browse": "浏览...",
@@ -2897,7 +2908,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "管理人设...",
     "persona.set_default": "设为新会话默认人设",
     "persona.default_badge": "默认",
-    "persona.delete_confirm": "确定删除人设「{0}」吗？"
+    "persona.delete_confirm": "确定删除人设「{0}」吗？",
+    "chat.review_file_count_one": "1 个文件",
+    "chat.review_file_count_many": "{0} 个文件",
+    "ref.prefix.at": "文件、目录与技能",
+    "ref.prefix.hash": "内置工具",
+    "ref.prefix.bang": "快捷指令",
+    "ref.type.dir": "目录",
+    "ref.type.file": "文件",
+    "ref.type.skill": "技能",
+    "ref.type.tool": "工具",
+    "ref.type.command": "指令",
+    "ref.hint": "↑↓ 切换 · Enter/Tab 补全"
   },
   "es": {
     "app.name": "Aether",
@@ -4117,7 +4139,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "ja": {
     "app.name": "Aether",
@@ -5337,7 +5370,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -6570,7 +6614,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "治人設...",
     "persona.set_default": "立為新談之常設",
     "persona.default_badge": "常設",
-    "persona.delete_confirm": "確定刪人設「{0}」乎？"
+    "persona.delete_confirm": "確定刪人設「{0}」乎？",
+    "chat.review_file_count_one": "一卷",
+    "chat.review_file_count_many": "{0} 卷",
+    "ref.prefix.at": "卷帙、目錄與方術",
+    "ref.prefix.hash": "內器",
+    "ref.prefix.bang": "捷令",
+    "ref.type.dir": "目錄",
+    "ref.type.file": "卷帙",
+    "ref.type.skill": "方術",
+    "ref.type.tool": "器",
+    "ref.type.command": "令",
+    "ref.hint": "↑↓ 擇選 · Enter/Tab 補全"
   },
   "fr": {
     "app.name": "Aether",
@@ -7790,7 +7845,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "de": {
     "app.name": "Aether",
@@ -9010,7 +9076,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "pt": {
     "app.name": "Aether",
@@ -10230,7 +10307,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "ru": {
     "app.name": "Aether",
@@ -11450,7 +11538,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -12683,7 +12782,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "管理人設...",
     "persona.set_default": "設為新對話預設人設",
     "persona.default_badge": "預設",
-    "persona.delete_confirm": "確定刪除人設「{0}」嗎？"
+    "persona.delete_confirm": "確定刪除人設「{0}」嗎？",
+    "chat.review_file_count_one": "1 個檔案",
+    "chat.review_file_count_many": "{0} 個檔案",
+    "ref.prefix.at": "檔案、目錄與技能",
+    "ref.prefix.hash": "內建工具",
+    "ref.prefix.bang": "快捷指令",
+    "ref.type.dir": "目錄",
+    "ref.type.file": "檔案",
+    "ref.type.skill": "技能",
+    "ref.type.tool": "工具",
+    "ref.type.command": "指令",
+    "ref.hint": "↑↓ 切換 · Enter/Tab 補全"
   },
   "ar": {
     "app.name": "Aether",
@@ -13903,7 +14013,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "uk": {
     "app.name": "Aether",
@@ -15123,7 +15244,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "ko": {
     "app.name": "Aether",
@@ -16343,7 +16475,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   },
   "hi": {
     "app.name": "Aether",
@@ -17563,7 +17706,18 @@ const translations: Record<string, Record<string, string>> = {
     "persona.manage": "Manage personas...",
     "persona.set_default": "Set as default for new chats",
     "persona.default_badge": "Default",
-    "persona.delete_confirm": "Delete persona '{0}'?"
+    "persona.delete_confirm": "Delete persona '{0}'?",
+    "chat.review_file_count_one": "1 file",
+    "chat.review_file_count_many": "{0} files",
+    "ref.prefix.at": "Files, Paths & Skills",
+    "ref.prefix.hash": "Tools",
+    "ref.prefix.bang": "Commands",
+    "ref.type.dir": "Dir",
+    "ref.type.file": "File",
+    "ref.type.skill": "Skill",
+    "ref.type.tool": "Tool",
+    "ref.type.command": "Command",
+    "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
   }
 }
 

@@ -116,11 +116,12 @@ export default function PersonaSelector({
               type="button"
               role="option"
               aria-selected={isSoulActive}
+              disabled={disabled}
               onClick={() => {
                 onSelect(-1)
                 setOpen(false)
               }}
-              className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] flex items-center justify-between cursor-pointer"
+              className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between cursor-pointer"
               style={isSoulActive ? { backgroundColor: 'var(--content-bg)' } : {}}
             >
               <div className="flex items-center gap-1.5 min-w-0">
@@ -138,11 +139,12 @@ export default function PersonaSelector({
             type="button"
             role="option"
             aria-selected={!isSoulActive && (!currentPersonaId || currentPersonaId === 0)}
+            disabled={disabled}
             onClick={() => {
               onSelect(0)
               setOpen(false)
             }}
-            className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] flex items-center justify-between cursor-pointer"
+            className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between cursor-pointer"
             style={!isSoulActive && (!currentPersonaId || currentPersonaId === 0) ? { backgroundColor: 'var(--content-bg)' } : {}}
           >
             <div className="flex items-center gap-1.5 min-w-0">
@@ -168,11 +170,12 @@ export default function PersonaSelector({
                 type="button"
                 role="option"
                 aria-selected={isSelected}
+                disabled={disabled}
                 onClick={() => {
                   onSelect(p.id)
                   setOpen(false)
                 }}
-                className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] flex items-center justify-between cursor-pointer"
+                className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between cursor-pointer"
                 style={isSelected ? { backgroundColor: 'var(--content-bg)' } : {}}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -199,7 +202,7 @@ export default function PersonaSelector({
                   }, 50)
                 }, 30)
               }}
-              className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] flex items-center gap-1.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 flex items-center gap-1.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               <SlidersHorizontal size={11} className="shrink-0" />
               <span className="truncate">{t('persona.manage')}</span>

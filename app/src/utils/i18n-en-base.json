@@ -1400,5 +1400,16 @@
   "persona.manage": "Manage personas...",
   "persona.set_default": "Set as default for new chats",
   "persona.default_badge": "Default",
-  "persona.delete_confirm": "Delete persona '{0}'?"
+  "persona.delete_confirm": "Delete persona '{0}'?",
+  "chat.review_file_count_one": "1 file",
+  "chat.review_file_count_many": "{0} files",
+  "ref.prefix.at": "Files, Paths & Skills",
+  "ref.prefix.hash": "Tools",
+  "ref.prefix.bang": "Commands",
+  "ref.type.dir": "Dir",
+  "ref.type.file": "File",
+  "ref.type.skill": "Skill",
+  "ref.type.tool": "Tool",
+  "ref.type.command": "Command",
+  "ref.hint": "↑↓ Navigate · Enter/Tab Complete"
 }

@@ -219,13 +219,13 @@ export default function ChatPage() {
             style={{
               borderColor: showReview ? 'var(--accent)' : 'var(--border)',
               backgroundColor: showReview ? 'var(--accent)' : 'var(--bg-secondary)',
-              color: showReview ? 'var(--accent-fg, #FFFFFF)' : 'var(--text-primary)',
+              color: showReview ? 'var(--accent-fg)' : 'var(--text-primary)',
             }}
             aria-label={t('chat.review_tooltip')}
             aria-expanded={showReview}
           >
             <FileDiff size={12} className="shrink-0" style={{ color: showReview ? 'currentColor' : 'var(--accent)' }} />
-            <span>{reviewSummary.fileCount} {reviewSummary.fileCount === 1 ? 'file' : 'files'}</span>
+            <span>{t(reviewSummary.fileCount === 1 ? 'chat.review_file_count_one' : 'chat.review_file_count_many', reviewSummary.fileCount)}</span>
             <span className="flex items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums ms-0.5">
               {reviewSummary.totalAdded > 0 && (
                 <span style={{ color: showReview ? 'currentColor' : 'var(--success)' }}>+{reviewSummary.totalAdded}</span>
@@ -264,7 +264,7 @@ export default function ChatPage() {
               ? {
                   backgroundColor: 'var(--accent)',
                   borderColor: 'var(--accent)',
-                  color: 'var(--accent-fg, #FFFFFF)',
+                  color: 'var(--accent-fg)',
                 }
               : {
                   backgroundColor: 'var(--content-bg)',

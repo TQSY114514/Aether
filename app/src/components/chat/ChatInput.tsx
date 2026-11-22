@@ -194,7 +194,7 @@ export default function ChatInput() {
   }, [currentSessionId, sessionConfigs, allModels])
 
   const currentPersonaId = currentSessionId
-    ? sessionConfigs[currentSessionId]?.personaId ?? defaultPersonaId
+    ? (sessionConfigs[currentSessionId]?.personaId ?? null)
     : defaultPersonaId
 
   const isBinaryReasoning = useMemo(() => {
