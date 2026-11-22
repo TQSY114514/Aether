@@ -110,6 +110,11 @@ const localBackend = {
       entry.exitCode = code
       entry.finishedAt = Date.now()
       if (signal) entry.stderrTail = capTail(entry.stderrTail, `[terminated by signal ${signal}]\n`)
+      // Free the child reference; execute() consumers hold the execId only.
+      entry.child = null
+    })
+
+    child.on('close', (code) => {
       if (!entry.killed && code !== 0) {
         try {
           const { extractCrashSignal } = require('../llm/processTap')
@@ -122,8 +127,6 @@ const localBackend = {
           })
         } catch {}
       }
-      // Free the child reference; execute() consumers hold the execId only.
-      entry.child = null
     })
 
     if (timeout > 0) {

@@ -492,8 +492,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Lint/test auto-repair: tracks how many repair rounds have been injected so
   // the model gets a chance to fix errors without looping forever.
   let repairRounds = 0
-  const shadowTouchedPaths = new Set()
-  let shadowBaselineHash = null
+  const shadowPathBaselines = new Map()
   let shadowRollbackTriggered = false
 
   // Supervised TDD loop attempts for auto_review mode (bounded to max 3 attempts)
@@ -1268,20 +1267,30 @@ Reply ONLY with JSON:
             const isWriteToolCall = WRITE_TOOLS.has(fn.name) || (fn.name === 'call_extended_tool' && WRITE_TOOLS.has(args?.tool_name))
             if (isWriteToolCall || tool.risk === 'dangerous') {
               try {
-                if (isWriteToolCall && wsRoot && sessionId) {
-                  const affected = checkpoints.extractAffectedPaths(fn.name, args, wsRoot)
-                  for (const ap of affected) shadowTouchedPaths.add(ap)
-                  if (!shadowBaselineHash && affected.length > 0 && featureFlags.isEnabled(db, 'agent.shadowWorkspace')) {
-                    const shadowGit = require('./shadowGit')
-                    const snap = shadowGit.commitCheckpoint(sessionId, wsRoot, { affectedPaths: affected, message: `turn_baseline_${Date.now()}` })
-                    if (snap && snap.ok && snap.commitHash) shadowBaselineHash = snap.commitHash
+                const activeRoot = getWorkspaceRoot(sessionId) || wsRoot
+                if (isWriteToolCall && activeRoot && sessionId && require('../featureFlags').isEnabled(db, 'agent.shadowWorkspace')) {
+                  const affected = checkpoints.extractAffectedPaths(fn.name, args, activeRoot)
+                  const unseen = affected.filter((ap) => !shadowPathBaselines.has(ap))
+                  if (unseen.length > 0) {
+                    const existingUnseen = unseen.filter((ap) => { try { return fs.existsSync(ap) } catch { return false } })
+                    const createdUnseen = unseen.filter((ap) => !existingUnseen.includes(ap))
+                    for (const ap of createdUnseen) shadowPathBaselines.set(ap, null)
+                    if (existingUnseen.length > 0) {
+                      const shadowGit = require('./shadowGit')
+                      const snap = shadowGit.commitCheckpoint(sessionId, activeRoot, { affectedPaths: existingUnseen, message: `turn_baseline_${Date.now()}` })
+                      if (snap && snap.ok && snap.commitHash) {
+                        for (const ap of existingUnseen) shadowPathBaselines.set(ap, snap.commitHash)
+                      }
+                    }
                   }
                 }
+              } catch {}
+              try {
                 entry.checkpointId = checkpoints.createCheckpoint({
                   sessionId,
                   messageId: messageId || tc.id,
                   turnId,
-                  workspaceRoot: wsRoot,
+                  workspaceRoot: getWorkspaceRoot(sessionId) || wsRoot,
                   toolName: fn.name,
                   args,
                 })
@@ -1489,7 +1498,7 @@ Reply ONLY with JSON:
           rawContent = `${rawContent}\n[recovery: ${rh.kind || rh.action || 'unknown'}${hintText}]`
         }
         // Middleware chain (redact, truncate) — never let it break the loop.
-        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args, isPoorMode }) } catch {}
+        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args, isPoorMode, db, workspaceRoot: wsRoot }) } catch {}
         // Enrich structured results with a summary line (OpenClaw-inspired).
         try { rawContent = enrichWithSummary(rawContent, (tc.function||{}).name) } catch {}
         // Collect evidence for verification (Codex-inspired).
@@ -1570,18 +1579,41 @@ Reply ONLY with JSON:
             }
           }
         } catch {}
-      } else if (!isTddAutoReview && !shadowRollbackTriggered && shadowBaselineHash && shadowTouchedPaths.size > 0) {
+      } else if (!isTddAutoReview && !shadowRollbackTriggered && shadowPathBaselines.size > 0 && require('../featureFlags').isEnabled(db, 'agent.shadowWorkspace')) {
         try {
           const touchedFiles = allExecuted.some(e => e.entry && lintTestRepair.shouldRunOnTool(e.entry.name) && !e.entry.error)
           if (touchedFiles) {
             const repair = await lintTestRepair.runLintAndRepair({ db, sessionId, round: repairRounds + 1, onStatus })
             if (repair.context) {
               shadowRollbackTriggered = true
+              const activeRoot = getWorkspaceRoot(sessionId) || wsRoot
               const shadowGit = require('./shadowGit')
-              const rb = shadowGit.rollbackCheckpoint(sessionId, wsRoot, shadowBaselineHash, [...shadowTouchedPaths])
-              if (rb && rb.ok) {
-                try { onStatus?.({ kind: 'harness_rollback', text: `🛡️ [Harness Circuit Breaker] 连续 ${repairRounds} 轮修复未通过，已自动回滚至修改前快照。` }) } catch {}
-                convo.push({ role: 'system', content: `[Harness Circuit Breaker] Consecutive repair attempts (${repairRounds}) failed to resolve lint/test errors. Changes to ${shadowTouchedPaths.size} file(s) were automatically rolled back to baseline (${shadowBaselineHash.slice(0, 8)}). Stop editing and summarize the root blocker for the user.` })
+              const byHash = new Map()
+              const createdFiles = []
+              for (const [ap, hash] of shadowPathBaselines.entries()) {
+                if (hash === null) { createdFiles.push(ap); continue }
+                if (!byHash.has(hash)) byHash.set(hash, [])
+                byHash.get(hash).push(ap)
+              }
+              let rolledBackCount = 0
+              for (const [hash, pathsForHash] of byHash.entries()) {
+                const rb = shadowGit.rollbackCheckpoint(sessionId, activeRoot, hash, pathsForHash)
+                if (rb && rb.ok) rolledBackCount += pathsForHash.length
+              }
+              const resolvedRoot = path.resolve(activeRoot)
+              for (const created of createdFiles) {
+                try {
+                  const abs = path.resolve(created)
+                  const rel = path.relative(resolvedRoot, abs)
+                  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(abs)) {
+                    fs.unlinkSync(abs)
+                    rolledBackCount++
+                  }
+                } catch {}
+              }
+              if (rolledBackCount > 0) {
+                try { onStatus?.({ kind: 'info', text: `[Harness Circuit Breaker] Rolled back ${rolledBackCount} file(s) after ${repairRounds} failed repair rounds.` }) } catch {}
+                convo.push({ role: 'system', content: `[Harness Circuit Breaker] Consecutive repair attempts (${repairRounds}) failed to resolve lint/test errors. Changes to ${rolledBackCount} file(s) were automatically rolled back to their pre-turn state. Stop editing and summarize the root blocker for the user.` })
               }
             }
           }

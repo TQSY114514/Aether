@@ -42,9 +42,42 @@ describe('Harness Phase 3 & 4: Process Tap & ShadowGit Hardening', () => {
     const okSig = extractCrashSignal({ command: 'echo ok', exitCode: 0, stdout: 'ok' })
     expect(okSig.ok).toBe(true)
     expect(formatCrashTapBanner(okSig)).toBe('')
+
+    const winTsSig = extractCrashSignal({
+      command: 'tsc',
+      exitCode: 2,
+      stdout: 'D:\\Aether\\app\\src\\a.ts:15:3 - error TS2322: Type mismatch',
+    })
+    expect(winTsSig.kind).toBe('typescript')
+    expect(winTsSig.location).toBe('D:\\Aether\\app\\src\\a.ts:15:3')
+
+    const rustSig = extractCrashSignal({
+      command: 'cargo check',
+      exitCode: 101,
+      stderr: 'error[E0308]: mismatched types\n  --> src/main.rs:12:5\n',
+    })
+    expect(rustSig.kind).toBe('rust')
+    expect(rustSig.location).toBe('src/main.rs:12:5')
   })
 
-  it('run_command prepends [Process Tap] banner and emits process_crash status on non-zero exit', async () => {
+  it('localBackend populates crashSignal on close after stderr finishes', async () => {
+    const { localBackend } = require('../electron/exec/localBackend')
+    const crashScript = path.join(tmpDir, 'lb_crash.js')
+    fs.writeFileSync(crashScript, 'process.stderr.write("TypeError: lb_boom\\n"); process.exit(1)\n', 'utf8')
+    const started = await localBackend.execute({ command: process.execPath, args: [crashScript], cwd: tmpDir })
+    expect(started.ok).toBe(true)
+    let st
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      st = await localBackend.status(started.execId)
+      if (st.state !== 'running' && st.crashSignal) break
+    }
+    expect(st.exitCode).toBe(1)
+    expect(st.crashSignal).toBeTruthy()
+    expect(st.crashSignal.primaryError).toContain('lb_boom')
+  })
+
+  it.skipIf(process.platform !== 'win32')('run_command prepends [Process Tap] banner and emits process_crash status on non-zero exit', async () => {
     const { getTool } = require('../electron/tools/registry')
     const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
     const sid = 'p3-runcmd-test'
@@ -66,7 +99,7 @@ describe('Harness Phase 3 & 4: Process Tap & ShadowGit Hardening', () => {
     }
   })
 
-  it('shadowGit.commitCheckpoint tolerates non-existent affectedPaths before write_file', () => {
+  it('shadowGit.commitCheckpoint tolerates untracked missing paths and records tracked deletions', () => {
     const shadowGit = require('../electron/llm/shadowGit')
     if (!shadowGit.isAvailable()) return
 
@@ -86,6 +119,16 @@ describe('Harness Phase 3 & 4: Process Tap & ShadowGit Hardening', () => {
     const rb = shadowGit.rollbackCheckpoint(999901, tmpDir, snap.commitHash, [existing])
     expect(rb.ok).toBe(true)
     expect(fs.readFileSync(existing, 'utf8')).toBe('v1\n')
+
+    // Delete tracked file, commit checkpoint, and verify diff reflects deletion
+    fs.unlinkSync(existing)
+    const snapDel = shadowGit.commitCheckpoint(999901, tmpDir, {
+      affectedPaths: [existing],
+      message: 'after_delete',
+    })
+    expect(snapDel.ok).toBe(true)
+    const diff = shadowGit.getDiff(999901, tmpDir, snap.commitHash, snapDel.commitHash)
+    expect(diff).toContain('deleted file mode')
 
     shadowGit.deleteShadowRepo(999901)
   }, 15000)

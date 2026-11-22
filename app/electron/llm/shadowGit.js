@@ -117,19 +117,31 @@ function commitCheckpoint(sessionId, workspaceRoot, opts = {}) {
   const msg = opts.message || `checkpoint_${Date.now()}`
 
   try {
-    const addArgs = ['--git-dir=' + repoDir, '--work-tree=' + workspaceRoot, 'add']
+    const addArgs = ['--git-dir=' + repoDir, '--work-tree=' + workspaceRoot, 'add', '-A']
     if (Array.isArray(opts.affectedPaths) && opts.affectedPaths.length > 0) {
       const relPaths = opts.affectedPaths
         .map((p) => {
           try {
             const abs = path.resolve(p)
-            if (!fs.existsSync(abs)) return null
-            return path.relative(workspaceRoot, abs).replace(/\\/g, '/')
+            const rel = path.relative(workspaceRoot, abs).replace(/\\/g, '/')
+            if (!rel || rel.startsWith('..')) return null
+            if (fs.existsSync(abs)) return rel
+            // Keep deleted files if they are already tracked in the shadow index
+            try {
+              execFileSync('git', ['--git-dir=' + repoDir, 'ls-files', '--error-unmatch', '--', rel], {
+                stdio: ['ignore', 'ignore', 'ignore'],
+                timeout: 2000,
+                windowsHide: true,
+              })
+              return rel
+            } catch {
+              return null
+            }
           } catch {
             return null
           }
         })
-        .filter((p) => p && !p.startsWith('..'))
+        .filter(Boolean)
 
       if (relPaths.length > 0) {
         addArgs.push('--', ...relPaths)

@@ -59,6 +59,21 @@ describe('Harness Phase 1 & 2: Semantic Radar & Fast Syntax Guard', () => {
     )
     expect(resJson).toContain('[Harness Syntax Guard] bad.json')
     expect(resJson).toContain('[SyntaxError]')
+
+    // JSONC tsconfig with comments & trailing comma passes; broken tsconfig fails
+    const validTsconfig = path.join(tmpDir, 'tsconfig.json')
+    const resValidTsconfig = await writeTool.run(
+      { path: validTsconfig, content: '{\n  // comment\n  "compilerOptions": { "strict": true, },\n}\n' },
+      { sessionId: sid, agentMode: 'act' }
+    )
+    expect(resValidTsconfig).not.toContain('[Harness Syntax Guard]')
+
+    const badTsconfig = path.join(tmpDir, 'tsconfig.bad.json')
+    const resBadTsconfig = await writeTool.run(
+      { path: badTsconfig, content: '{\n  // comment\n  "compilerOptions": }\n' },
+      { sessionId: sid, agentMode: 'act' }
+    )
+    expect(resBadTsconfig).toContain('[Harness Syntax Guard] tsconfig.bad.json')
   })
 
   it('lsp_diagnostics falls back to fast syntax check when LSP server is unavailable', async () => {

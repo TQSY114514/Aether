@@ -46,7 +46,7 @@ function extractCrashSignal({ command = '', exitCode = null, stdout = '', stderr
       primaryError = `${tsParen[4]}: ${tsParen[5]}`
       break
     }
-    const tsColon = line.match(/^([^\s:]+):(\d+):(\d+)\s*-\s*error\s+(TS\d+):\s*(.+)$/)
+    const tsColon = line.match(/^((?:[A-Za-z]:)?[^\s:]+):(\d+):(\d+)\s*-\s*error\s+(TS\d+):\s*(.+)$/)
     if (tsColon) {
       kind = 'typescript'
       location = `${tsColon[1]}:${tsColon[2]}:${tsColon[3]}`
@@ -80,11 +80,16 @@ function extractCrashSignal({ command = '', exitCode = null, stdout = '', stderr
       }
     }
 
-    // 5. Rust / Cargo error: error[E0308]: ...
+    // 5. Rust / Cargo error: error[E0308]: ... + --> src/main.rs:12:5
     const rustErr = line.match(/^error(?:\[(E\d+)\])?:\s*(.+)$/)
     if (rustErr) {
       kind = 'rust'
       primaryError = rustErr[1] ? `${rustErr[1]}: ${rustErr[2]}` : rustErr[2]
+      continue
+    }
+    const rustLoc = line.match(/^\s*-->\s+((?:[A-Za-z]:)?[^\s:]+:\d+:\d+)/)
+    if (rustLoc && !location) {
+      location = rustLoc[1]
       continue
     }
 
