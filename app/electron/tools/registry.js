@@ -106,9 +106,12 @@ function fastSyntaxCheck(filePath, content) {
       return runTsOrEsmCheck()
     }
 
+    // Note: .jsx and .tsx require JSX parsing not supported by Node's stripTypeScriptTypes;
+    // they rely on the workspace LSP diagnostics path when available.
     if (ext === '.js' || ext === '.cjs') {
-      const mod = require('module')
-      const wrapped = typeof mod.wrap === 'function' ? mod.wrap(text) : `(function (exports, require, module, __filename, __dirname) { ${text}\n})`
+      // Strip leading BOM / shebang line while preserving line numbers (keep trailing newline)
+      const body = text.replace(/^\uFEFF/, '').replace(/^#![^\r\n]*/, '')
+      const wrapped = `(function (exports, require, module, __filename, __dirname) { ${body}\n})`
       try {
         new (require('vm').Script)(wrapped, { filename: filePath })
         return ''
@@ -352,7 +355,7 @@ function runCommandStreaming(cmd, { cwd, timeoutMs, onChunk }) {
   const args = needsShell ? shellArgs : []
   return new Promise((resolve, reject) => {
     let stdout = '', stderr = '', timedOut = false
-    const child = spawn(command, args, { cwd, shell: needsShell, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
     child.stdout.on('data', (d) => { const s = d.toString(); stdout += s; try { onChunk?.(s) } catch {} })
     child.stderr.on('data', (d) => { const s = d.toString(); stderr += s; try { onChunk?.(s) } catch {} })
     const timer = setTimeout(() => {
@@ -532,7 +535,19 @@ const TOOLS = [
   { name: 'find_symbol', description: 'Find symbol definition (LSP-first, regex fallback).', risk: 'safe', parameters: { type: 'object', properties: { name: { type: 'string' }, cwd: { type: 'string' } }, required: ['name', 'cwd'] }, run: async (args, ctx) => {
     const name = String(args.name || ''); const cwd = String(args.cwd || '')
     if (!name) throw new Error('name is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
-    if (lspFullEnabled(ctx)) { try { const lsp = require('../context/lspClient'); const r = await lsp.searchWorkspace(cwd, name); if (r && r.length) return JSON.stringify(r) } catch {} }
+    if (lspFullEnabled(ctx)) {
+      try {
+        const lsp = require('../context/lspClient')
+        const inferLang = (dir) => {
+          if (fs.existsSync(path.join(dir, 'Cargo.toml'))) return 'rust'
+          if (fs.existsSync(path.join(dir, 'go.mod'))) return 'go'
+          if (fs.existsSync(path.join(dir, 'pyproject.toml')) || fs.existsSync(path.join(dir, 'requirements.txt'))) return 'python'
+          return 'javascript'
+        }
+        const r = await lsp.searchWorkspace(cwd, name, { language: inferLang(cwd) })
+        if (r && r.length) return JSON.stringify(r)
+      } catch {}
+    }
     const re = new RegExp(`\\b${name.replace(/[.*+?^${}()[\\]\\]/g, '\\$&')}\\b`)
     const files = await globFiles('**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
     const hits = []; outer: for (const f of files.slice(0, 2000)) {
@@ -763,7 +778,7 @@ const TOOLS = [
         }
         const shellExe = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
         const shellArgs = process.platform === 'win32' ? ['/c', cmd] : ['-c', cmd]
-        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand(shellExe, shellArgs, { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
+        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand(shellExe, shellArgs, { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: false }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
           .then(({ stdout, stderr, exitCode, timedOut }) => tapWrap(stdout, stderr, exitCode, timedOut))
       }
       return runInDocker(cmd, timeoutMs, ctx?.db).then((dockerOut) => {
@@ -1196,13 +1211,7 @@ const TOOLS = [
       for (const p of snapshot) {
         lines.push(`- **${p.providerName}** (ID: \`${p.providerId}\`, Kind: \`${p.endpointKind}\`, Stability: \`${p.stabilityHint}\`)\n  URL: \`${p.baseUrl}\``)
         if (p.models && p.models.length > 0) {
-          lines.push(`  Models: ${p.models.map(m => {
-            const caps = (m.capabilityHints || []).join(', ')
-            const arena = Array.isArray(m.arenaScores) && m.arenaScores.length > 0
-              ? ` | Arena: ${m.arenaScores.map(a => `${a.intent} ${a.score} (${a.winRate}%, n=${a.totalCount})`).join(', ')}`
-              : ''
-            return `\`${m.modelId}\` (${caps}${arena})`
-          }).join(', ')}`)
+          lines.push(`  Models: ${p.models.map(m => `\`${m.modelId}\` (${(m.capabilityHints || []).join(', ')})`).join(', ')}`)
         } else {
           lines.push('  Models: (none configured)')
         }

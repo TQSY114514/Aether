@@ -85,7 +85,7 @@ describe('Harness Phase 1 & 2: Semantic Radar & Fast Syntax Guard', () => {
 
     const cjsFile = path.join(tmpDir, 'guard.cjs')
     const resCjs = await writeTool.run(
-      { path: cjsFile, content: 'if (!process.env.ENABLED) return;\nmodule.exports = {}\n' },
+      { path: cjsFile, content: '#!/usr/bin/env node\nif (!process.env.ENABLED) return;\nmodule.exports = {}\n' },
       { sessionId: sid, agentMode: 'act', lspWaitMs: 50, lspDeadlineMs: 80 }
     )
     expect(resCjs).not.toContain('[Harness Syntax Guard]')

@@ -445,7 +445,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   let shadowWorktree = null
   let origRoot = null
   let shadowSuccess = false
-  const shadowEnabled = (normalizedAgentMode === 'auto_review' || agentMode === 'auto') && (() => {
+  const shadowConfigEnabled = (() => {
     try {
       if (db && require('../featureFlags').isEnabled(db, 'agent.shadowWorkspace') === true) return true
       const pc = require('../config/projectConfig').loadProjectConfig(getWorkspaceRoot(sessionId))
@@ -453,6 +453,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       return false
     } catch { return false }
   })()
+  const shadowEnabled = (normalizedAgentMode === 'auto_review' || agentMode === 'auto') && shadowConfigEnabled
 
   if (shadowEnabled && sessionId) {
     try {
@@ -1268,7 +1269,7 @@ Reply ONLY with JSON:
             if (isWriteToolCall || tool.risk === 'dangerous') {
               try {
                 const activeRoot = getWorkspaceRoot(sessionId) || wsRoot
-                if (isWriteToolCall && activeRoot && sessionId && require('../featureFlags').isEnabled(db, 'agent.shadowWorkspace')) {
+                if (isWriteToolCall && activeRoot && sessionId && shadowConfigEnabled) {
                   const affected = checkpoints.extractAffectedPaths(fn.name, args, activeRoot)
                   const unseen = affected.filter((ap) => !shadowPathBaselines.has(ap))
                   if (unseen.length > 0) {
@@ -1579,7 +1580,7 @@ Reply ONLY with JSON:
             }
           }
         } catch {}
-      } else if (!isTddAutoReview && !shadowRollbackTriggered && shadowPathBaselines.size > 0 && require('../featureFlags').isEnabled(db, 'agent.shadowWorkspace')) {
+      } else if (!isTddAutoReview && !shadowRollbackTriggered && shadowPathBaselines.size > 0 && shadowConfigEnabled) {
         try {
           const touchedFiles = allExecuted.some(e => e.entry && lintTestRepair.shouldRunOnTool(e.entry.name) && !e.entry.error)
           if (touchedFiles) {
