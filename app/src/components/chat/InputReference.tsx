@@ -89,9 +89,9 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
       return
     }
 
-    // Find the last @ / # / ! before cursor (allows spaces/C: paths only up to whitespace)
+    // Find the last @ / # / ! before cursor (supports @"quoted path with spaces" or unquoted token)
     const before = value.slice(0, cursorPos)
-    const match = before.match(/([@#!])([^\s]*)$/)
+    const match = before.match(/([@#!])(?:"([^"\r\n]*)|([^\s]*))$/)
     if (!match) {
       setSuggestions([])
       setPrefix(null)
@@ -99,7 +99,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
     }
 
     const p = match[1]
-    const rawQuery = match[2]
+    const rawQuery = match[2] !== undefined ? match[2] : (match[3] || '')
     const q = rawQuery.toLowerCase()
     setPrefix(p)
     setQuery(rawQuery)
@@ -120,12 +120,17 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
                 .slice(0, 10)
               const rawCanon = res.dir ? res.dir.replace(/\\/g, '/') : ''
               const canonBase = rawCanon ? (rawCanon.endsWith('/') ? rawCanon : rawCanon + '/') : parsed.displayBase
-              items = filtered.map((e) => ({
-                text: `${parsed.displayBase}${e.name}${e.isDir ? parsed.sep : ''}`,
-                replacement: `${canonBase}${e.name}${e.isDir ? '/' : ''}`,
-                desc: e.isDir ? t('ref.type.dir') : t('ref.type.file'),
-                type: e.isDir ? ('dir' as const) : ('file' as const),
-              }))
+              items = filtered.map((e) => {
+                const full = `${canonBase}${e.name}${e.isDir ? '/' : ''}`
+                const hasSpace = /\s/.test(full)
+                const replacement = hasSpace ? (e.isDir ? `"${full}` : `"${full}"`) : full
+                return {
+                  text: `${parsed.displayBase}${e.name}${e.isDir ? parsed.sep : ''}`,
+                  replacement,
+                  desc: e.isDir ? t('ref.type.dir') : t('ref.type.file'),
+                  type: e.isDir ? ('dir' as const) : ('file' as const),
+                }
+              })
             }
           } catch {}
         } else {
@@ -136,11 +141,15 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
             if (api?.search?.files) {
               const files = await api.search.files(q, activeCwd)
               if (Array.isArray(files)) {
-                fileItems = files.slice(0, 6).map((f: any) => ({
-                  text: (f.relPath || f.name || '').replace(/\\/g, '/'),
-                  desc: f.size ? `${Math.ceil(f.size / 1024)}KB` : t('ref.type.file'),
-                  type: 'file' as const,
-                }))
+                fileItems = files.slice(0, 6).map((f: any) => {
+                  const text = (f.relPath || f.name || '').replace(/\\/g, '/')
+                  return {
+                    text,
+                    replacement: /\s/.test(text) ? `"${text}"` : text,
+                    desc: f.size ? `${Math.ceil(f.size / 1024)}KB` : t('ref.type.file'),
+                    type: 'file' as const,
+                  }
+                })
               }
             }
           } catch {}

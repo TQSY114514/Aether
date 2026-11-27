@@ -20,9 +20,26 @@ describe('sessionReview utils', () => {
   })
 
   it('normalizes path keys uniformly', () => {
-    const p1 = normalizePathKey('src\\utils\\test.ts')
-    const p2 = normalizePathKey('src/utils/test.ts')
-    expect(p1.toLowerCase()).toBe(p2.toLowerCase())
+    expect(normalizePathKey('src\\utils\\test.ts')).toBe(normalizePathKey('src/utils/test.ts'))
+    const isCaseInsensitive = typeof navigator !== 'undefined' && /win|mac/i.test(navigator.platform || navigator.userAgent)
+    if (isCaseInsensitive) {
+      expect(normalizePathKey('SRC\\Index.ts')).toBe('src/index.ts')
+    } else {
+      expect(normalizePathKey('SRC/Index.ts')).toBe('SRC/Index.ts')
+    }
+  })
+
+  it('tracks delete then recreate status transitions cleanly', () => {
+    const messages: Message[] = [
+      { id: 1, role: 'assistant', content: 'Delete' } as any,
+      { id: 2, role: 'assistant', content: 'Recreate' } as any,
+    ]
+    const summary = aggregateSessionFileChanges(messages, {
+      1: { fileCount: 1, totalAdded: 0, totalRemoved: 4, files: [{ path: 'src/a.ts', added: 0, removed: 4, status: 'deleted' }] },
+      2: { fileCount: 1, totalAdded: 2, totalRemoved: 0, files: [{ path: 'src/a.ts', added: 2, removed: 0, status: 'created' }] },
+    })
+    expect(summary.fileCount).toBe(1)
+    expect(summary.files[0]?.status).toBe('created')
   })
 
   it('aggregates file changes across multiple turns', () => {

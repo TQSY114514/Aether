@@ -166,8 +166,8 @@ export default function SessionReviewDrawer({
     let ok = false
     try {
       if (window.electronAPI?.system?.clipboardWrite) {
-        await window.electronAPI.system.clipboardWrite(path)
-        ok = true
+        const res = await window.electronAPI.system.clipboardWrite(path)
+        ok = Boolean(res?.ok)
       } else if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(path)
         ok = true
@@ -449,65 +449,58 @@ export default function SessionReviewDrawer({
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
               >
                 <div
-                  onClick={() => toggleFile(file.path)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.target !== e.currentTarget) return
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      toggleFile(file.path)
-                    }
-                  }}
-                  aria-expanded={expanded}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer group"
+                  className="w-full flex items-center gap-2 px-2.5 py-2 hover:bg-[var(--bg-secondary)] transition-colors group"
                 >
-                  {expanded ? (
-                    <ChevronDown size={13} className="shrink-0 text-[var(--text-muted)]" />
-                  ) : (
-                    <ChevronRight size={13} className="shrink-0 text-[var(--text-muted)]" />
-                  )}
-                  <span
-                    className="font-mono text-[10px] font-bold w-4 h-4 rounded-[4px] flex items-center justify-center shrink-0 border"
-                    style={{
-                      borderColor: 'var(--border)',
-                      backgroundColor: 'var(--bg-secondary)',
-                      color: badge.color,
-                    }}
+                  <button
+                    type="button"
+                    onClick={() => toggleFile(file.path)}
+                    aria-expanded={expanded}
+                    className="flex-1 min-w-0 flex items-center gap-2 text-left rounded-[4px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
                   >
-                    {badge.label}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-mono text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                        {fileName}
-                      </span>
-                      {file.turnsCount > 1 && (
-                        <span
-                          className="font-mono text-[9.5px] px-1 rounded-[4px] shrink-0"
-                          style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}
-                        >
-                          {t('chat.review_turns_touched', file.turnsCount)}
+                    {expanded ? (
+                      <ChevronDown size={13} className="shrink-0 text-[var(--text-muted)]" />
+                    ) : (
+                      <ChevronRight size={13} className="shrink-0 text-[var(--text-muted)]" />
+                    )}
+                    <span
+                      className="font-mono text-[10px] font-bold w-4 h-4 rounded-[4px] flex items-center justify-center shrink-0 border"
+                      style={{
+                        borderColor: 'var(--border)',
+                        backgroundColor: 'var(--bg-secondary)',
+                        color: badge.color,
+                      }}
+                    >
+                      {badge.label}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                          {fileName}
                         </span>
+                        {file.turnsCount > 1 && (
+                          <span
+                            className="font-mono text-[9.5px] px-1 rounded-[4px] shrink-0"
+                            style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}
+                          >
+                            {t('chat.review_turns_touched', file.turnsCount)}
+                          </span>
+                        )}
+                      </div>
+                      {dir && (
+                        <div className="font-mono text-[10px] truncate" style={{ color: 'var(--text-muted)' }} title={file.path}>
+                          {dir}
+                        </div>
                       )}
                     </div>
-                    {dir && (
-                      <div className="font-mono text-[10px] truncate" style={{ color: 'var(--text-muted)' }} title={file.path}>
-                        {dir}
-                      </div>
-                    )}
-                  </div>
+                  </button>
 
                   {/* Copy Path Quick Action */}
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleCopyPath(file.path)
-                    }}
+                    onClick={() => handleCopyPath(file.path)}
                     title={copiedPath === file.path ? t('chat.review_path_copied') : t('chat.review_copy_path')}
                     aria-label={copiedPath === file.path ? t('chat.review_path_copied') : t('chat.review_copy_path')}
-                    className="p-1 rounded-[4px] hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 cursor-pointer shrink-0"
+                    className="p-1 rounded-[4px] hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 cursor-pointer shrink-0"
                   >
                     {copiedPath === file.path ? (
                       <Check size={11} className="text-[var(--success)]" />

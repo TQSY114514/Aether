@@ -60,7 +60,8 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
       // Migrate legacy 'off' → thinkingEnabled=false, effortLevel='medium'
       const defaultEffort = (rawEffort === "off" ? "medium" : rawEffort) as "low" | "medium" | "high"
       const defaultModelId = parseInt(s.defaultModelId ?? "0", 10) || null
-      const defaultPersonaId = parseInt(s.defaultPersonaId ?? "0", 10) || null
+      const parsedPersonaId = parseInt(s.defaultPersonaId ?? "", 10)
+      const defaultPersonaId = Number.isFinite(parsedPersonaId) ? parsedPersonaId : null
       const maxTokens = parseInt(s.maxTokens ?? "0", 10)
       const temperature = parseFloat(s.temperature ?? "0")
       const topP = parseFloat(s.topP ?? "0")

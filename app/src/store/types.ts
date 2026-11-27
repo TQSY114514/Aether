@@ -191,7 +191,7 @@ export interface AppState {
   messages: Message[]
   loadSessions: () => Promise<void>
   createSession: (customCwd?: string) => Promise<number | null>
-  setSessionCwd: (cwd: string) => Promise<void>
+  setSessionCwd: (cwd: string) => Promise<string | void>
   selectSession: (id: number) => Promise<void>
   deleteSession: (id: number) => Promise<void>
   forkSession: (messageId?: number) => Promise<number | null>

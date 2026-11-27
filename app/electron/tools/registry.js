@@ -1829,15 +1829,25 @@ TOOLS.push(
       if (isForbiddenCwd(canonical)) {
         return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${canonical}` })
       }
+      if (ctx?.db && sid != null) {
+        const prevCfg = ctx.db.getSessionConfig?.(sid)
+        const prevCwd = getExplicitSessionCwd(ctx.db, sid)
+        try {
+          if (typeof ctx.db.setSessionCwd === 'function') {
+            ctx.db.setSessionCwd(sid, canonical)
+          }
+        } catch (err) {
+          return JSON.stringify({ ok: false, error: `Failed to persist session CWD: ${err?.message || String(err)}` })
+        }
+        try {
+          ctx.db.setSessionConfig?.(sid, { ...(prevCfg || {}), workspace: canonical })
+        } catch (err) {
+          try { if (typeof ctx.db.setSessionCwd === 'function') ctx.db.setSessionCwd(sid, prevCwd ?? null) } catch {}
+          return JSON.stringify({ ok: false, error: `Failed to persist session config: ${err?.message || String(err)}` })
+        }
+      }
       if (ctx && typeof ctx === 'object') {
         ctx.cwd = canonical
-      }
-      if (ctx?.db && sid != null) {
-        try { ctx.db.setSessionCwd?.(sid, canonical) } catch {}
-        try {
-          const prevCfg = ctx.db.getSessionConfig?.(sid) || {}
-          ctx.db.setSessionConfig?.(sid, { ...prevCfg, workspace: canonical })
-        } catch {}
       }
       if (sid != null && _hasSessionWorkspace(sid)) {
         try { setWorkspaceRootForSession(sid, canonical) } catch {}
