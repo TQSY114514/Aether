@@ -17,6 +17,7 @@ const soulManager = require('../llm/soulManager')
 const memoryProjector = require('../llm/memoryProjector')
 const { isAuthorizedWorkspace, isWorkspaceTrusted } = require('../tools/sandbox')
 const path = require('path')
+const fs = require('fs')
 const skills = require('../llm/skills')
 const { computeCost } = require('../utils/cost')
 const modelAdvisor = require('../llm/modelAdvisor')
@@ -35,6 +36,7 @@ const _lastOverflowCompactAt = new Map()  // sessionId -> ts，进程级即可
 
 const DEFAULT_CTX_BUDGET = 32000
 const DEFAULT_FALLBACK_TIMEOUT_MS = 30000
+const _memoryFileMtimeCache = new Map() // wsRoot -> last seen MEMORY.md mtimeMs
 
 // Shared with the token estimator used elsewhere (same 6-range CJK coverage).
 const estimateTokens = estimateTextTokens
@@ -198,7 +200,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           name: first.name || 'image.png',
           mime: first.mime || 'image/png',
           kind: first.kind || 'image',
-          preview: first.dataUrl || first.preview || '',
+          ...(all.length === 0 ? { preview: first.dataUrl || first.preview || '' } : {}),
           all,
         })
       }
@@ -227,7 +229,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Model suggestion (auto-routing rationale for the renderer).
     let modelSuggestion = null
     try {
-      const allModelsForSuggest = db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
+      const allModelsForSuggest = typeof db.getAllModelsMetadata === 'function'
+        ? db.getAllModelsMetadata()
+        : db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
       // Check project-level .aether/config.json routingRules override first
       let matchedRule = null
       try {
@@ -256,8 +260,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
                   const idx = spec.indexOf('/')
                   const pname = spec.slice(0, idx).toLowerCase()
                   const mname = spec.slice(idx + 1)
-                  const p = db.getProvider(m.provider_id)
-                  if (p && String(p.name || '').toLowerCase() === pname && m.model_name === mname) return true
+                  const pName = m.provider_name || db.getProvider(m.provider_id)?.name
+                  if (pName && String(pName).toLowerCase() === pname && m.model_name === mname) return true
                 }
                 return m.model_name === spec
               })
@@ -313,8 +317,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
       }
     }
 
-    // Get conversation history
-    const msgs = db.getMessages(sessionId)
+    // Get conversation history (lightweight columns only; selectively load recent user image attachments)
+    const msgs = typeof db.getMessagesForContext === 'function'
+      ? db.getMessagesForContext(sessionId)
+      : db.getMessages(sessionId)
+    const recentUserImages = typeof db.getRecentUserImageAttachments === 'function'
+      ? db.getRecentUserImageAttachments(sessionId)
+      : null
     // Fetch the current session once (a direct indexed lookup, far cheaper than
     // the getSessions() full-table-scan-with-subquery that ran here twice before).
     // Used for both the placeholder-title check and the persona_id fallback below.
@@ -339,22 +348,38 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // 用 AI 精炼覆盖。这样首轮中止/失败后, 只要标题还是截断形态,
     // 下一次成功回合仍有机会升级为 AI 摘要——不再受 msgs.length===1 单窗口限制。
     const needsAiSummary = shouldTryAiSummary({ autoTitleOn, sessionTitle: session0 && session0.title, content })
-    const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
-    // Attach images to the latest user message as OpenAI-compatible multimodal content.
-    if (attachments.length > 0) {
-      const lastUserIdx = apiMsgs.map(m => m.role).lastIndexOf('user')
-      if (lastUserIdx >= 0) {
-        const parts = []
-        const text = String(apiMsgs[lastUserIdx].content || '')
-        // Some providers reject an empty-string text part, so only include it when non-empty.
-        if (text) parts.push({ type: 'text', text })
-        for (const a of attachments) {
-          if (a.mime && a.mime.startsWith('image/')) {
-            parts.push({ type: 'image_url', image_url: { url: a.dataUrl } })
+    const buildImageMessageParts = (rawText, imageUrls) => {
+      const parts = []
+      const text = String(rawText || '')
+      // Some providers reject an empty-string text part, so only include it when non-empty.
+      if (text) parts.push({ type: 'text', text })
+      for (const url of imageUrls) {
+        if (url) parts.push({ type: 'image_url', image_url: { url } })
+      }
+      return parts
+    }
+    const nonSystemMsgs = msgs.filter(m => m.role !== 'system')
+    const lastUserIdx = nonSystemMsgs.map(m => m.role).lastIndexOf('user')
+    const apiMsgs = nonSystemMsgs.map((m, idx) => {
+      if (m.role === 'user') {
+        const isCurrentWithLiveAttachments = idx === lastUserIdx && attachments.length > 0
+        if (!isCurrentWithLiveAttachments) {
+          const priorUrls = recentUserImages && typeof recentUserImages.get === 'function' && m.id != null
+            ? recentUserImages.get(m.id)
+            : null
+          if (Array.isArray(priorUrls) && priorUrls.length > 0) {
+            const parts = buildImageMessageParts(m.content, priorUrls)
+            if (parts.length > 0) return { role: m.role, content: parts }
           }
         }
-        if (parts.length > 0) apiMsgs[lastUserIdx].content = parts
       }
+      return { role: m.role, content: m.content }
+    })
+    // Attach images to the latest user message as OpenAI-compatible multimodal content.
+    if (attachments.length > 0 && lastUserIdx >= 0) {
+      const urls = attachments.filter(a => a?.mime && a.mime.startsWith('image/')).map(a => a.dataUrl)
+      const parts = buildImageMessageParts(apiMsgs[lastUserIdx].content, urls)
+      if (parts.length > 0) apiMsgs[lastUserIdx].content = parts
     }
     // Persona & SOUL.md injection:
     // - personaId > 0: explicit SQLite persona
@@ -484,11 +509,17 @@ ipcMain.handle('chat:complete', handleChatComplete)
     const isMemoryTrusted = isMemoryAuthorized && isWorkspaceTrusted(db, wsRoot, sessionId)
     if (autoMemoryOn && isMemoryAuthorized && isMemoryTrusted) {
       try {
-        const prev = memoryProjector.getLastProjectedContent?.(wsRoot)
-        memoryProjector.syncMemoryFileToDb(db, wsRoot, {
-          deleteMissing: false,
-          baselineContent: prev || null,
-        })
+        const memFile = path.join(wsRoot, 'MEMORY.md')
+        const st = await fs.promises.stat(memFile).catch(() => null)
+        const mtimeMs = st && st.isFile() ? st.mtimeMs : null
+        if (mtimeMs != null && _memoryFileMtimeCache.get(wsRoot) !== mtimeMs) {
+          const prev = memoryProjector.getLastProjectedContent?.(wsRoot)
+          memoryProjector.syncMemoryFileToDb(db, wsRoot, {
+            deleteMissing: false,
+            baselineContent: prev || null,
+          })
+          _memoryFileMtimeCache.set(wsRoot, mtimeMs)
+        }
       } catch {}
     }
     const recallWs = isMemoryAuthorized ? wsRoot : null
@@ -505,33 +536,28 @@ ipcMain.handle('chat:complete', handleChatComplete)
     }
     let memBlock = memDetails.text || memDetails.contextBlock || ''
     let memHits = memDetails.hits || []
-    if (!memBlock && autoMemoryOn && provider && model) {
-      // LLM second-pass recall (P1-5): keyword+graph recall found nothing —
-      // ask the model to pick relevant memories from the recent pool. Gated
-      // by the auto-memory setting; one cheap completion, never throws.
-      try {
-        memBlock = (await autoMemory.recall({ db, provider, model, userMessage: content, signal: controller?.signal, workspace: recallWs })) || ''
-      } catch {}
-    }
-    if (memBlock) postDynamicSystemMsgs.push({ role: 'system', content: memBlock })
+    if (memBlock) postDynamicSystemMsgs.push({ role: 'system', content: memBlock, cacheHint: 'dynamic' })
 
-    // Inject current date/time so the model knows "today". Kept at the tail of
-    // the leading system block (after static prompts) so KV cache stays warm.
+    // Inject current date so the model knows "today" without minute-by-minute
+    // timestamp ticks busting the provider KV/Prompt Cache across turns.
     try {
       const _now = new Date()
       const _pad = (n) => String(n).padStart(2, '0')
-      const _dateStr = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())} ${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`
+      const _dateStr = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())}`
       const _tzOff = -_now.getTimezoneOffset() / 60
       const _tzStr = `UTC${_tzOff >= 0 ? '+' : ''}${_tzOff}`
       const _weekday = ['日','一','二','三','四','五','六'][_now.getDay()]
-      postDynamicSystemMsgs.push({ role: 'system', content: `当前时间：${_dateStr} (${_tzStr}, 星期${_weekday})` })
+      postDynamicSystemMsgs.push({ role: 'system', content: `当前时间：${_dateStr} (${_tzStr}, 星期${_weekday})`, cacheHint: 'dynamic' })
     } catch {}
 
     insertSystemMessages(compacted, postStaticSystemMsgs, postDynamicSystemMsgs)
 
-    // Proactive habit suggestions (Hermes-style): fire-and-forget match.
+    // Proactive habit suggestions (Hermes-style): deferred fire-and-forget match so
+    // it never competes with main stream startup on the send hot path.
     if (autoMemoryOn) {
-      try { habitLearner.proactiveSuggest({ db, provider, model, userMessage: content, signal: controller?.signal, onSuggest: (h) => { try { getWebContents()?.send('chat:habit-suggestion', h) } catch {} } }) } catch {}
+      setImmediate(() => {
+        try { habitLearner.proactiveSuggest({ db, provider, model, userMessage: content, onSuggest: (h) => { try { getWebContents()?.send('chat:habit-suggestion', h) } catch {} } }) } catch {}
+      })
     }
 
     const timeoutMs = parseInt(_s['fallback_timeout_ms'] ?? String(DEFAULT_FALLBACK_TIMEOUT_MS), 10)
@@ -580,8 +606,18 @@ ipcMain.handle('chat:complete', handleChatComplete)
       if (extraSystemMsgs.length > 0) {
         let dynStart = 0
         while (dynStart < toolMessages.length && toolMessages[dynStart]?.role === 'system') {
-          const c = String(toolMessages[dynStart].content || '')
-          if (c.startsWith('当前时间：') || c.includes('Relevant memories') || c.startsWith('[Memory')) break
+          const msgObj = toolMessages[dynStart]
+          const c = String(msgObj.content || '')
+          if (
+            msgObj.cacheHint === 'dynamic' ||
+            c.startsWith('当前时间：') ||
+            c.includes('Relevant memories') ||
+            c.startsWith('[Memory') ||
+            c.startsWith('Consolidated memory digest:') ||
+            c.startsWith('Project knowledge (') ||
+            c.startsWith('<untrusted_memory>') ||
+            c.startsWith('<relevant_memories>')
+          ) break
           dynStart++
         }
         toolMessages.splice(dynStart, 0, ...extraSystemMsgs)

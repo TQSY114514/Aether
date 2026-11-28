@@ -16,6 +16,7 @@ import {
   Rocket,
 } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
+import AboutMascotCard from '@/components/settings/AboutMascotCard'
 
 export function UpdateCard() {
   const { toast } = useUI()
@@ -417,6 +418,9 @@ export default function GeneralDomain() {
           </label>
         </div>
       </div>
+
+      {/* About & Opt-In Mascot Companion */}
+      <AboutMascotCard />
     </div>
   )
 }

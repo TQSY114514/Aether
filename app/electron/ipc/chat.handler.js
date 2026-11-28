@@ -21,6 +21,7 @@ const pendingInjections = new Map() // sessionId -> string[] of pending injectio
 // Per-session message tracking for abortControllers cleanup on session delete.
 let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
 const sideAbortControllers = new Map() // sessionId -> AbortController
+const predictAbortControllers = new Map() // sessionId -> AbortController
 const activeCompleteControllers = new Set() // active synchronous chat:complete AbortControllers
 function registerSessionMessages(sessionId, messageIds) {
   if (!sessionMessagesMap.has(sessionId)) sessionMessagesMap.set(sessionId, new Set())
@@ -39,6 +40,10 @@ function cleanupSessionControllers(sessionId) {
   if (sideAbortControllers.has(sessionId)) {
     try { sideAbortControllers.get(sessionId).abort() } catch {}
     sideAbortControllers.delete(sessionId)
+  }
+  if (predictAbortControllers.has(sessionId)) {
+    try { predictAbortControllers.get(sessionId).abort() } catch {}
+    predictAbortControllers.delete(sessionId)
   }
 }
 
@@ -214,10 +219,12 @@ The user is asking a quick side question about the ongoing conversation.
     try {
       const session = db.getSession(sessionId)
       const currentModelId = session?.config ? JSON.parse(session.config)?.modelId : null
-      const allModels = db.getAllModels().filter(m => {
-        const p = db.getProvider(m.provider_id)
-        return p && p.enabled
-      })
+      const allModels = typeof db.getAllModelsMetadata === 'function'
+        ? db.getAllModelsMetadata()
+        : db.getAllModels().filter(m => {
+            const p = db.getProvider(m.provider_id)
+            return p && p.enabled
+          })
       const intent = db.classifyIntent(userMessage)
       const scores = db.getModelScores()
       const eloData = modelAdvisor.buildEloData(scores, intent)
@@ -240,10 +247,12 @@ The user is asking a quick side question about the ongoing conversation.
   // Arena ELO + price + latency (Task 3.3).
   ipcMain.handle('model:route-tier', (_e, { taskType, userMessage }) => {
     try {
-      const allModels = db.getAllModels().filter(m => {
-        const p = db.getProvider(m.provider_id)
-        return p && p.enabled
-      })
+      const allModels = typeof db.getAllModelsMetadata === 'function'
+        ? db.getAllModelsMetadata()
+        : db.getAllModels().filter(m => {
+            const p = db.getProvider(m.provider_id)
+            return p && p.enabled
+          })
       const tier = modelRouter.routeTask(taskType, userMessage || '', 0)
       const autoMode = db.getSetting('modelAutoRoute') === '1'
       const priority = db.getSetting('modelRoutingPriority') || 'quality'
@@ -568,6 +577,96 @@ The user is asking a quick side question about the ongoing conversation.
     } catch (e) {
       log.warn('chat:handoff-commit failed:', e.message || e)
       return { ok: false, error: e.message || String(e) }
+    }
+  })
+
+  // ─── Stage 2 Idle Next-Prompt Prediction IPC ────────────────────────────
+  ipcMain.handle('chat:predict-next', async (_e, arg1, arg2) => {
+    try {
+      const featureFlags = require('../featureFlags')
+      if (!featureFlags.isEnabled(db, 'composer.nextPromptPrediction')) {
+        return { suggestion: '' }
+      }
+      const payload = (arg1 && typeof arg1 === 'object') ? arg1 : { sessionId: arg1, modelId: arg2 }
+      const rawSid = payload.sessionId
+      if (rawSid === undefined || rawSid === null || rawSid === '') {
+        return { suggestion: '' }
+      }
+      const sid = Number(rawSid) || rawSid
+      const msgs = (typeof db?.getMessagesForContext === 'function'
+        ? db.getMessagesForContext(sid)
+        : db?.getMessages?.(sid)) || []
+      const recent = msgs
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
+        .slice(-6)
+      if (recent.length === 0) return { suggestion: '' }
+
+      const session = db?.getSession?.(sid) || null
+      let targetModelId = payload.modelId
+      if (!targetModelId && session && session.config) {
+        try { targetModelId = JSON.parse(session.config)?.modelId } catch {}
+      }
+      let model = targetModelId ? db?.getModel?.(targetModelId) : null
+      if (!model && typeof db?.getPrimaryModel === 'function') {
+        const primary = db.getPrimaryModel()
+        if (primary) model = db?.getModel?.(primary.id) || primary
+      }
+      if (!model && typeof db?.getAllModelsMetadata === 'function') {
+        const meta = db.getAllModelsMetadata() || []
+        if (meta[0]) model = db?.getModel?.(meta[0].id) || meta[0]
+      }
+      if (!model && typeof db?.getAllModels === 'function') {
+        model = (db.getAllModels() || [])[0] || null
+      }
+      if (!model || !model.provider_id) return { suggestion: '' }
+      const provider = db?.getProvider?.(model.provider_id)
+      if (!provider) return { suggestion: '' }
+
+      const prevCtrl = predictAbortControllers.get(sid)
+      if (prevCtrl) {
+        try { prevCtrl.abort() } catch {}
+      }
+      const ctrl = new AbortController()
+      predictAbortControllers.set(sid, ctrl)
+      const timer = setTimeout(() => {
+        try { ctrl.abort() } catch {}
+      }, 4000)
+      if (typeof timer.unref === 'function') timer.unref()
+
+      try {
+        const transcript = recent
+          .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 500)}`)
+          .join('\n')
+        const { completeChat } = require('../llm/providerAdapter')
+        const raw = await completeChat({
+          provider,
+          model,
+          signal: ctrl.signal,
+          messages: [
+            {
+              role: 'system',
+              content: 'Predict the user\'s most likely short next prompt based on the conversation. Output ONLY one concise single-line prompt in the user\'s language, with no quotes, markdown, or explanation. Output NONE if nothing clear follows.',
+            },
+            { role: 'user', content: transcript },
+          ],
+          options: { max_tokens: 48, temperature: 0.2 },
+        })
+        if (ctrl.signal.aborted) return { suggestion: '' }
+        const firstLine = String(raw || '')
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .find(Boolean) || ''
+        const cleaned = firstLine.replace(/^["'`]+|["'`]+$/g, '').trim()
+        if (!cleaned || /^none$/i.test(cleaned)) return { suggestion: '' }
+        return { suggestion: cleaned.slice(0, 160).trim() }
+      } finally {
+        clearTimeout(timer)
+        if (predictAbortControllers.get(sid) === ctrl) {
+          predictAbortControllers.delete(sid)
+        }
+      }
+    } catch {
+      return { suggestion: '' }
     }
   })
 

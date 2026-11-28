@@ -257,9 +257,13 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
     if (!targetSessionId || !modelId) {
       log.warn("sendMessage: no session or model configured")
+      const errMsg = !targetSessionId
+        ? t('chat.error.no_session', '请先新建或选择一个会话')
+        : t('chat.error.no_model', '未配置可用模型，请先在「设置 - 模型与路由」中添加服务商或模型')
       if (overrides?.throwOnError) {
         throw new Error(!targetSessionId ? "No active session selected" : "No model configured")
       }
+      get().triggerToast(errMsg, 'warning')
       return
     }
 
@@ -273,7 +277,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           imageAttachments.push({ name: a.name, mime: a.mime, dataUrl: a.dataUrl })
         } else if (a.kind === "text" && a.dataUrl) {
           const text = decodeDataUrlText(a.dataUrl)
-          textBlocks.push("📎 " + a.name + ":\n```\n" + text + "\n```")
+          textBlocks.push("[File: " + a.name + "]:\n```\n" + text + "\n```")
         }
       }
       if (textBlocks.length > 0) {
@@ -291,17 +295,24 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         name: firstAttachment.name,
         mime: firstAttachment.mime,
         kind: imageAttachments.length > 0 ? "image" : firstAttachment.kind,
-        preview: firstAttachment.kind === "image" ? firstAttachment.dataUrl : (imageAttachments[0]?.dataUrl ?? undefined),
+        ...(imageAttachments.length === 0 && firstAttachment.kind === "image" ? { preview: firstAttachment.dataUrl } : {}),
         all: imageAttachments.map(img => ({ name: img.name, preview: img.dataUrl })),
       } : null,
     }
 
+    const nowIso = new Date().toISOString()
     set((s) => ({
       sending: true,
       streamingBySession: { ...s.streamingBySession, [targetSessionId]: { content: "", messageId: null } },
       ...(s.currentSessionId === targetSessionId ? { messages: [...s.messages, tempUserMsg] } : {}),
+      sessions: s.sessions.some((sess) => sess.id === targetSessionId)
+        ? s.sessions.map((sess) =>
+            sess.id === targetSessionId
+              ? { ...sess, last_message: finalContent.slice(0, 200), updated_at: nowIso }
+              : sess
+          )
+        : s.sessions,
     }))
-    setTimeout(() => { get().loadSessions() }, 150)
 
     ensureAllChatListeners()
     get().resetTurnUsage(targetSessionId)
@@ -333,6 +344,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         if (!result?.queued && !result?.aborted && !(Number(result?.messageId) > 0)) {
           throw new Error('Send failed')
         }
+      } else if (result?.error) {
+        set(clearStreaming(targetSessionId))
+        get().triggerToast(result.error, 'error')
       }
     } catch (err) {
       log.error("[Aether] chat.send FAILED:", err)
@@ -341,6 +355,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       if (overrides?.throwOnError) {
         throw err
       }
+      get().triggerToast((err as Error)?.message || t('chat.error.send_failed', '发送失败，请检查模型或网络配置'), 'error')
     }
   },
 
@@ -412,51 +427,61 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     get().sendMessage("继续")
   },
 
-  regenerate: async () => {
+  regenerate: async (messageId?: number) => {
     const { currentSessionId, messages, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     const activeModelId = cfg?.modelId
-    if (!currentSessionId || !activeModelId || messages.length < 2) return
-    let userIdx = -1
-    for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === "user") { userIdx = i; break } }
-    if (userIdx < 0) return
-    pushUndo(currentSessionId, messages, true, get())
-    const regeneratedMsgId = messages.slice(userIdx + 1).find(m => m.role === "assistant")?.id
-    set((s) => {
-      const next: any = {
-        messages: messages.slice(0, userIdx + 1),
-        streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: "", messageId: null } },
+    if (!currentSessionId || !activeModelId || messages.length < 2) {
+      if (currentSessionId && !activeModelId) {
+        get().triggerToast(t('chat.error.no_model', '未配置可用模型，请先在「设置 - 模型与路由」中添加服务商或模型'), 'warning')
       }
-      if (regeneratedMsgId !== undefined) {
-        const { [regeneratedMsgId]: _, ...restTC } = s.toolCallsByMessage
-        const { [regeneratedMsgId]: __, ...restPS } = s.planStepsByMessage
-        const { [regeneratedMsgId]: ___, ...restTB } = s.todosByMessage
-        const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
-        const { [regeneratedMsgId]: ____D, ...restTDB } = s.thinkingDurationsByMessage
-        const { [regeneratedMsgId]: ____S, ...restTSB } = s.thinkingStartsByMessage
-        const { [regeneratedMsgId]: ____A, ...restTAB } = s.thinkingActiveByMessage
-        const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
-        const { [regeneratedMsgId]: ______, ...restSNAP } = s.planSnapshotsByMessage
-        const { [regeneratedMsgId]: _______, ...restSA } = s.subagentsByMessage
-        const { [regeneratedMsgId]: ________, ...restFS } = s.fileSummariesByMessage
-        next.toolCallsByMessage = restTC
-        next.planStepsByMessage = restPS
-        next.todosByMessage = restTB
-        next.thinkingBlocksByMessage = restTIB
-        next.thinkingDurationsByMessage = restTDB
-        next.thinkingStartsByMessage = restTSB
-        next.thinkingActiveByMessage = restTAB
-        next.statusLinesByMessage = restSIB
-        next.planSnapshotsByMessage = restSNAP
-        next.subagentsByMessage = restSA
-        next.fileSummariesByMessage = restFS
+      return
+    }
+    let searchFrom = messages.length - 1
+    if (messageId != null) {
+      const targetIdx = messages.findIndex(m => m.id === messageId)
+      if (targetIdx >= 0) searchFrom = targetIdx
+    }
+    let userIdx = -1
+    for (let i = searchFrom; i >= 0; i--) {
+      if (messages[i].role === "user") { userIdx = i; break }
+    }
+    if (userIdx < 0) return
+    const targetUserMsg = messages[userIdx]
+    const removedMsgs = messages.slice(userIdx + 1)
+    if (removedMsgs.length === 0) return
+    const hasLaterUser = removedMsgs.some(m => m.role === "user")
+    pushUndo(currentSessionId, messages, true, get())
+    if (hasLaterUser) {
+      await window.electronAPI.message?.deleteAfter?.(currentSessionId, targetUserMsg.id)
+    }
+    const dropIds = new Set(removedMsgs.map(m => m.id))
+    const omitDropped = <T>(rec: Record<number, T>): Record<number, T> => {
+      const next: Record<number, T> = {}
+      for (const [k, v] of Object.entries(rec)) {
+        if (!dropIds.has(Number(k))) next[Number(k)] = v
       }
       return next
-    })
+    }
+    set((s) => ({
+      messages: messages.slice(0, userIdx + 1),
+      streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: "", messageId: null } },
+      toolCallsByMessage: omitDropped(s.toolCallsByMessage),
+      planStepsByMessage: omitDropped(s.planStepsByMessage),
+      todosByMessage: omitDropped(s.todosByMessage),
+      thinkingBlocksByMessage: omitDropped(s.thinkingBlocksByMessage),
+      thinkingDurationsByMessage: omitDropped(s.thinkingDurationsByMessage),
+      thinkingStartsByMessage: omitDropped(s.thinkingStartsByMessage),
+      thinkingActiveByMessage: omitDropped(s.thinkingActiveByMessage),
+      statusLinesByMessage: omitDropped(s.statusLinesByMessage),
+      planSnapshotsByMessage: omitDropped(s.planSnapshotsByMessage),
+      subagentsByMessage: omitDropped(s.subagentsByMessage),
+      fileSummariesByMessage: omitDropped(s.fileSummariesByMessage),
+    }))
     ensureAllChatListeners()
     try {
       const result = await window.electronAPI.chat.send({
-        sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
+        sessionId: currentSessionId, content: targetUserMsg.content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
         agentMode: agentMode === "off" ? "act" : agentMode,
@@ -471,6 +496,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     } catch (err) {
       set(clearStreaming(currentSessionId))
       log.error("regenerate error:", err)
+      get().triggerToast((err as Error)?.message || t('chat.error.send_failed', '重新生成失败，请检查模型或网络配置'), 'error')
     }
   },
 
@@ -559,7 +585,12 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     const { currentSessionId, messages, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     const activeModelId = cfg?.modelId
-    if (!currentSessionId || !activeModelId) return
+    if (!currentSessionId || !activeModelId) {
+      if (currentSessionId && !activeModelId) {
+        get().triggerToast(t('chat.error.no_model', '未配置可用模型，请先在「设置 - 模型与路由」中添加服务商或模型'), 'warning')
+      }
+      return
+    }
     const target = messages.find(m => m.id === messageId)
     if (!target || target.role !== "user") return
     const content = newContent.trim()
@@ -591,7 +622,29 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     } catch (err) {
       set(clearStreaming(currentSessionId))
       log.error("editMessage error:", err)
+      get().triggerToast((err as Error)?.message || t('chat.error.send_failed', '编辑重发失败，请检查模型或网络配置'), 'error')
     }
+  },
+
+  editAndForkMessage: async (messageId, newContent) => {
+    const { currentSessionId, messages } = get()
+    const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
+    if (!currentSessionId || !cfg?.modelId) {
+      if (currentSessionId && !cfg?.modelId) {
+        get().triggerToast(t('chat.error.no_model', '未配置可用模型，请先在「设置 - 模型与路由」中添加服务商或模型'), 'warning')
+      }
+      return
+    }
+    const target = messages.find(m => m.id === messageId)
+    if (!target || target.role !== "user") return
+    const content = newContent.trim()
+    if (!content) return
+    const newSessionId = await get().forkSession(messageId)
+    if (!newSessionId) return
+    const forkedMsgs = get().messages
+    const copiedUser = [...forkedMsgs].reverse().find(m => m.role === "user")
+    if (!copiedUser) return
+    await get().editMessage(copiedUser.id, content)
   },
 
   loadMessages: async (sessionId, opts) => {
@@ -631,6 +684,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         return
       }
       set({
+        lastMessagesLoaded: { sessionId, at: Date.now() },
         ...(changed ? { messages: reconciled } : {}),
         ...(summariesChanged ? { fileSummariesByMessage: nextSummaries } : {}),
       })
@@ -727,9 +781,16 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     set((s) => ({ proposedHabits: s.proposedHabits.filter((h) => h.key !== key) }))
   },
 
-  enqueueMessage: (content, sessionId) => {
+  enqueueMessage: (content, sessionId, extras) => {
     const targetSid = sessionId ?? get().currentSessionId ?? undefined
-    set((s) => ({ queuedMessages: [...s.queuedMessages, { id: Date.now() + Math.random(), content, sessionId: targetSid }] }))
+    const item = {
+      id: Date.now() + Math.random(),
+      content,
+      sessionId: targetSid,
+      ...(extras?.attachments && extras.attachments.length > 0 ? { attachments: extras.attachments } : {}),
+      ...(extras?.snippets && extras.snippets.length > 0 ? { snippets: extras.snippets } : {}),
+    }
+    set((s) => ({ queuedMessages: [...s.queuedMessages, item] }))
     get().triggerHint("first_queue", t("hint.first_queue"))
   },
 

@@ -105,7 +105,7 @@ function ensureMemDb(db) {
  * @returns {{ prefix: Array<{role:'system', content:string}>, memoryCount: number }}
  */
 function buildSessionContext(opts = {}) {
-  const { db, sessionId, personaId, userMessage, cwd } = opts || {}
+  const { db, sessionId, personaId, userMessage, cwd, includeWorkspaceAgentsMd = true } = opts || {}
   const prefix = []
   let memoryCount = 0
 
@@ -143,19 +143,21 @@ function buildSessionContext(opts = {}) {
   }
 
   // 2) Context Engine 核心扩充 (AGENTS.md — stable CWD prefix, placed BEFORE dynamic memory!)
-  try {
-    const fs = require('fs')
-    const path = require('path')
-    if (effectiveCwd) {
-      const agentsMdPath = path.join(effectiveCwd, 'AGENTS.md')
-      if (fs.existsSync(agentsMdPath)) {
-        const agentsMd = fs.readFileSync(agentsMdPath, 'utf8')
-        if (agentsMd && agentsMd.trim()) {
-          prefix.push({ role: 'system', content: `[Workspace Context: AGENTS.md]\n${agentsMd.slice(0, 8000)}`, cacheHint: 'stable' })
+  if (includeWorkspaceAgentsMd) {
+    try {
+      const fs = require('fs')
+      const path = require('path')
+      if (effectiveCwd) {
+        const agentsMdPath = path.join(effectiveCwd, 'AGENTS.md')
+        if (fs.existsSync(agentsMdPath)) {
+          const agentsMd = fs.readFileSync(agentsMdPath, 'utf8')
+          if (agentsMd && agentsMd.trim()) {
+            prefix.push({ role: 'system', content: `[Workspace Context: AGENTS.md]\n${agentsMd.slice(0, 8000)}`, cacheHint: 'stable' })
+          }
         }
       }
-    }
-  } catch { /* 容错：防止因文件读取失败导致会话崩溃 */ }
+    } catch { /* 容错：防止因文件读取失败导致会话崩溃 */ }
+  }
 
   // 3) Provider topology snapshot injection (Milestone 3: Feature 18)
   if (db) {

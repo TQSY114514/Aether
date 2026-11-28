@@ -185,7 +185,7 @@ function prefetchWithDetails(db, userMessage, scopeOrCwd) {
     if (typeof db.getMemoriesScoped === 'function') {
       // scopeKey = 'D:\Aether' -> returns workspace IS NULL OR workspace = 'D:\Aether'
       // scopeKey = null -> returns workspace IS NULL only
-      pool = db.getMemoriesScoped(scopeKey) || []
+      pool = db.getMemoriesScoped(scopeKey, 200) || []
     } else if (typeof db.getMemories === 'function') {
       pool = db.getMemories(200) || []
     }
@@ -200,6 +200,7 @@ function prefetchWithDetails(db, userMessage, scopeOrCwd) {
 
   const hits = []
   const sections = []
+  const accessedIds = []
 
   // Existing persisted workspace/global digests must remain recallable even if
   // `memory.dreamConsolidation` is later toggled off (or created via manual
@@ -230,7 +231,7 @@ function prefetchWithDetails(db, userMessage, scopeOrCwd) {
   if (projectMem.length > 0) {
     const projPicks = projectMem.slice(0, 5)
     for (const m of projPicks) {
-      try { db.incrementMemoryAccess(m.id) } catch {}
+      accessedIds.push(m.id)
       hits.push({
         id: m.id,
         content: m.content,
@@ -243,14 +244,25 @@ function prefetchWithDetails(db, userMessage, scopeOrCwd) {
     sections.push(`Project knowledge (architecture/conventions/decisions — follow these):\n${projLines.join('\n')}`)
   }
 
-  const kwResult = _prefetchKeywordsWithHits(db, userMessage, trusted)
+  const kwResult = _prefetchKeywordsWithHits(db, userMessage, trusted, accessedIds)
   hits.push(...kwResult.hits)
   if (kwResult.text) sections.push(kwResult.text)
   let out = sections.join('\n\n')
 
-  const untrustedResult = _untrustedBlockWithHits(db, userMessage, external)
+  const untrustedResult = _untrustedBlockWithHits(db, userMessage, external, accessedIds)
   hits.push(...untrustedResult.hits)
   if (untrustedResult.text) out = out ? `${out}\n\n${untrustedResult.text}` : untrustedResult.text
+
+  if (accessedIds.length > 0) {
+    const uniqueIds = Array.from(new Set(accessedIds))
+    if (typeof db.incrementMemoryAccessBatch === 'function') {
+      try { db.incrementMemoryAccessBatch(uniqueIds) } catch {}
+    } else if (typeof db.incrementMemoryAccess === 'function') {
+      for (const id of uniqueIds) {
+        try { db.incrementMemoryAccess(id) } catch {}
+      }
+    }
+  }
 
   const seenIds = new Set()
   const dedupedHits = []
@@ -269,7 +281,7 @@ function prefetch(db, userMessage, scopeOrCwd) {
 
 // H5: external 来源记忆的降权注入块。仅在查询有关键词命中时注入（与可信
 // 记忆同一相关性门槛），最多 MAX_UNTRUSTED_MEMORIES 条，排在整段注入末尾。
-function _untrustedBlockWithHits(db, userMessage, externalMemories) {
+function _untrustedBlockWithHits(db, userMessage, externalMemories, accessedIds = null) {
   if (!externalMemories || externalMemories.length === 0) return { text: '', hits: [] }
   const qkw = keywords(userMessage)
   if (qkw.size === 0) return { text: '', hits: [] }
@@ -281,7 +293,8 @@ function _untrustedBlockWithHits(db, userMessage, externalMemories) {
   if (picked.length === 0) return { text: '', hits: [] }
   const hits = []
   const lines = picked.map(x => {
-    try { db.incrementMemoryAccess(x.m.id) } catch {}
+    if (accessedIds) accessedIds.push(x.m.id)
+    else { try { db.incrementMemoryAccess(x.m.id) } catch {} }
     hits.push({
       id: x.m.id,
       content: x.m.content,
@@ -301,7 +314,7 @@ function _untrustedBlock(db, userMessage, externalMemories) {
   return _untrustedBlockWithHits(db, userMessage, externalMemories).text
 }
 
-function _prefetchKeywordsWithHits(db, userMessage, memories) {
+function _prefetchKeywordsWithHits(db, userMessage, memories, accessedIds = null) {
   const qkw = keywords(userMessage)
   if (qkw.size === 0) return { text: '', hits: [] }
 
@@ -329,14 +342,16 @@ function _prefetchKeywordsWithHits(db, userMessage, memories) {
         const ageDays = Math.max(0, (nowMs - _parseTimestampMs(m.created_at || m.createdAt, nowMs)) / 86400000)
         const recencyBonus = Math.max(0, 1 - ageDays / 90) * 0.5
         w = (kwScore + recencyBonus) * computeMemoryStrength(m, nowMs)
-        // Graph expansion bonus: if this memory matched via graph neighbours,
-        // give it a small boost so related context surfaces.
-        if (graphIds.has(m.id) && kwScore === 0) {
-          w = 0.3
-          isGraph = true
-        }
-        // Record access for decay tracking.
-        try { db.incrementMemoryAccess(m.id) } catch {}
+        // Record access for decay tracking (batched when caller collects accessedIds).
+        if (accessedIds) accessedIds.push(m.id)
+        else { try { db.incrementMemoryAccess(m.id) } catch {} }
+      } else if (graphIds.has(m.id)) {
+        // Graph expansion bonus: if this memory matched via graph neighbours
+        // without direct keyword overlap, give it a floor boost so related context surfaces.
+        w = 0.3
+        isGraph = true
+        if (accessedIds) accessedIds.push(m.id)
+        else { try { db.incrementMemoryAccess(m.id) } catch {} }
       }
       return { m, s: w, graph: isGraph }
     })

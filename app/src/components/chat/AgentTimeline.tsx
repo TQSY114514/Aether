@@ -1,9 +1,11 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { Brain, Wrench, Check, AlertCircle, MessageSquare, ShieldAlert, ShieldCheck } from 'lucide-react'
 import ToolCallBlock from './ToolCallBlock'
 import ThinkingBlock from './ThinkingBlock'
+import ImageLightboxModal, { type LightboxImage } from './ImageLightboxModal'
 import { t } from '@/utils/i18n'
 import { renderMarkdown } from '@/utils/markdown'
+import { handleMarkdownContainerClick, useLocalImageFallback } from '@/utils/markdownDom'
 
 type ToolEntry = {
   name: string
@@ -163,12 +165,16 @@ function AgentTimeline({ thinkingText, thinkingStreaming, thinkingDuration, thin
   const hasSteps = !!planSteps && planSteps.length > 0
   const hasAny = hasThinking || hasTools || hasSteps
 
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const [lightboxState, setLightboxState] = useState<{ images: LightboxImage[]; index: number } | null>(null)
+  useLocalImageFallback(timelineRef, planSteps?.length)
+
   const timelineNodes = useMemo(() => buildTimelineNodes(planSteps, toolCalls), [planSteps, toolCalls])
 
   if (!hasAny) return null
 
   return (
-    <div className="mb-2">
+    <div ref={timelineRef} className="mb-2">
       {/* Thinking section — rendered first with left-bar style */}
       {hasThinking && (
         <ThinkingBlock
@@ -211,6 +217,11 @@ function AgentTimeline({ thinkingText, thinkingStreaming, thinkingDuration, thin
                       <div
                         className="mc text-xs leading-relaxed break-words px-2.5 py-1.5 rounded border"
                         style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        onClick={(e) =>
+                          handleMarkdownContainerClick(e, timelineRef.current, (images, index) =>
+                            setLightboxState({ images, index })
+                          )
+                        }
                         dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
                       />
                     </div>
@@ -236,6 +247,13 @@ function AgentTimeline({ thinkingText, thinkingStreaming, thinkingDuration, thin
             })}
           </div>
         </div>
+      )}
+      {lightboxState && lightboxState.images.length > 0 && (
+        <ImageLightboxModal
+          images={lightboxState.images}
+          initialIndex={lightboxState.index}
+          onClose={() => setLightboxState(null)}
+        />
       )}
     </div>
   )

@@ -6,6 +6,24 @@ All notable changes to AetherAI are documented here.
 
 ### Added
 
+- **Composer Ghost Text, Tab Completion & Idle Prompt Prediction (输入灰字提示与 Tab 补全):**
+  - 新增 `GhostTextMirror` 与 `ghostCompletion` 引擎：支持斜杠命令后缀补全、`/mode`/`/effort`/`/role` 离散参数链式补全、`@`/`#`/`!` 引用后缀预览以及当前会话历史用户消息前缀灰字复现；严格防抖竞态与中文 IME `isComposing` 保护，`Tab` / 文末 `ArrowRight` 一键采纳。
+  - 新增默认关闭的 `composer.nextPromptPrediction` Feature Flag 与 `chat:predict-next` IPC：开启后在助手回复完成且输入框为空时异步预测下一轮建议提示。
+- **Basic Chat Ergonomics, Lightbox Wiring & Settings/Sidebar Polish (基础聊天体验与工作台打磨):**
+  - 全链路打通 `ImageLightboxModal` 点击放大至 Markdown 图片、流式输出、时间线与浏览器/工具截图（修复多图覆盖、真图片剪贴板复制、1:1 比例与安全本地图片路径预览）。
+  - 前端接入后端 FTS5 全文搜索（`Ctrl+K` 全局跳转 + `Ctrl+F` 扩展匹配思考与工具输出）、任意楼层 `regenerate(messageId)`、非破坏性「编辑并分支」、引用回复、`/export` 与侧边栏 Markdown 导出、纯文本复制及队列附件保留。
+  - 侧边栏会话列表接入 `@tanstack/react-virtual` 虚拟滚动；设置页新增 Feature Flag 安全模式/完整模式预设面板，拍平嵌套滚动并补全 `FirstRunWizard` 交互式默认模式选择与多语言本地化。
+
+### Fixed & Hardened
+
+- **Send-Path Freeze & Core Runtime Performance (发送卡顿与主进程性能根治):**
+  - 消除每次 `chat:send` 的主线程 DPAPI 密钥解密风暴（新增有界解密缓存与非解密元数据查询），移除阻塞首字的 `autoMemory.recall` 同步等待与并发抢占，异步化 `codeUnderstanding` / `repoMap` / `checkpoints` Git 快照与 `fileScanner` 并发控制，并阻断 `ChatPage` 60fps 级联重绘。
+  - 新增 SQLite 复合索引、`db.startup_backfill_v1` 冷启动整理去重标记与 `knowledgeGraph.searchGraph` 有界查询；`checkpointManager` 改按步数/Token 增量保存。
+- **Agent Protocol, Tool & Compaction Reliability (协议、工具与压缩可靠性修复):**
+  - 修复 `anthropicAdapter` 多工具并发结果未合并进单条 `user` 消息导致的 400 报错；修复 `read_file` 先截断 64KB 再切片导致的后半段不可读及 UTF-8 跨块截裂问题；为 `run_command` 绑定 `AbortSignal` 秒级 `killTree` 并标记超时 `noRetry`。
+  - 修复 `compaction.js` 将整次摘要请求与 3s 连接超时竞速的假超时 Bug，重构保留策略以维持 `tool_call`/`tool_result` 成对与时间序，加入图片 Token 计价；适配器改用 120s chunk 空闲重置超时与按需 `stream_options`；去掉系统前缀分钟级时间并稳定 KV-Cache。
+  - 修复 `ChatInput` 中文输入法 `isComposing` 回车误发与 `Ctrl+Z`/`Ctrl+K` 冲突，为无模型/发送失败补充明确 Toast 提示，并为 `/clear` 补充确认弹窗。
+
 - **Super-Harness Upgrades: LSP Semantic Radar, Fast Syntax Guard, Process Tap & Shadow Rollback (#134):**
   - **LSP 语义雷达激活与降级**：默认开启 `lsp.full`，修复 `find_symbol` 调用不存在方法的问题（改用 `lsp.searchWorkspace` 并支持 Rust/Go/Python/JS 语言推断），重构 `lsp_definition` / `lsp_references` / `lsp_diagnostics` / `lsp_code_actions` / `lsp_rename` 入参 Schema 与正则/语法检查优雅降级，并修复 `grepWithRipgrep` 漏传 `pattern` 及相对路径基准错乱问题。
   - **毫秒级内存语法看门狗 (`fastSyntaxCheck`)**：基于 Node 内置 `JSON.parse`（含 `tsconfig*.json`/`jsconfig*.json` 注释与尾逗号 JSONC 剥离）、`vm.Script`（含 `#!` shebang 与 BOM 剥离）及 `module.stripTypeScriptTypes`（豁免合法 `enum`/`namespace`）提供零外部依赖写后语法校验。

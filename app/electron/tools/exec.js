@@ -58,7 +58,13 @@ function runCommand(command, args, opts = {}) {
       maxBuffer = 32 * 1024,
       shell = false,
       windowsHide = true,
+      signal = null,
     } = opts
+
+    if (signal?.aborted) {
+      resolve({ stdout: '', stderr: 'aborted', exitCode: null, timedOut: false, aborted: true })
+      return
+    }
 
     const nonInteractiveEnv = {
       CI: 'true',
@@ -78,20 +84,38 @@ function runCommand(command, args, opts = {}) {
 
     const stdoutParts = []
     const stderrParts = []
+    let stdoutBytes = 0
+    let stderrBytes = 0
+    let maxBufferTriggered = false
     let timedOut = false
+    let aborted = false
+    let settled = false
 
-    child.stdout.on('data', (d) => {
-      stdoutParts.push(d)
-      if (Buffer.concat(stdoutParts).byteLength > maxBuffer) {
-        killTree(child.pid)
+    const cleanupSignal = () => {
+      if (signal) signal.removeEventListener('abort', onAbort)
+    }
+
+    const onAbort = () => {
+      aborted = true
+      killTree(child.pid)
+    }
+    if (signal) signal.addEventListener('abort', onAbort, { once: true })
+
+    const handleChunk = (parts, isStderr, d) => {
+      const nextBytes = (isStderr ? stderrBytes : stdoutBytes) + d.byteLength
+      if (isStderr) stderrBytes = nextBytes
+      else stdoutBytes = nextBytes
+      if (!maxBufferTriggered) {
+        parts.push(d)
+        if (nextBytes > maxBuffer) {
+          maxBufferTriggered = true
+          killTree(child.pid)
+        }
       }
-    })
-    child.stderr.on('data', (d) => {
-      stderrParts.push(d)
-      if (Buffer.concat(stderrParts).byteLength > maxBuffer) {
-        killTree(child.pid)
-      }
-    })
+    }
+
+    child.stdout.on('data', (d) => handleChunk(stdoutParts, false, d))
+    child.stderr.on('data', (d) => handleChunk(stderrParts, true, d))
 
     const timer = setTimeout(() => {
       timedOut = true
@@ -99,18 +123,25 @@ function runCommand(command, args, opts = {}) {
     }, timeout)
 
     child.on('close', (code) => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
+      cleanupSignal()
       resolve({
         stdout: Buffer.concat(stdoutParts).toString('utf-8'),
         stderr: Buffer.concat(stderrParts).toString('utf-8'),
         exitCode: code,
         timedOut,
+        aborted,
       })
     })
 
     child.on('error', (err) => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
-      resolve({ stdout: '', stderr: err.message, exitCode: null, timedOut: false })
+      cleanupSignal()
+      resolve({ stdout: '', stderr: err.message, exitCode: null, timedOut: false, aborted })
     })
   })
 }

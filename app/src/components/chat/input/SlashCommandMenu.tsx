@@ -2,12 +2,17 @@ import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { t } from '@/utils/i18n'
 import type { SlashCommand } from '../slashCommands'
+import type { SlashArgCandidate } from '@/utils/ghostCompletion'
 
 export interface SlashCommandMenuProps {
   commands: SlashCommand[]
   selectedIndex: number
   onSelectIndex: (index: number) => void
   onSelectCommand: (cmd: SlashCommand) => void
+  argCandidates?: SlashArgCandidate[]
+  selectedArgIndex?: number
+  onSelectArgIndex?: (index: number) => void
+  onSelectArg?: (candidate: SlashArgCandidate) => void
 }
 
 const CATEGORY_NAMES: Record<string, () => string> = {
@@ -21,17 +26,22 @@ export default function SlashCommandMenu({
   selectedIndex,
   onSelectIndex,
   onSelectCommand,
+  argCandidates = [],
+  selectedArgIndex = 0,
+  onSelectArgIndex,
+  onSelectArg,
 }: SlashCommandMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const isArgMode = argCandidates.length > 0
 
   useEffect(() => {
     const activeEl = menuRef.current?.querySelector('[aria-selected="true"]')
     if (activeEl) {
       activeEl.scrollIntoView({ block: 'nearest' })
     }
-  }, [selectedIndex])
+  }, [selectedIndex, selectedArgIndex, isArgMode])
 
-  if (commands.length === 0) return null
+  if (!isArgMode && commands.length === 0) return null
 
   let lastCategory = ''
 
@@ -44,9 +54,39 @@ export default function SlashCommandMenu({
         borderColor: 'var(--border)',
       }}
       role="listbox"
-      aria-label="Slash commands"
+      aria-label={isArgMode ? 'Slash command arguments' : 'Slash commands'}
     >
-      <div className="p-1 space-y-0.5">
+      {isArgMode ? (
+        <div className="p-1 space-y-0.5">
+          <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--text-muted)] opacity-75">
+            {t('slash.arg_options', '可选参数')}
+          </div>
+          {argCandidates.map((cand, idx) => {
+            const active = idx === selectedArgIndex
+            return (
+              <div
+                key={`${cand.commandId}-${cand.value}`}
+                role="option"
+                aria-selected={active}
+                className={cn(
+                  'flex items-center justify-between gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors motion-reduce:transition-none',
+                  active ? 'bg-[var(--bg-secondary)]' : 'hover:bg-[var(--bg-secondary)]/50'
+                )}
+                onMouseEnter={() => onSelectArgIndex?.(idx)}
+                onClick={() => onSelectArg?.(cand)}
+              >
+                <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">
+                  {cand.value}
+                </span>
+                <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                  /{cand.commandId} {cand.value}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="p-1 space-y-0.5">
         {commands.map((cmd, idx) => {
           const active = idx === selectedIndex
           const showCatHeader = cmd.category && cmd.category !== lastCategory
@@ -96,6 +136,7 @@ export default function SlashCommandMenu({
           )
         })}
       </div>
+      )}
 
       <div
         className="px-2 py-1 border-t flex items-center justify-between text-[9px] text-[var(--text-muted)] font-mono"

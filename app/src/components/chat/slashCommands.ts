@@ -7,7 +7,9 @@
 
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import { showConfirm, showPrompt, showToast } from '@/components/ui/feedback'
 import { getFeatureFlagFresh, setFeatureFlag } from '@/utils/featureFlags'
+import { formatSessionAsMarkdown, downloadMarkdownFile } from '@/utils/exportMarkdown'
 import type { AgentMode, EffortLevel } from '@/store/types'
 
 export type { AgentMode }
@@ -18,6 +20,7 @@ export interface SlashCommand {
   description: string
   category: 'agent' | 'dev' | 'session'
   paramHint?: string
+  argOptions?: string[]
   prompt?: string
   action?: (arg?: string) => Promise<void> | void
   requiresArg?: boolean
@@ -36,6 +39,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     description: t('slash.mode_desc', '切换 Agent 二元模式（plan 只读规划、act 默认行动）'),
     category: 'agent',
     paramHint: '[plan|act]',
+    argOptions: ['plan', 'act'],
     requiresArg: true,
     action: (arg) => {
       if (!arg) return
@@ -54,6 +58,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     description: t('slash.effort_desc', '调整思考深度预算（minimal 极简, low 浅思, medium 标准, high 深度, max 满血, off 关闭）'),
     category: 'agent',
     paramHint: '[minimal|low|medium|high|max|off]',
+    argOptions: ['minimal', 'low', 'medium', 'high', 'max', 'off'],
     requiresArg: true,
     action: (arg) => {
       if (!arg) return
@@ -165,7 +170,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
           await useStore.getState().loadMessages(sid)
           useStore.getState().triggerToast(t('slash.doctor_done', rep.summary.passes, rep.summary.warnings, rep.summary.failures), rep.overallStatus === 'healthy' ? 'success' : 'info')
         } else {
-          window.alert(rep.markdownReport)
+          showToast(t('slash.doctor_no_session', '请先新建或选择一个会话以查看自检报告'), { type: 'info' })
         }
       } catch (e: any) {
         useStore.getState().triggerToast(t('slash.doctor_failed', e.message || e), 'error')
@@ -190,7 +195,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
         if (sid && res.suggestedReviewPrompt) {
           useStore.getState().sendMessage(res.suggestedReviewPrompt)
         } else {
-          window.alert(t('slash.review_no_session', '请先选择或新建一个会话以发起代码审查'))
+          showToast(t('slash.review_no_session', '请先选择或新建一个会话以发起代码审查'), { type: 'info' })
         }
       } catch (e: any) {
         useStore.getState().triggerToast(t('slash.review_failed', e.message || e), 'error')
@@ -291,10 +296,14 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
         }
         const res = await window.electronAPI.git.craftCommitMessage({ sessionId: sid || undefined })
         if (!res.success) {
-          window.alert(t('slash.commit_no_changes', '工作区没有待提交的改动'))
+          showToast(t('slash.commit_no_changes', '工作区没有待提交的改动'), { type: 'info' })
           return
         }
-        const msg = window.prompt(t('slash.commit_prompt', '确认提交信息 (可修改)：'), res.suggestedMessage)
+        const msg = await showPrompt({
+          title: t('slash.commit_prompt', '确认提交信息 (可修改)：'),
+          defaultValue: res.suggestedMessage || '',
+          confirmText: t('slash.commit', '提交改动'),
+        })
         if (msg && msg.trim()) {
           const commitRes = await window.electronAPI.git.commit({ message: msg.trim(), sessionId: sid || undefined })
           if (commitRes.success) {
@@ -316,9 +325,9 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     action: async () => {
       try {
         const res = await useStore.getState().undoLastAction()
-        if (!res.ok) window.alert(t('chat.undo_failed', res.error || t('chat.unknown_error')))
+        if (!res.ok) showToast(t('chat.undo_failed', res.error || t('chat.unknown_error')), { type: 'error' })
       } catch {
-        window.alert(t('chat.undo_failed', t('chat.unknown_error')))
+        showToast(t('chat.undo_failed', t('chat.unknown_error')), { type: 'error' })
       }
     },
   },
@@ -352,10 +361,20 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     category: 'session',
     action: async () => {
       const sid = useStore.getState().currentSessionId
-      if (sid) {
-        await window.electronAPI.message.deleteAfter(sid, 0).catch(() => {})
-        useStore.getState().loadMessages(sid)
+      if (!sid) {
+        showToast(t('chat.error.no_session', '请先新建或选择一个会话'), { type: 'warning' })
+        return
       }
+      const ok = await showConfirm({
+        title: t('slash.clear_confirm_title', '清空当前会话历史？'),
+        description: t('slash.clear_confirm_desc', '将永久删除本会话内的所有消息记录，此操作不可撤销。'),
+        confirmText: t('slash.clear_confirm_btn', '清空历史'),
+        danger: true,
+      })
+      if (!ok) return
+      await window.electronAPI.message.deleteAfter(sid, 0).catch(() => {})
+      await useStore.getState().loadMessages(sid)
+      showToast(t('slash.clear_done', '已清空会话历史'), { type: 'info' })
     },
   },
   {
@@ -392,6 +411,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     category: 'agent',
     requiresArg: true,
     paramHint: '<role> <task>',
+    argOptions: ['explore', 'explorer', 'build', 'implementer', 'review', 'research', 'debug', 'oracle', 'librarian', 'hunter', 'verifier'],
     action: async (arg) => {
       const SUPPORTED_ROLES = ['explore', 'explorer', 'build', 'implementer', 'review', 'research', 'debug', 'oracle', 'librarian', 'hunter', 'verifier']
       const trimmed = (arg || '').trim()
@@ -454,6 +474,34 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    id: 'export',
+    name: t('slash.export', '导出 Markdown'),
+    description: t('slash.export_desc', '将当前会话导出为 Markdown 文件'),
+    category: 'session',
+    action: async () => {
+      const store = useStore.getState()
+      const sid = store.currentSessionId
+      if (!sid) {
+        showToast(t('chat.error.no_session', '请先新建或选择一个会话'), { type: 'warning' })
+        return
+      }
+      const sess = store.sessions.find((s) => s.id === sid) || {
+        id: sid,
+        title: `Session #${sid}`,
+        persona_id: null,
+        created_at: new Date().toISOString(),
+        pinned: 0,
+        updated_at: new Date().toISOString(),
+      }
+      const msgs = store.messages.length > 0
+        ? store.messages
+        : await window.electronAPI.message.list(sid).catch(() => [])
+      const md = formatSessionAsMarkdown(sess, msgs, store.toolCallsByMessage)
+      downloadMarkdownFile(`aether-session-${sid}-${(sess.title || 'chat').slice(0, 24)}`, md)
+      showToast(t('slash.export_done', '已导出 Markdown 会话记录'), { type: 'success' })
+    },
+  },
+  {
     id: 'help',
     name: t('slash.help', '指令帮助'),
     description: t('slash.help_desc', '列出所有支持的斜杠命令与快捷键说明'),
@@ -481,6 +529,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
         '- `/compact` — 智能压缩上下文历史以节省 Token',
         '- `/clear` — 清空当前会话历史',
         '- `/fork` — 分叉当前会话到新分支',
+        '- `/export` — 导出当前会话为 Markdown 文档',
         '- `/role <role> <task>` — 直接调度指定角色子代理，进度内联展示于对话流',
         '- `/checkpoints` — 打开时间旅行历史快照抽屉',
         '- `/history` — 打开时间旅行历史快照抽屉',

@@ -26,11 +26,22 @@ export type ConfirmOptions = {
   danger?: boolean
 }
 
+export type PromptOptions = {
+  title?: string
+  description?: string
+  defaultValue?: string
+  placeholder?: string
+  confirmText?: string
+  cancelText?: string
+}
+
 type ConfirmState = (ConfirmOptions & { resolve: (v: boolean) => void }) | null
+type PromptState = (PromptOptions & { resolve: (v: string | null) => void }) | null
 
 export type UIApi = {
   toast: (message: string, opts?: { type?: ToastType; duration?: number }) => void
   confirm: (opts: ConfirmOptions) => Promise<boolean>
+  prompt: (opts: PromptOptions) => Promise<string | null>
 }
 
 const UICtx = createContext<UIApi | null>(null)
@@ -44,6 +55,7 @@ export function useUI(): UIApi {
     return {
       toast: (m, opts) => { useStore.getState().triggerToast(m, opts?.type || 'info') },
       confirm: (o) => Promise.resolve(window.confirm(o.title || o.description || o.message || '')),
+      prompt: (o) => Promise.resolve(window.prompt(o.title || o.description || '', o.defaultValue || '')),
     }
   }
   return ctx
@@ -64,8 +76,16 @@ export function showConfirm(opts: ConfirmOptions): Promise<boolean> {
   return Promise.resolve(window.confirm(opts.title || opts.description || opts.message || ''))
 }
 
+export function showPrompt(opts: PromptOptions): Promise<string | null> {
+  if (globalUI) {
+    return globalUI.prompt(opts)
+  }
+  return Promise.resolve(window.prompt(opts.title || opts.description || '', opts.defaultValue || ''))
+}
+
 export function UIProvider({ children }: { children: ReactNode }) {
   const [confirmState, setConfirmState] = useState<ConfirmState>(null)
+  const [promptState, setPromptState] = useState<PromptState>(null)
 
   const toast = useCallback((message: string, opts?: { type?: ToastType; duration?: number }) => {
     useStore.getState().triggerToast(message, opts?.type || 'info')
@@ -77,6 +97,12 @@ export function UIProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const prompt = useCallback((opts: PromptOptions) => {
+    return new Promise<string | null>((resolve) => {
+      setPromptState({ ...opts, resolve })
+    })
+  }, [])
+
   const closeConfirm = (val: boolean) => {
     if (confirmState) {
       confirmState.resolve(val)
@@ -84,16 +110,24 @@ export function UIProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const closePrompt = (val: string | null) => {
+    if (promptState) {
+      promptState.resolve(val)
+      setPromptState(null)
+    }
+  }
+
   useEffect(() => {
-    globalUI = { toast, confirm }
+    globalUI = { toast, confirm, prompt }
     return () => { globalUI = null }
-  }, [toast, confirm])
+  }, [toast, confirm, prompt])
 
   return (
-    <UICtx.Provider value={{ toast, confirm }}>
+    <UICtx.Provider value={{ toast, confirm, prompt }}>
       {children}
       <Toaster />
       <ConfirmHost state={confirmState} onConfirm={() => closeConfirm(true)} onCancel={() => closeConfirm(false)} />
+      <PromptHost state={promptState} onSubmit={closePrompt} />
     </UICtx.Provider>
   )
 }
@@ -269,6 +303,84 @@ function ConfirmHost({ state, onConfirm, onCancel }: { state: ConfirmState; onCo
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function PromptHost({ state, onSubmit }: { state: PromptState; onSubmit: (val: string | null) => void }) {
+  const [value, setValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!state) return
+    setValue(state.defaultValue || '')
+    const timer = setTimeout(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }, 0)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onSubmit(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [state, onSubmit])
+
+  if (!state) return null
+
+  return (
+    <div className="fixed inset-0 z-[101] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={() => onSubmit(null)} />
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="prompt-dialog-title"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSubmit(value)
+        }}
+        className="relative w-full max-w-md rounded-lg border shadow-2xl p-5 animate-spring-up motion-reduce:animate-none"
+        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+      >
+        <h3 id="prompt-dialog-title" className="text-sm font-semibold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+          {state.title || t('common.confirm', '确认')}
+        </h3>
+        {state.description && (
+          <p className="text-xs leading-relaxed mb-3 whitespace-pre-line" style={{ color: 'var(--text-secondary)' }}>
+            {state.description}
+          </p>
+        )}
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={state.placeholder || ''}
+          className="w-full px-3 py-2 text-xs rounded-[6px] border outline-none bg-[var(--content-bg)] font-mono focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+        />
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            type="button"
+            onClick={() => onSubmit(null)}
+            className="px-3.5 py-1.5 text-xs rounded-[6px] border hover:bg-[var(--bg-secondary)] transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          >
+            {state.cancelText || t('common.cancel', '取消')}
+          </button>
+          <button
+            type="submit"
+            className="px-3.5 py-1.5 text-xs rounded-[6px] text-white transition-opacity motion-reduce:transition-none hover:opacity-90 font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            {state.confirmText || t('common.confirm', '确定')}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

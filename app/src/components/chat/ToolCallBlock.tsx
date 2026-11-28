@@ -3,6 +3,9 @@ import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, Shi
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { cleanDiffLines, countDiffLines } from '@/utils/diff'
+import { showConfirm } from '@/components/ui/feedback'
+import ImageLightboxModal, { type LightboxImage } from './ImageLightboxModal'
+import MessageImageGrid from './MessageImageGrid'
 
 export function stripAnsi(text: string): string {
   if (!text) return ''
@@ -128,13 +131,20 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   // Long results default to a collapsed single line with a click-to-expand
   // toggle (Feature C2). Short results render fully as before.
   const [collapsed, setCollapsed] = useState(true)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const rawRes = tool.result as any
-  let extractedImageUrl: string | null = null
+  const extractedImages: LightboxImage[] = []
   let resultText = ''
   if (Array.isArray(rawRes)) {
     for (const part of rawRes) {
       if (part?.type === 'text' && part.text) resultText += part.text
-      if (part?.type === 'image_url' && part.image_url?.url) extractedImageUrl = part.image_url.url
+      if (part?.type === 'image_url' && part.image_url?.url) {
+        const idx = extractedImages.length + 1
+        extractedImages.push({
+          name: idx === 1 ? t('tool.browser_snapshot') : `${t('tool.browser_snapshot')} #${idx}`,
+          preview: part.image_url.url,
+        })
+      }
     }
   } else {
     resultText = typeof rawRes === 'string' ? rawRes : String(rawRes ?? '')
@@ -161,7 +171,12 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
     try {
       let res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId })
       if (!res?.success && res?.conflict) {
-        const ok = window.confirm(res.error + '\n是否确认强制回退？')
+        const ok = await showConfirm({
+          title: t('tool.rollback_conflict_title', '回退冲突确认'),
+          description: `${res.error}\n${t('tool.rollback_conflict_desc', '是否确认强制回退？')}`,
+          confirmText: t('common.force_continue', 'Force undo anyway'),
+          danger: true,
+        })
         if (ok) {
           res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId, force: true })
         }
@@ -427,10 +442,17 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                 )}
               </div>
             )}
-            {extractedImageUrl && (
-              <div className="mt-2 rounded-[2px] border overflow-hidden max-w-lg" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                <img src={extractedImageUrl} alt={t('tool.browser_snapshot')} className="w-full h-auto object-contain max-h-72" />
+            {extractedImages.length > 0 && (
+              <div className="mt-2">
+                <MessageImageGrid images={extractedImages} variant="tool" onOpen={setLightboxIndex} />
               </div>
+            )}
+            {lightboxIndex !== null && extractedImages.length > 0 && (
+              <ImageLightboxModal
+                images={extractedImages}
+                initialIndex={lightboxIndex}
+                onClose={() => setLightboxIndex(null)}
+              />
             )}
             {/* After-snapshot — shows the file's current content after the tool ran */}
             {tool.afterSnapshot && !tool.error && (
@@ -607,7 +629,7 @@ function AfterSnapshotView({ snapshot }: { snapshot: { path: string; content: st
         style={{ backgroundColor: 'var(--bg-secondary)' }}>
         <FileText size={11} style={{ color: 'var(--text-muted)' }} />
         <span className="text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-          执行后快照: {snapshot.path.split('/').pop()?.split('\\').pop()}
+          {t('tool.after_snapshot', '执行后快照')}: {snapshot.path.split('/').pop()?.split('\\').pop()}
         </span>
         <span className="text-[10px] ml-auto font-mono" style={{ color: 'var(--text-muted)' }}>
           {snapshot.content.length.toLocaleString()} chars {snapshot.truncated && '…'}

@@ -121,6 +121,11 @@ export async function setFeatureFlag(key: string, value: boolean | string): Prom
   return !!result.ok
 }
 
+// Force-refresh cached feature flags from main (useful after batch presets like safeMode).
+export async function refreshFeatureFlags(): Promise<boolean> {
+  return refresh()
+}
+
 // Read a flag once without subscribing (safe outside React components).
 export function useFlagsList(): FeatureFlagEntry[] {
   ensureLoaded()

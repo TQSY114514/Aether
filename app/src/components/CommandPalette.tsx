@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
-import { Search, MessageSquare, Cpu, Sparkles, Settings as SettingsIcon, Brain, Shield, Zap, FlaskConical } from 'lucide-react'
+import { Search, MessageSquare, Cpu, Settings as SettingsIcon, Brain, Shield, Zap, FlaskConical } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Global command palette (Ctrl+K). Fuzzy-search across sessions, models,
@@ -35,10 +35,30 @@ function fuzzy(label: string, q: string): number {
   return qi === q.length ? score : -1
 }
 
+type FtsHit = {
+  id: number
+  session_id: number
+  role: string
+  content: string
+  session_title?: string
+}
+
+function buildSnippet(content: string, query: string): string {
+  const flat = (content || '').replace(/\s+/g, ' ').trim()
+  if (!flat) return ''
+  const idx = flat.toLowerCase().indexOf(query.toLowerCase())
+  if (idx < 0) return flat.slice(0, 80) + (flat.length > 80 ? '...' : '')
+  const start = Math.max(0, idx - 24)
+  const end = Math.min(flat.length, idx + query.length + 56)
+  return (start > 0 ? '...' : '') + flat.slice(start, end) + (end < flat.length ? '...' : '')
+}
+
 /** Render and filter the application command palette. */
 export default function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(0)
+  const [ftsHits, setFtsHits] = useState<FtsHit[]>([])
+  const [searching, setSearching] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const sessions = useStore((s) => s.sessions)
@@ -55,7 +75,47 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   const effortLevel = useStore((s) => s.effortLevel)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
 
-  useEffect(() => { if (open) { setQ(''); setSel(0); setTimeout(() => inputRef.current?.focus(), 0) } }, [open])
+  useEffect(() => {
+    if (open) {
+      setQ('')
+      setSel(0)
+      setFtsHits([])
+      setSearching(false)
+      setTimeout(() => inputRef.current?.focus(), 0)
+    }
+  }, [open])
+
+  // Debounced global FTS5 message search across all sessions
+  useEffect(() => {
+    const trimmed = q.trim()
+    if (!open || trimmed.length < 2) {
+      setFtsHits([])
+      setSearching(false)
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const searchApi = window.electronAPI?.search
+        if (searchApi?.unified) {
+          const res = await searchApi.unified(trimmed, { limit: 12 })
+          if (!cancelled) setFtsHits(Array.isArray(res?.messages) ? res.messages : [])
+        } else if (searchApi?.messages) {
+          const msgs = await searchApi.messages(trimmed)
+          if (!cancelled) setFtsHits(Array.isArray(msgs) ? msgs.slice(0, 12) : [])
+        }
+      } catch {
+        if (!cancelled) setFtsHits([])
+      } finally {
+        if (!cancelled) setSearching(false)
+      }
+    }, 180)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [open, q])
 
   const commands = useMemo<Cmd[]>(() => {
     const cmds: Cmd[] = []
@@ -106,10 +166,36 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   }, [sessions, allModels, setCurrentView, setAgentMode, setEffortLevel, selectSession, saveSessionConfig, currentSessionId, onClose, language])
 
   const filtered = useMemo(() => {
-    if (!q.trim()) return commands
-    const scored = commands.map(c => ({ c, s: Math.max(fuzzy(c.label, q), fuzzy(c.group, q)) }))
-    return scored.filter(x => x.s >= 0).sort((a, b) => b.s - a.s).map(x => x.c)
-  }, [q, commands])
+    const trimmed = q.trim()
+    const base = !trimmed
+      ? commands
+      : commands
+          .map(c => ({ c, s: Math.max(fuzzy(c.label, trimmed), fuzzy(c.group, trimmed)) }))
+          .filter(x => x.s >= 0)
+          .sort((a, b) => b.s - a.s)
+          .map(x => x.c)
+
+    if (trimmed.length < 2 || ftsHits.length === 0) return base
+    const hitCmds: Cmd[] = ftsHits.map((m) => ({
+      id: `fts-msg-${m.session_id}-${m.id}`,
+      label: buildSnippet(m.content, trimmed) || `#${m.id}`,
+      hint: m.session_title || `#${m.session_id}`,
+      group: t('cmd.group.messages', '消息历史'),
+      icon: MessageSquare,
+      run: async () => {
+        onClose()
+        await selectSession(m.session_id)
+        useStore.getState().setCurrentView('chat')
+        useStore.getState().setMessageSearchQuery(trimmed)
+        window.dispatchEvent(
+          new CustomEvent('aether:jump-to-message', {
+            detail: { sessionId: m.session_id, messageId: m.id, query: trimmed },
+          })
+        )
+      },
+    }))
+    return [...base, ...hitCmds]
+  }, [q, commands, ftsHits, selectSession, onClose])
 
   useEffect(() => { setSel(0) }, [q])
   useEffect(() => {
@@ -149,7 +235,9 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
         </div>
         <div className="max-h-[50vh] overflow-y-auto py-1">
           {filtered.length === 0 && (
-            <div className="px-4 py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>{t('cmd.empty')}</div>
+            <div className="px-4 py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+              {searching ? t('cmd.searching', 'Searching message history...') : t('cmd.empty')}
+            </div>
           )}
           {groups.map(g => (
             <div key={g.name}>

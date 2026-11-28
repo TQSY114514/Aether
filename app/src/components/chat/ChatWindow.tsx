@@ -3,7 +3,10 @@ import { useStore } from '@/store'
 import MessageBubble from './MessageBubble'
 import EmptyState from './EmptyState'
 import { renderMarkdown, renderMarkdownTail, splitMarkdownBlocks, getHighlightVersion } from '@/utils/markdown'
+import { handleMarkdownContainerClick, useLocalImageFallback } from '@/utils/markdownDom'
+import { messageMatchesSearch } from '@/utils/exportMarkdown'
 import { t } from '@/utils/i18n'
+import ImageLightboxModal, { type LightboxImage } from './ImageLightboxModal'
 import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert, Star, Check, Sparkles } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
@@ -48,6 +51,9 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const [thinkingDuration, setThinkingDuration] = useState<number | null>(null)
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null)
   const [toolCalls, setToolCalls] = useState<any[]>(EMPTY_ARRAY)
+  const [lightboxState, setLightboxState] = useState<{ images: LightboxImage[]; index: number } | null>(null)
+
+  useLocalImageFallback(ref, sessionId)
 
   const renderIncrementalContent = useCallback((rawContent: string) => {
     const committedEl = committedRef.current
@@ -250,12 +256,27 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
             toolCalls={toolCalls.length > 0 ? toolCalls : undefined}
             streaming
           />
-          <div ref={ref} className="mc">
+          <div
+            ref={ref}
+            className="mc"
+            onClick={(e) =>
+              handleMarkdownContainerClick(e, ref.current, (images, index) =>
+                setLightboxState({ images, index })
+              )
+            }
+          >
             <div ref={committedRef} />
             <div ref={tailRef} className="typing-cursor" />
           </div>
         </div>
       </div>
+      {lightboxState && lightboxState.images.length > 0 && (
+        <ImageLightboxModal
+          images={lightboxState.images}
+          initialIndex={lightboxState.index}
+          onClose={() => setLightboxState(null)}
+        />
+      )}
     </div>
   )
 }
@@ -270,7 +291,7 @@ export default function ChatWindow() {
   // values actually change, not on every store update.
   const {
     messages, currentSessionId, isCurrentStreaming, currentStreamingMessageId, chatMode,
-    toolCallsByMessage, arenaResults, arenaResultsSessionId, arenaPending, arenaError,
+    toolCallsByMessage, thinkingBlocksByMessage, arenaResults, arenaResultsSessionId, arenaPending, arenaError,
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId, theme, backgroundImage,
   } = useStore(useShallow((s) => ({
@@ -280,6 +301,7 @@ export default function ChatWindow() {
     currentStreamingMessageId: s.currentSessionId ? (s.streamingBySession[s.currentSessionId]?.messageId ?? null) : null,
     chatMode: s.chatMode,
     toolCallsByMessage: s.toolCallsByMessage,
+    thinkingBlocksByMessage: s.thinkingBlocksByMessage,
     arenaResults: s.arenaResults,
     arenaResultsSessionId: s.arenaResultsSessionId,
     arenaPending: s.arenaPending,
@@ -411,15 +433,24 @@ export default function ChatWindow() {
     setActiveMsgId(null)
   }, [setMessageSearchQuery])
 
-  // Always reload messages when switching sessions. The messages array belongs
-  // to whichever session was active when it was last set; switching back needs
-  // a fresh load so cross-session streaming completion doesn't leave stale data.
+  const pendingJumpRef = useRef<{ sessionId: number; messageId: number; query?: string } | null>(null)
+
+  // Reload messages when switching sessions unless selectSession/createSession
+  // already populated this exact session within the last second.
   useEffect(() => {
     if (currentSessionId) {
-      loadMessages(currentSessionId)
+      const { lastMessagesLoaded } = useStore.getState()
+      const recentlyLoaded =
+        lastMessagesLoaded?.sessionId === currentSessionId &&
+        Date.now() - lastMessagesLoaded.at < 1000
+      if (!recentlyLoaded) {
+        loadMessages(currentSessionId)
+      }
     }
-    clearSearch()
-    setTimeout(() => scrollToBottom(false), 50)
+    if (!pendingJumpRef.current || pendingJumpRef.current.sessionId !== currentSessionId) {
+      clearSearch()
+      setTimeout(() => scrollToBottom(false), 50)
+    }
   }, [currentSessionId, loadMessages, scrollToBottom, clearSearch])
 
   // Only auto-scroll when the user is already near the bottom (normal reading
@@ -443,8 +474,10 @@ export default function ChatWindow() {
   const matchIds = useMemo(() => {
     if (!debouncedQuery.trim()) return [] as number[]
     const q = debouncedQuery.toLowerCase()
-    return messages.filter(m => m.content.toLowerCase().includes(q)).map(m => m.id)
-  }, [messages, debouncedQuery])
+    return messages
+      .filter((m) => messageMatchesSearch(m, q, thinkingBlocksByMessage[m.id], toolCallsByMessage[m.id]))
+      .map((m) => m.id)
+  }, [messages, debouncedQuery, thinkingBlocksByMessage, toolCallsByMessage])
   const [matchIdx, setMatchIdx] = useState(0)
   const [showTimeline, setShowTimeline] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -481,15 +514,53 @@ export default function ChatWindow() {
         setTimeout(() => searchInputRef.current?.focus(), 0)
       }
     }
+    const onJumpToMessage = (e: Event) => {
+      const detail = (e as CustomEvent<{ sessionId: number; messageId: number; query?: string }>).detail
+      if (!detail || !detail.messageId) return
+      pendingJumpRef.current = detail
+      if (detail.query) {
+        setMessageSearchQuery(detail.query)
+        setDebouncedQuery(detail.query)
+        setSearchOpen(true)
+      }
+      if (detail.sessionId === useStore.getState().currentSessionId) {
+        const idx = virtualMessages.findIndex(m => m.id === detail.messageId)
+        if (idx >= 0) {
+          pendingJumpRef.current = null
+          requestAnimationFrame(() => {
+            setActiveMsgId(detail.messageId)
+            scrollToMsg(detail.messageId)
+          })
+        }
+      }
+    }
     window.addEventListener('aether:toggle-chat-search', onToggleSearch)
     window.addEventListener('aether:toggle-run-timeline', onToggleTimeline)
+    window.addEventListener('aether:jump-to-message', onJumpToMessage)
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('aether:toggle-chat-search', onToggleSearch)
       window.removeEventListener('aether:toggle-run-timeline', onToggleTimeline)
+      window.removeEventListener('aether:jump-to-message', onJumpToMessage)
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [clearSearch])
+  }, [clearSearch, virtualMessages, scrollToMsg, setMessageSearchQuery])
+
+  useEffect(() => {
+    const pending = pendingJumpRef.current
+    if (!pending || pending.sessionId !== currentSessionId) return
+    if (!virtualMessages.some(m => m.id === pending.messageId)) return
+    pendingJumpRef.current = null
+    if (pending.query) {
+      setMessageSearchQuery(pending.query)
+      setDebouncedQuery(pending.query)
+      setSearchOpen(true)
+    }
+    requestAnimationFrame(() => {
+      setActiveMsgId(pending.messageId)
+      scrollToMsg(pending.messageId)
+    })
+  }, [currentSessionId, virtualMessages, scrollToMsg, setMessageSearchQuery])
 
   // Empty chat: render EmptyState safely centered via flex + my-auto.
   // When the window is short, my-auto prevents negative scroll / top clipping,

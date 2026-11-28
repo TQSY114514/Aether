@@ -74,6 +74,8 @@ const FLAG_DEFS = [
   { key: 'plugin.sdk',           default: false, category: 'ecosystem',   description: 'Third-party plugin SDK (registerTool/Skill/Agent/Provider)' },
   // Phase 6 — UX / onboarding
   { key: 'ux.firstRunWizard',   default: true,  category: 'ux',          description: 'First-run onboarding wizard (provider setup + permission recommendation)' },
+  { key: 'ux.mascotCompanion',  default: false, category: 'ux',          description: 'Show the optional Aether mascot companion in the sidebar footer' },
+  { key: 'composer.nextPromptPrediction', default: false, category: 'ux', description: 'Predict next user prompt in composer when idle' },
   // Phase 5 — Arena
   { key: 'arena.objectiveArena', default: false, category: 'agent',      description: 'Objective Sandbox Arena: run candidate models against a verifiable task and rank by pass/fail + ELO' },
   // Pre-push gate — blocks a push that would carry credentials to a remote.

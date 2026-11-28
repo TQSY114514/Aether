@@ -515,6 +515,10 @@ function getActiveProviders(db, includeInactive = false) {
     try {
       rows = db.listProviders()
     } catch {}
+  } else if (typeof db.getProvidersMetadata === 'function') {
+    try {
+      rows = db.getProvidersMetadata()
+    } catch {}
   } else if (typeof db.getProvidersDecrypted === 'function') {
     try {
       rows = db.getProvidersDecrypted()
@@ -525,11 +529,12 @@ function getActiveProviders(db, includeInactive = false) {
     } catch {}
   } else if (typeof db.prepare === 'function') {
     try {
-      rows = db.prepare('SELECT * FROM provider ORDER BY id').all()
-      if (typeof db.decryptKey === 'function') {
-        rows = rows.map(r => ({ ...r, api_key: db.decryptKey(r.api_key) }))
-      }
-    } catch {}
+      rows = db.prepare('SELECT id, name, api_url, api_format, enabled FROM provider ORDER BY id').all()
+    } catch {
+      try {
+        rows = db.prepare('SELECT * FROM provider ORDER BY id').all()
+      } catch {}
+    }
   }
 
   if (!Array.isArray(rows)) return []

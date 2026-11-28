@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll } from "vitest"
 import { useStore } from "@/store"
-import { ensureChunkListener, ensureToolCallListener } from "@/store/listeners"
+import { ensureChunkListener, ensureToolCallListener, ensureToolStreamListener } from "@/store/listeners"
 
 // The listeners bridge to the main process via `window.electronAPI` and use
 // `requestAnimationFrame` to batch stream flushes. In the node/vitest env both
@@ -21,6 +21,7 @@ type ToolPayload = {
 
 let chunkCb: ((p: ChunkPayload) => void) | null = null
 let toolCb: ((p: ToolPayload) => void) | null = null
+let toolStreamCb: ((p: { messageId: number; sessionId: number; text: string; done: boolean }) => void) | null = null
 let chunkRegisterCalls = 0
 let toolRegisterCalls = 0
 let rafCbs: Array<() => void> = []
@@ -44,6 +45,10 @@ beforeAll(() => {
         toolRegisterCalls++
         return () => {}
       },
+      onToolStream: (cb: (p: { messageId: number; sessionId: number; text: string; done: boolean }) => void) => {
+        toolStreamCb = cb
+        return () => {}
+      },
     },
     message: { list: async () => [] },
     arena: {},
@@ -58,6 +63,7 @@ beforeAll(() => {
   // Install once; the guards make them idempotent (asserted below).
   ensureChunkListener()
   ensureToolCallListener()
+  ensureToolStreamListener()
 })
 
 beforeEach(() => {
@@ -121,6 +127,40 @@ describe("chunk listener", () => {
     expect(st.streamingBySession[sid]).toBeUndefined()
     expect(st.messages[0].content).toBe("Hello world!")
   })
+  it("drains queued messages preserving attachments and snippets after stream completes", async () => {
+    const sid = 3
+    const sent: Array<{ content: string; attachments?: any[] }> = []
+    useStore.setState({
+      currentSessionId: sid,
+      sessions: [{ id: sid, title: "S3", created_at: "", updated_at: "", pinned: 0 } as any],
+      pinSession: async () => {},
+      loadSessions: async () => {},
+      notifyComplete: () => {},
+      sendMessage: (async (content: string, attachments?: any[]) => {
+        sent.push({ content, attachments })
+      }) as any,
+      queuedMessages: [
+        {
+          id: 1,
+          sessionId: sid,
+          content: "Please check",
+          attachments: [{ name: "a.png", mime: "image/png", kind: "image", dataUrl: "data:image/png;base64,123" }],
+          snippets: [{ id: 1, content: "console.log(1)", preview: "console.log(1)" }],
+        },
+      ],
+    })
+    ;(globalThis as any).window.electronAPI.message.list = async () => [{ id: 1, content: "done" }]
+
+    chunkCb!({ sessionId: sid, messageId: 301, delta: "ok", done: true })
+    flushRaf()
+    await new Promise((r) => setTimeout(r, 80))
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0].content).toContain("Please check")
+    expect(sent[0].content).toContain("console.log(1)")
+    expect(sent[0].attachments).toHaveLength(1)
+    expect(sent[0].attachments?.[0].name).toBe("a.png")
+  })
 })
 
 describe("tool call listener", () => {
@@ -149,6 +189,26 @@ describe("tool call listener", () => {
     const calls = useStore.getState().toolCallsByMessage[msgId]
     expect(calls).toHaveLength(2)
     expect(calls[1].result).toBe("found")
+  })
+})
+
+describe("tool stream listener", () => {
+  it("batches rapid tool-stream stdout chunks via rAF and flushes on done", () => {
+    const msgId = 7
+    toolCb!({ messageId: msgId, sessionId: 1, tool: { name: "run_command", args: { command: "ls" }, result: null, error: null } })
+
+    toolStreamCb!({ messageId: msgId, sessionId: 1, text: "line1\n", done: false })
+    toolStreamCb!({ messageId: msgId, sessionId: 1, text: "line2\n", done: false })
+    // Not flushed before rAF fires.
+    expect(useStore.getState().toolCallsByMessage[msgId][0].liveOutput).toBeUndefined()
+
+    flushRaf()
+    expect(useStore.getState().toolCallsByMessage[msgId][0].liveOutput).toBe("line1\nline2\n")
+    expect(useStore.getState().toolCallsByMessage[msgId][0].liveOutputDone).toBeUndefined()
+
+    toolStreamCb!({ messageId: msgId, sessionId: 1, text: "eof", done: true })
+    expect(useStore.getState().toolCallsByMessage[msgId][0].liveOutput).toBe("line1\nline2\neof")
+    expect(useStore.getState().toolCallsByMessage[msgId][0].liveOutputDone).toBe(true)
   })
 })
 

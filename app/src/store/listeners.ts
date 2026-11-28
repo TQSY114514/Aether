@@ -4,6 +4,7 @@ import type { TaskInfo } from "./types"
 import { taskProgressText, taskApi } from "./types"
 import { reconcileMessages } from "./chatSlice"
 import { t } from "../utils/i18n"
+import { composePromptWithSnippets } from "../utils/exportMarkdown"
 
 // Lazy store reference - set by initStoreListeners() after store creation.
 let _store: StoreApi<AppState> | null = null
@@ -34,6 +35,8 @@ let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
 let _thinkingStreamRaf = 0
 let _pendingThinkingDeltas: Record<number, string> = {}
+let _toolStreamRaf = 0
+let _pendingToolStreams: Record<number, { text: string; done: boolean }> = {}
 let _statusListenerInstalled = false
 let _habitSuggestionInstalled = false
 let _todoListenerInstalled = false
@@ -103,10 +106,13 @@ export function ensureChunkListener() {
     if (done) {
       flushStreamUpdates()
       flushThinkingUpdates()
+      flushToolStreamUpdates()
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
       if (_thinkingStreamRaf) { cancelAnimationFrame(_thinkingStreamRaf); _thinkingStreamRaf = 0 }
+      if (_toolStreamRaf) { cancelAnimationFrame(_toolStreamRaf); _toolStreamRaf = 0 }
       _pendingDeltas = {}
       _pendingThinkingDeltas = {}
+      _pendingToolStreams = {}
       const sid = sessionId
       const finishedMsgId = messageId || (buf && buf.messageId) || null
       if (finishedMsgId != null) {
@@ -199,8 +205,14 @@ export function ensureChunkListener() {
               await st.selectSession(targetSid)
             }
             const st4 = getStore().getState()
-            if (st4.chatMode === "arena") st4.runArena(q.content)
-            else st4.sendMessage(q.content)
+            const finalContent = composePromptWithSnippets(
+              q.content,
+              q.snippets,
+              (n) => t('paste.snippet_n', n)
+            )
+            const atts = q.attachments && q.attachments.length > 0 ? q.attachments : undefined
+            if (st4.chatMode === "arena") st4.runArena(finalContent)
+            else st4.sendMessage(finalContent, atts)
           }, 50)
         }
       })
@@ -486,28 +498,63 @@ export function ensureThinkingListener() {
 }
 
 // Tool stream listener — live stdout/stderr from run_command (and future
-// streaming tools). Chunks attach to the currently-running tool call for the
-// message (the last entry with result == null && error == null).
+// streaming tools). Batched via rAF so rapid stdout chunks never clone
+// toolCallsByMessage or re-render ToolCallBlock faster than the frame rate.
+function flushToolStreamUpdates() {
+  const pending = _pendingToolStreams
+  _pendingToolStreams = {}
+  const entries = Object.entries(pending)
+  if (entries.length === 0) return
+  getStore().setState((s) => {
+    let nextMap: Record<number, any[]> | null = null
+    for (const [midStr, chunk] of entries) {
+      const mid = Number(midStr)
+      const calls = (nextMap ? nextMap[mid] : null) ?? s.toolCallsByMessage[mid]
+      if (!calls || calls.length === 0) continue
+      let target = -1
+      for (let i = calls.length - 1; i >= 0; i--) {
+        if (calls[i].result == null && calls[i].error == null) {
+          target = i
+          break
+        }
+      }
+      if (target < 0) continue
+      const next = [...calls]
+      next[target] = {
+        ...next[target],
+        liveOutput: (next[target].liveOutput || "") + chunk.text,
+        ...(chunk.done ? { liveOutputDone: true } : {}),
+      }
+      if (!nextMap) nextMap = { ...s.toolCallsByMessage }
+      nextMap[mid] = next
+    }
+    return nextMap ? { toolCallsByMessage: nextMap } : s
+  })
+}
+
 export function ensureToolStreamListener() {
   if (_toolStreamListenerInstalled) return
   _toolStreamListenerInstalled = true
-  window.electronAPI.chat.onToolStream?.(({ messageId, sessionId, text, done }) => {
+  window.electronAPI.chat.onToolStream?.(({ messageId, text, done }) => {
     if (!messageId) return
-    getStore().setState((s) => {
-      const calls = s.toolCallsByMessage[messageId]
-      if (!calls || calls.length === 0) return s
-      // Find the running tool call: last entry still awaiting a result.
-      const idx = calls.map((c, i) => ({ c, i })).filter(({ c }) => c.result == null && c.error == null).pop()
-      if (!idx) return s
-      const target = idx.i
-      const next = [...calls]
-      next[target] = { ...next[target], liveOutput: (next[target].liveOutput || "") + (text || "") }
-      if (done) {
-        // Mark the stream finished so the UI can stop showing the live cursor.
-        next[target] = { ...next[target], liveOutputDone: true }
-      }
-      return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: next } }
-    })
+    const cur = _pendingToolStreams[messageId]
+    if (cur) {
+      cur.text += text || ""
+      cur.done = cur.done || Boolean(done)
+    } else {
+      _pendingToolStreams[messageId] = { text: text || "", done: Boolean(done) }
+    }
+    if (done) {
+      if (_toolStreamRaf) { cancelAnimationFrame(_toolStreamRaf); _toolStreamRaf = 0 }
+      flushToolStreamUpdates()
+      return
+    }
+    if (!_toolStreamRaf) {
+      _toolStreamRaf = requestAnimationFrame(() => {
+        _toolStreamRaf = 0
+        flushToolStreamUpdates()
+      })
+    }
   })
 }
 

@@ -16,6 +16,7 @@ export const SHORTCUTS: ShortcutMeta[] = [
   { id: 'toggle-palette', group: 'global', desc: 'Command palette', combos: ['Ctrl+K'] },
   { id: 'toggle-shortcuts', group: 'global', desc: 'Keyboard shortcuts help', combos: ['Ctrl+?', 'Ctrl+/'], laxMods: ['shift'] },
   { id: 'new-chat', group: 'chat', desc: 'New chat', combos: ['Ctrl+N'] },
+  { id: 'in-chat-search', group: 'chat', desc: 'Search in current chat', combos: ['Ctrl+F'] },
   { id: 'regenerate', group: 'chat', desc: 'Regenerate last reply', combos: ['Ctrl+R'] },
   { id: 'edit-last', group: 'chat', desc: 'Edit last message', combos: ['Ctrl+E'] },
   { id: 'undo', group: 'chat', desc: 'Undo last edit', combos: ['Ctrl+Z'] },

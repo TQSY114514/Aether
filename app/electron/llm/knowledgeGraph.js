@@ -25,6 +25,10 @@ const { keywords: sharedKeywords } = require('../memoryText')
 const MAX_GRAPH_RESULTS = 10
 const MIN_CONFIDENCE = 0.3
 const GRAPH_WINDOW = 50 // last N memories to scan for graph building
+const MAX_QUERY_KEYWORDS = 6
+const MAX_MATCHING_NODES = 20
+const MAX_EDGES_PER_NODE = 20
+const MAX_NEIGHBOURS = 40
 
 // ─── Build graph from raw memory rows ──────────────────────────────────────
 // Called once after autoMemory sync completes. Extracts entities and relations
@@ -120,47 +124,52 @@ function buildGraph(db) {
 
 function searchGraph(db, query, limit = 5) {
   try {
-    const qkws = _keywords(query)
+    const qkws = [...new Set(_keywords(query))].slice(0, MAX_QUERY_KEYWORDS)
     if (qkws.length === 0) return []
 
-    // Find entities matching ANY query keyword（此前只用 qkws[0]，多词查询漏配）。
+    // Find entities matching top unique non-stopword query keywords.
     const matchingNodes = []
     const seenEntities = new Set()
     for (const kw of qkws) {
       const rows = db.allRows(
-        `SELECT entity, type FROM kg_nodes WHERE LOWER(entity) LIKE ? LIMIT 20`,
-        [`%${kw}%`]
+        `SELECT entity, type FROM kg_nodes WHERE LOWER(entity) LIKE ? LIMIT ?`,
+        [`%${kw}%`, MAX_MATCHING_NODES]
       ) || []
       for (const r of rows) {
         if (r && r.entity && !seenEntities.has(r.entity)) {
           seenEntities.add(r.entity)
           matchingNodes.push(r)
+          if (matchingNodes.length >= MAX_MATCHING_NODES) break
         }
       }
-      if (matchingNodes.length >= 20) break
+      if (matchingNodes.length >= MAX_MATCHING_NODES) break
     }
 
     if (matchingNodes.length === 0) return []
 
-    // Collect 1-hop neighbour entities.
+    // Collect 1-hop neighbour entities (bounded per node and in total).
     const neighbours = new Set()
     for (const node of matchingNodes) {
+      if (neighbours.size >= MAX_NEIGHBOURS) break
       const entity = node.entity
       // Outgoing edges.
       const out = db.allRows(
-        `SELECT "to", relation, confidence FROM kg_edges WHERE "from" = ? AND confidence >= ?`,
-        [entity, MIN_CONFIDENCE]
+        `SELECT "to", relation, confidence FROM kg_edges WHERE "from" = ? AND confidence >= ? LIMIT ?`,
+        [entity, MIN_CONFIDENCE, MAX_EDGES_PER_NODE]
       ) || []
       for (const row of out) {
-        neighbours.add(row.to)
+        if (row && row.to) neighbours.add(row.to)
+        if (neighbours.size >= MAX_NEIGHBOURS) break
       }
+      if (neighbours.size >= MAX_NEIGHBOURS) break
       // Incoming edges.
       const inEdges = db.allRows(
-        `SELECT "from", relation, confidence FROM kg_edges WHERE "to" = ? AND confidence >= ?`,
-        [entity, MIN_CONFIDENCE]
+        `SELECT "from", relation, confidence FROM kg_edges WHERE "to" = ? AND confidence >= ? LIMIT ?`,
+        [entity, MIN_CONFIDENCE, MAX_EDGES_PER_NODE]
       ) || []
       for (const row of inEdges) {
-        neighbours.add(row.from)
+        if (row && row.from) neighbours.add(row.from)
+        if (neighbours.size >= MAX_NEIGHBOURS) break
       }
     }
 
@@ -521,5 +530,9 @@ module.exports = {
   addRelation,
   deleteRelation,
   getWikiArticle,
+  MAX_QUERY_KEYWORDS,
+  MAX_MATCHING_NODES,
+  MAX_EDGES_PER_NODE,
+  MAX_NEIGHBOURS,
 }
 

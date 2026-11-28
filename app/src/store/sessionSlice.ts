@@ -15,6 +15,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
   sessionConfigs: {},
   sessionHistory: [],
   sessionHistoryIdx: -1,
+  lastMessagesLoaded: null,
 
   loadSessions: async () => {
     const sessions = await window.electronAPI.session.list()
@@ -70,6 +71,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
       sessions: [...s.sessions, result.session],
       sessionConfigs: { ...s.sessionConfigs, [sid]: sessionCfg },
       messages: result.messages || [],
+      lastMessagesLoaded: { sessionId: sid, at: Date.now() },
     }))
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
     await get().loadWorkspaceSoul(result.session?.cwd || (sessionCfg as any)?.workspace || null)
@@ -170,6 +172,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
       return {
         currentSessionId: id,
         messages: msgs,
+        lastMessagesLoaded: { sessionId: id, at: Date.now() },
         arenaResults: [],
         thinkingBlocksByMessage: boundedThinkingBlocks,
         thinkingDurationsByMessage: boundedThinkingDurations,

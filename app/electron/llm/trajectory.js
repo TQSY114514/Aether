@@ -325,13 +325,17 @@ function compressTrajectory(messages, options = {}) {
   const older = messages.slice(0, splitIdx)
   const recent = messages.slice(splitIdx)
 
-  // Separate key messages from mechanical messages in the older block
-  const keyMessages = []
+  // Preserve leading system instructions from `older` in place and separate key vs mechanical
+  // non-system messages without reordering `keyMessages` out of chronological order.
+  const leadingSystem = []
+  const keptOlder = []
   const mechanicalMessages = []
 
   for (const msg of older) {
-    if (keepKey && isKeyMessage(msg)) {
-      keyMessages.push(msg)
+    if (msg.role === 'system' && mechanicalMessages.length === 0 && keptOlder.length === 0) {
+      leadingSystem.push(msg)
+    } else if (keepKey && isKeyMessage(msg)) {
+      keptOlder.push(msg)
     } else {
       mechanicalMessages.push(msg)
     }
@@ -345,20 +349,15 @@ function compressTrajectory(messages, options = {}) {
   // Build a summary of mechanical messages
   const summary = buildTrajectorySummary(mechanicalMessages)
 
-  // Build result: system messages + PortContext + key messages + summary + recent
-  const systemMsgs = messages.filter(m => m.role === 'system' && !older.includes(m))
+  const trailingSystem = messages.filter(m => m.role === 'system' && !older.includes(m))
   const result = [
-    ...systemMsgs,
+    ...leadingSystem,
+    ...(portContext ? [{ role: 'system', content: portContext.toString() }] : []),
     { role: 'system', content: summary },
-    ...keyMessages,
+    ...keptOlder,
+    ...trailingSystem,
     ...recent,
   ]
-
-  // Append PortContext snapshot to the summary if available
-  if (portContext) {
-    // Insert PortContext snapshot as a system message after the compression summary
-    result.splice(1, 0, { role: 'system', content: portContext.toString() })
-  }
 
   return {
     messages: result,

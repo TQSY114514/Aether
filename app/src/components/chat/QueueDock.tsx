@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { useStore } from '@/store'
+import type { QueuedMessageItem } from '@/store/types'
 import { t } from '@/utils/i18n'
 import {
   ListOrdered,
@@ -16,11 +17,11 @@ import {
   Trash2,
   X,
   Edit3,
-  Layers,
+  Paperclip,
 } from 'lucide-react'
 
 interface QueueDockProps {
-  onEditInComposer?: (content: string) => boolean | void
+  onEditInComposer?: (item: QueuedMessageItem) => Promise<boolean | void> | boolean | void
 }
 
 export default function QueueDock({ onEditInComposer }: QueueDockProps) {
@@ -129,8 +130,19 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
                 </div>
 
                 {/* Content preview */}
-                <div className="flex-1 min-w-0 text-[var(--text-primary)] truncate font-mono text-[11px]">
-                  {item.content}
+                <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                  <span className="truncate text-[var(--text-primary)] font-mono text-[11px]">
+                    {item.content || t('queue.attachments_only', '附件消息')}
+                  </span>
+                  {((item.attachments?.length || 0) + (item.snippets?.length || 0)) > 0 && (
+                    <span
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[4px] border text-[10px] font-mono shrink-0"
+                      style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-secondary)' }}
+                    >
+                      <Paperclip size={10} />
+                      <span>{(item.attachments?.length || 0) + (item.snippets?.length || 0)}</span>
+                    </span>
+                  )}
                 </div>
 
                 {/* Actions */}
@@ -161,8 +173,8 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
                   {onEditInComposer && (
                     <button
                       type="button"
-                      onClick={() => {
-                        const ok = onEditInComposer(item.content)
+                      onClick={async () => {
+                        const ok = await onEditInComposer(item)
                         if (ok !== false) {
                           removeQueued(item.id)
                         }

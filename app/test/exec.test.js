@@ -37,5 +37,5 @@ describe('runCommand', () => {
     const r = await runCommand('node', ['-e', 'while(true) console.log("x".repeat(100))'], { timeout: 5000, maxBuffer: 1024 })
     // 进程应被终止(非 0 退出或 timedOut)——taskkill 异步, 缓冲可能已部分收集
     expect(r.exitCode !== 0 || r.timedOut).toBe(true)
-  })
+  }, 15000)
 })

@@ -16,6 +16,8 @@ import {
   Shrink,
 } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import { showToast } from '@/components/ui/feedback'
+import { copyImageToClipboard, downloadImageSource } from '@/utils/lightboxUtils'
 
 export interface LightboxImage {
   name?: string
@@ -147,7 +149,7 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
     const img = imgRef.current
     if (img && naturalSize && img.clientWidth > 0) {
       const ratio = naturalSize.w / img.clientWidth
-      return Math.max(1.2, Math.min(6, Number(ratio.toFixed(2))))
+      return Math.max(1, Math.min(8, Number(ratio.toFixed(2))))
     }
     return 2
   }, [naturalSize])
@@ -160,7 +162,9 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
         setScale(1)
         setPosition({ x: 0, y: 0 })
       } else {
-        const targetScale = getActualPixelScale()
+        const actual = getActualPixelScale()
+        // If double-clicking a small image already shown at 1:1, zoom to 2x so double-click stays responsive
+        const targetScale = e && actual <= 1.02 ? 2 : actual
         if (e && containerRef.current) {
           const stageRect = containerRef.current.getBoundingClientRect()
           const stageCenterX = stageRect.left + stageRect.width / 2
@@ -326,35 +330,20 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!currentImage?.preview) return
-    if (navigator.clipboard?.write && window.ClipboardItem) {
-      try {
-        const res = await fetch(currentImage.preview)
-        const blob = await res.blob()
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })])
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
-        return
-      } catch {
-        // Fallback to electronAPI if web API throws
-      }
-    }
-    // Fallback to electronAPI
-    if ((window as any).electronAPI?.system?.clipboardWrite) {
-      ;(window as any).electronAPI.system.clipboardWrite(currentImage.preview)
+    const ok = await copyImageToClipboard(currentImage.preview)
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
+    } else {
+      showToast(t('chat.lightbox.copy_failed', '复制图片失败'), { type: 'warning' })
     }
   }
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!currentImage?.preview) return
-    const a = document.createElement('a')
-    a.href = currentImage.preview
-    a.download = currentImage.name || `image-${currentIndex + 1}.png`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    const defaultName = currentImage.name || `image-${currentIndex + 1}.png`
+    await downloadImageSource(currentImage.preview, defaultName)
   }
 
   if (!currentImage) return null
@@ -367,7 +356,7 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
       role="dialog"
       aria-modal="true"
       aria-label={currentImage.name || 'Image Preview'}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none overflow-hidden animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 select-none overflow-hidden animate-fade-in motion-reduce:animate-none"
       onClick={(e) => {
         // Clicking backdrop closes modal; dragging doesn't close
         if (!hasDragged && e.target === containerRef.current) {
@@ -379,27 +368,27 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
     >
       {/* Top HUD Bar: File Info + Actions (clears Electron WCO window controls when not OS fullscreen) */}
       <div
-        className={`pointer-events-none absolute top-0 inset-x-0 z-20 h-12 flex items-center justify-between gap-4 pl-5 transition-opacity duration-300 ${
+        className={`pointer-events-none absolute top-0 inset-x-0 z-20 h-12 flex items-center justify-between gap-4 pl-5 transition-opacity duration-300 motion-reduce:transition-none ${
           isFullscreen ? 'pr-5' : 'pr-[152px]'
         } ${isHudIdle ? 'opacity-25 hover:opacity-100' : 'opacity-100'}`}
       >
         <div
-          className="pointer-events-auto app-no-drag min-w-0 flex items-center gap-2 px-3 py-1.5 rounded-[6px] text-xs font-mono shadow-lg border border-white/10 backdrop-blur-md"
-          style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)', color: '#d4d4d8' }}
+          className="pointer-events-auto app-no-drag min-w-0 flex items-center gap-2 px-3 py-1.5 rounded-[6px] text-xs font-mono shadow-md border"
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           onClick={(e) => e.stopPropagation()}
         >
           <span className="truncate max-w-sm font-medium">{currentImage.name || `image-${currentIndex + 1}`}</span>
           {naturalSize && (
-            <span className="opacity-60 text-[11px] tabular-nums font-normal">
+            <span className="text-[11px] tabular-nums font-normal" style={{ color: 'var(--text-muted)' }}>
               ({naturalSize.w} × {naturalSize.h} px)
             </span>
           )}
-          <div className="w-[1px] h-3 bg-white/15 mx-1" />
-          <span className="opacity-80 text-[11px] font-mono tabular-nums">
+          <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--border)' }} />
+          <span className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--text-secondary)' }}>
             {isFit ? t('chat.lightbox.fit') : `${Math.round(scale * 100)}%`}
           </span>
           {rotation !== 0 && (
-            <span className="opacity-60 text-[11px] font-mono tabular-nums">
+            <span className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--text-muted)' }}>
               {rotation}°
             </span>
           )}
@@ -410,22 +399,22 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           className="pointer-events-auto app-no-drag shrink-0 flex items-center gap-2"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Fullscreen Toggle */}
           <button
+            type="button"
             onClick={handleToggleFullscreen}
-            className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
-            style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
+            className="p-2 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky transition-colors motion-reduce:transition-none border shadow-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             title={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
             aria-label={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
           >
             {isFullscreen ? <Shrink size={16} /> : <Expand size={16} />}
           </button>
 
-          {/* Close Button */}
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
-            style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
+            className="p-2 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky transition-colors motion-reduce:transition-none border shadow-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             title={t('chat.lightbox.close')}
             aria-label={t('chat.lightbox.close')}
           >
@@ -437,14 +426,15 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
       {/* Gallery Left Arrow (Multi-image) */}
       {images.length > 1 && (
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation()
             handlePrev()
           }}
-          className={`absolute left-6 z-20 p-3 rounded-full text-white/80 hover:text-white border border-white/10 shadow-xl backdrop-blur-md transition-all active:scale-90 hover:bg-white/15 ${
+          className={`absolute left-6 z-20 p-2.5 rounded-[8px] border shadow-lg transition-all motion-reduce:transition-none active:scale-95 hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer ${
             isHudIdle ? 'opacity-20 hover:opacity-100' : 'opacity-100'
           }`}
-          style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           title={t('chat.lightbox.prev')}
           aria-label={t('chat.lightbox.prev')}
         >
@@ -475,7 +465,7 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
             ref={imgRef}
             src={currentImage.preview}
             alt={currentImage.name || 'Image'}
-            className="max-w-[96vw] max-h-[92vh] object-contain select-none pointer-events-none drop-shadow-2xl"
+            className="max-w-[96vw] max-h-[92vh] object-contain select-none pointer-events-none"
             onLoad={(e) => {
               const img = e.currentTarget
               setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
@@ -488,14 +478,15 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
       {/* Gallery Right Arrow (Multi-image) */}
       {images.length > 1 && (
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation()
             handleNext()
           }}
-          className={`absolute right-6 z-20 p-3 rounded-full text-white/80 hover:text-white border border-white/10 shadow-xl backdrop-blur-md transition-all active:scale-90 hover:bg-white/15 ${
+          className={`absolute right-6 z-20 p-2.5 rounded-[8px] border shadow-lg transition-all motion-reduce:transition-none active:scale-95 hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer ${
             isHudIdle ? 'opacity-20 hover:opacity-100' : 'opacity-100'
           }`}
-          style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           title={t('chat.lightbox.next')}
           aria-label={t('chat.lightbox.next')}
         >
@@ -503,9 +494,9 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
         </button>
       )}
 
-      {/* Bottom Floating Island: Filmstrip + Control Pill */}
+      {/* Bottom Floating Island: Filmstrip + Control Bar */}
       <div
-        className={`absolute bottom-5 z-20 flex flex-col items-center gap-2 max-w-2xl w-full px-4 transition-opacity duration-300 ${
+        className={`absolute bottom-5 z-20 flex flex-col items-center gap-2 max-w-2xl w-full px-4 transition-opacity duration-300 motion-reduce:transition-none ${
           isHudIdle ? 'opacity-25 hover:opacity-100' : 'opacity-100'
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -513,20 +504,20 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
         {/* Filmstrip Carousel (Multi-image) */}
         {images.length > 1 && (
           <div
-            className="flex items-center gap-1.5 p-1.5 rounded-[8px] border border-white/10 backdrop-blur-md shadow-xl overflow-x-auto max-w-full"
-            style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
+            className="flex items-center gap-1.5 p-1.5 rounded-[10px] border shadow-lg overflow-x-auto max-w-full"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
           >
             {images.map((img, idx) => {
               const isActive = idx === currentIndex
               return (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => setCurrentIndex(idx)}
-                  className={`w-10 h-10 rounded-[4px] overflow-hidden border transition-all shrink-0 ${
-                    isActive
-                      ? 'border-white opacity-100 scale-105 shadow-md'
-                      : 'border-transparent opacity-45 hover:opacity-85'
+                  className={`w-10 h-10 rounded-[6px] overflow-hidden border transition-all motion-reduce:transition-none shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer ${
+                    isActive ? 'opacity-100' : 'opacity-50 hover:opacity-90'
                   }`}
+                  style={{ borderColor: isActive ? 'var(--accent)' : 'var(--border)' }}
                   title={img.name || `image-${idx + 1}`}
                 >
                   <img
@@ -541,35 +532,37 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           </div>
         )}
 
-        {/* Minimalist Floating Pill Toolbar */}
+        {/* Control Bar */}
         <div
-          className="flex items-center gap-1 px-3.5 py-1.5 rounded-full border border-white/10 shadow-2xl backdrop-blur-md text-xs text-white"
-          style={{ backgroundColor: 'rgba(24, 24, 27, 0.90)' }}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-[10px] border shadow-lg text-xs"
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         >
           {images.length > 1 && (
             <>
-              <span className="font-mono text-[11px] font-medium text-white/70 px-1">
+              <span className="font-mono text-[11px] font-medium px-1" style={{ color: 'var(--text-muted)' }}>
                 {currentIndex + 1} / {images.length}
               </span>
-              <div className="w-[1px] h-3.5 bg-white/15 mx-0.5" />
+              <div className="w-[1px] h-3.5 mx-0.5" style={{ backgroundColor: 'var(--border)' }} />
             </>
           )}
 
           {/* Zoom Out */}
           <button
+            type="button"
             onClick={handleZoomOut}
             disabled={scale <= 0.25}
-            className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky disabled:opacity-30"
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={t('chat.lightbox.zoom_out')}
             aria-label={t('chat.lightbox.zoom_out')}
           >
             <ZoomOut size={14} />
           </button>
 
-          {/* Scale Reset Pill */}
+          {/* Scale Reset */}
           <button
+            type="button"
             onClick={handleResetZoom}
-            className="px-2 py-0.5 rounded-full font-mono text-[11px] hover:bg-white/15 icon-btn-silky tabular-nums"
+            className="px-2 py-0.5 rounded-[6px] font-mono text-[11px] hover:bg-[var(--bg-secondary)] icon-btn-silky tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={t('chat.lightbox.reset')}
             aria-label={t('chat.lightbox.reset')}
           >
@@ -578,21 +571,23 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
 
           {/* Zoom In */}
           <button
+            type="button"
             onClick={handleZoomIn}
             disabled={scale >= 8}
-            className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky disabled:opacity-30"
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={t('chat.lightbox.zoom_in')}
             aria-label={t('chat.lightbox.zoom_in')}
           >
             <ZoomIn size={14} />
           </button>
 
-          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5" />
+          <div className="w-[1px] h-3.5 mx-0.5" style={{ backgroundColor: 'var(--border)' }} />
 
           {/* Toggle Fit ↔ 1:1 Actual Size */}
           <button
+            type="button"
             onClick={() => handleToggleFitOrActual()}
-            className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={scale > 1.05 ? t('chat.lightbox.fit_to_window') : t('chat.lightbox.actual_size')}
             aria-label={scale > 1.05 ? t('chat.lightbox.fit_to_window') : t('chat.lightbox.actual_size')}
           >
@@ -601,8 +596,9 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
 
           {/* Fullscreen Toggle */}
           <button
+            type="button"
             onClick={handleToggleFullscreen}
-            className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
             aria-label={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
           >
@@ -611,8 +607,9 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
 
           {/* Rotate 90° Clockwise */}
           <button
+            type="button"
             onClick={handleRotate}
-            className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={t('chat.lightbox.rotate')}
             aria-label={t('chat.lightbox.rotate')}
           >
@@ -621,18 +618,20 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
 
           {/* Copy Image */}
           <button
+            type="button"
             onClick={handleCopy}
-            className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky relative"
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky relative focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={copied ? t('chat.lightbox.copied') : t('chat.lightbox.copy')}
             aria-label={copied ? t('chat.lightbox.copied') : t('chat.lightbox.copy')}
           >
-            {copied ? <Check size={14} className="text-emerald-400 animate-scale-pop" /> : <Copy size={14} />}
+            {copied ? <Check size={14} style={{ color: 'var(--success)' }} className="animate-scale-pop motion-reduce:animate-none" /> : <Copy size={14} />}
           </button>
 
           {/* Download Image */}
           <button
+            type="button"
             onClick={handleDownload}
-            className="p-1.5 rounded-full hover:bg-white/15 icon-btn-silky"
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             title={t('chat.lightbox.download')}
             aria-label={t('chat.lightbox.download')}
           >

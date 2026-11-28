@@ -1,11 +1,14 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Settings, ChevronLeft, Trash2, Search, Pin, Download, Loader2, TerminalSquare, PanelLeft, FlaskConical, Folder } from 'lucide-react'
+import { MessageSquare, Plus, Settings, ChevronLeft, Trash2, Search, Pin, Download, Loader2, TerminalSquare, PanelLeft, FlaskConical, Folder, FileText } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import { stripChannelMarkers } from '@/utils/markdown'
-import HoverMarquee from '@/components/ui/HoverMarquee'
+import { formatSessionAsMarkdown, downloadMarkdownFile } from '@/utils/exportMarkdown'
+import MascotCompanion from '@/components/mascot/MascotCompanion'
+import SidebarSessionRow from './SidebarSessionRow'
 
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
@@ -162,6 +165,30 @@ export default function Sidebar() {
 
   const groups = useMemo(() => getSessionGroups(filteredSessions, needsInputIds), [filteredSessions, needsInputIds, language])
 
+  type SidebarRow =
+    | { type: 'header'; key: string; label: string; count: number; kind?: 'needs_input' }
+    | { type: 'session'; key: string; session: Session }
+
+  const flatRows = useMemo<SidebarRow[]>(() => {
+    const rows: SidebarRow[] = []
+    for (const g of groups) {
+      rows.push({ type: 'header', key: `hdr:${g.label}`, label: g.label, count: g.count, kind: g.kind })
+      for (const s of g.sessions) {
+        rows.push({ type: 'session', key: `sess:${s.id}`, session: s })
+      }
+    }
+    return rows
+  }, [groups])
+
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  const rowVirtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => listScrollRef.current,
+    estimateSize: (i) => (flatRows[i]?.type === 'header' ? 28 : 54),
+    overscan: 8,
+    getItemKey: (i) => flatRows[i].key,
+  })
+
   const handleDoubleClick = (session: Session) => {
     setRenamingId(session.id); setRenameValue(session.title || '')
   }
@@ -188,12 +215,41 @@ export default function Sidebar() {
     return () => { window.removeEventListener('click', close); window.removeEventListener('contextmenu', close) }
   }, [ctxMenu])
 
+  const [ftsMsgHits, setFtsMsgHits] = useState<Array<{ id: number; session_id: number; role: string; content: string; session_title?: string }>>([])
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim()
+    if (!sidebarOpen || trimmed.length < 2) {
+      setFtsMsgHits([])
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const res = await window.electronAPI?.search?.messages?.(trimmed)
+        if (!cancelled) setFtsMsgHits(Array.isArray(res) ? res.slice(0, 10) : [])
+      } catch {
+        if (!cancelled) setFtsMsgHits([])
+      }
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [sidebarOpen, searchQuery])
+
   const exportSession = async (session: Session) => {
     const msgs = await window.electronAPI.message.list(session.id)
     const data = { session, messages: msgs }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `aetherai-session-${session.id}-${(session.title || 'chat').slice(0, 20)}.json`
     a.click(); URL.revokeObjectURL(a.href)
+  }
+
+  const exportSessionMarkdown = async (session: Session) => {
+    const msgs = await window.electronAPI.message.list(session.id)
+    const md = formatSessionAsMarkdown(session, msgs)
+    downloadMarkdownFile(`aetherai-session-${session.id}-${(session.title || 'chat').slice(0, 24)}`, md)
   }
 
   return (
@@ -243,6 +299,7 @@ export default function Sidebar() {
           </button>
           <div className="w-5 my-1.5 border-t border-[var(--border)]" />
           <div className="mt-auto flex flex-col items-center gap-1 w-full pb-2">
+            <MascotCompanion compact />
             {([
               { id: 'chat' as const, icon: MessageSquare, title: t('sidebar.nav.workspace', '工作区') },
               { id: 'arena' as const, icon: FlaskConical, title: t('sidebar.nav.arena', '竞技场') },
@@ -328,127 +385,110 @@ export default function Sidebar() {
           </div>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
-        {groups.length === 0 && (
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
+        {flatRows.length === 0 && ftsMsgHits.length === 0 && (
           <div className="text-center py-8 text-xs" style={{ color: 'var(--text-muted)' }}>
             {searchQuery || cwdFilter ? t('sidebar.no_match') : t('sidebar.no_sessions')}
           </div>
         )}
-        {groups.map((group) => (
-          <div key={group.label} className="mb-1">
-            <div className="session-date flex items-center justify-between">
-              <span className="flex items-center gap-1.5" style={group.kind === 'needs_input' ? { color: 'var(--warning)' } : undefined}>
-                {group.kind === 'needs_input' && (
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--warning)' }} />
-                )}
-                {group.label}
-              </span>
-              <span className="text-[10px] font-normal" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>{group.count}</span>
-            </div>
-            {group.sessions.map((session) => {
-              const isNeedsInput = needsInputIds.has(session.id)
-              const isStreaming = Boolean(activeStreamingIds && activeStreamingIds.split(',').includes(String(session.id)))
-              const dirTag = getDirTag(session.cwd)
+        {flatRows.length > 0 && (
+          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+            {rowVirtualizer.getVirtualItems().map((vi) => {
+              const row = flatRows[vi.index]
               return (
-              <div key={session.id}
-                onClick={() => { selectSession(session.id); setCurrentView('chat') }}
-                onDoubleClick={() => handleDoubleClick(session)}
-                onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
-                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm mb-px session-item-interactive ${currentSessionId === session.id ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
-                style={currentSessionId === session.id ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
-                {isNeedsInput ? (
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0 animate-pulse motion-reduce:animate-none"
-                    style={{ backgroundColor: 'var(--warning)' }}
-                    title={t('sidebar.badge.needs_input')}
-                  />
-                ) : session.pinned ? (
-                  <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
-                ) : (
-                  <MessageSquare size={14} className="text-[var(--text-muted)] shrink-0" />
-                )}
-                {!isNeedsInput && isStreaming && (
-                  <Loader2 size={11} className="shrink-0 animate-spin" style={{ color: 'var(--accent)' }} />
-                )}
-                {renamingId === session.id ? (
-                  <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenamingId(null) }}
-                    onBlur={handleRenameSubmit} autoFocus
-                    className="flex-1 text-[13px] px-1.5 py-0.5 rounded border outline-none bg-[var(--content-bg)]"
-                    style={{ borderColor: 'var(--accent)' }} onClick={(e) => e.stopPropagation()} />
-                ) : (
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1.5 leading-tight">
-                      <HoverMarquee
-                        text={session.title || t('chat.new')}
-                        className="flex-1 min-w-0 text-[13px]"
-                        style={{ color: 'var(--text-primary)' }}
-                      />
-                      {isNeedsInput ? (
-                        <span
-                          className="text-[9.5px] font-mono px-1 py-0.2 rounded-[4px] border shrink-0 group-hover:hidden"
-                          style={{ borderColor: 'var(--warning)', color: 'var(--warning)', backgroundColor: 'var(--bg-primary)' }}
-                        >
-                          {t('sidebar.badge.needs_input')}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] shrink-0 tabular-nums group-hover:hidden" style={{ color: 'var(--text-muted)' }}>
-                          {relativeTime(session.updated_at || session.created_at)}
-                        </span>
-                      )}
+                <div
+                  key={row.key}
+                  data-index={vi.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${vi.start}px)`,
+                  }}
+                >
+                  {row.type === 'header' ? (
+                    <div className="session-date flex items-center justify-between">
+                      <span className="flex items-center gap-1.5" style={row.kind === 'needs_input' ? { color: 'var(--warning)' } : undefined}>
+                        {row.kind === 'needs_input' && (
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--warning)' }} />
+                        )}
+                        {row.label}
+                      </span>
+                      <span className="text-[10px] font-normal" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>{row.count}</span>
                     </div>
-                    {(session.last_message || dirTag) && (
-                      <div className="flex items-center gap-1.5 mt-1 min-w-0">
-                        {dirTag && (
-                          <span
-                            title={session.cwd || dirTag}
-                            className="inline-flex items-center gap-0.5 text-[9.5px] font-mono px-1 py-0.2 rounded-[4px] border shrink-0 max-w-[82px]"
-                            style={{
-                              borderColor: 'var(--border)',
-                              color: currentSessionId === session.id ? 'var(--text-secondary)' : 'var(--text-muted)',
-                              backgroundColor: 'var(--bg-primary)',
-                            }}
-                          >
-                            <Folder size={8.5} className="shrink-0 opacity-75" />
-                            <span className="truncate">{dirTag}</span>
-                          </span>
-                        )}
-                        {session.last_message && (
-                          <HoverMarquee
-                            text={previewOf(session.last_message)}
-                            className="flex-1 min-w-0 text-[11px] leading-tight"
-                            style={{ color: 'var(--text-muted)' }}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 -mr-1">
-                  <button onClick={async (e) => {
-                    e.stopPropagation()
-                    const pinned = session.pinned ? 0 : 1
-                    await window.electronAPI?.session?.pin?.(session.id, pinned)
-                    loadSessions()
-                  }}
-                    className={`p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky ${session.pinned ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}
-                    title={session.pinned ? 'Unpin' : 'Pin'}>
-                    <Pin size={11} />
-                  </button>
-                  <button onClick={async (e) => {
-                    e.stopPropagation()
-                    const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
-                    if (ok) deleteSession(session.id)
-                  }}
-                    className="p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky">
-                    <Trash2 size={12} className="text-gray-400" />
-                  </button>
+                  ) : (
+                    (() => {
+                      const session = row.session
+                      const isNeedsInput = needsInputIds.has(session.id)
+                      const isStreaming = Boolean(activeStreamingIds && activeStreamingIds.split(',').includes(String(session.id)))
+                      return (
+                        <SidebarSessionRow
+                          session={session}
+                          isActive={currentSessionId === session.id}
+                          isNeedsInput={isNeedsInput}
+                          isStreaming={isStreaming}
+                          isRenaming={renamingId === session.id}
+                          renameValue={renameValue}
+                          dirTag={getDirTag(session.cwd)}
+                          timeLabel={relativeTime(session.updated_at || session.created_at)}
+                          previewText={session.last_message ? previewOf(session.last_message) : ''}
+                          onSelect={() => { selectSession(session.id); setCurrentView('chat') }}
+                          onStartRename={() => handleDoubleClick(session)}
+                          onRenameChange={setRenameValue}
+                          onRenameSubmit={handleRenameSubmit}
+                          onRenameCancel={() => setRenamingId(null)}
+                          onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
+                          onTogglePin={async (e) => {
+                            e.stopPropagation()
+                            const pinned = session.pinned ? 0 : 1
+                            await window.electronAPI?.session?.pin?.(session.id, pinned)
+                            loadSessions()
+                          }}
+                          onDelete={async (e) => {
+                            e.stopPropagation()
+                            const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
+                            if (ok) deleteSession(session.id)
+                          }}
+                        />
+                      )
+                    })()
+                  )}
                 </div>
-              </div>
               )
             })}
           </div>
-        ))}
+        )}
+        {lowerQuery.length >= 2 && ftsMsgHits.length > 0 && (
+          <div className="mt-2 pt-1.5 border-t border-[var(--border)]">
+            <div className="session-date flex items-center justify-between">
+              <span>{t('cmd.group.messages', '消息历史')}</span>
+              <span className="text-[10px] font-normal" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>{ftsMsgHits.length}</span>
+            </div>
+            {ftsMsgHits.map((hit) => (
+              <button
+                key={`fts-${hit.session_id}-${hit.id}`}
+                type="button"
+                onClick={async () => {
+                  await selectSession(hit.session_id)
+                  setCurrentView('chat')
+                  window.dispatchEvent(new CustomEvent('aether:jump-to-message', {
+                    detail: { sessionId: hit.session_id, messageId: hit.id, query: searchQuery.trim() },
+                  }))
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--content-bg)] transition-colors mb-0.5 cursor-pointer"
+              >
+                <div className="text-[11px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                  {hit.session_title || `#${hit.session_id}`}
+                </div>
+                <div className="text-[10.5px] truncate" style={{ color: 'var(--text-muted)' }}>
+                  {previewOf(hit.content)}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
         {ctxMenu && (
           <div className="fixed z-50 rounded-lg border shadow-lg py-1 min-w-[180px] animate-spring-up"
             style={{ left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 200), backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
@@ -465,6 +505,10 @@ export default function Sidebar() {
             <button onClick={() => { setCtxMenu(null); exportSession(ctxMenu.session) }}
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
               <Download size={11} /> {t('sidebar.export_conversation')}
+            </button>
+            <button onClick={() => { setCtxMenu(null); exportSessionMarkdown(ctxMenu.session) }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <FileText size={11} /> {t('sidebar.export_markdown', '导出为 Markdown')}
             </button>
             <button onClick={async () => {
               setCtxMenu(null)
@@ -488,6 +532,7 @@ export default function Sidebar() {
           </div>
         )}
       </div>
+      <MascotCompanion />
       <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
         <NavItem icon={MessageSquare} label={t('sidebar.nav.workspace', '工作区')} active={currentView === 'chat' || currentView === 'workspace'} onClick={() => setCurrentView('chat')} />
         <NavItem icon={FlaskConical} label={t('sidebar.nav.arena', '竞技场')} active={currentView === 'arena'} onClick={() => setCurrentView('arena')} />

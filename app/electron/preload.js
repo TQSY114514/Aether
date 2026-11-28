@@ -146,6 +146,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fork: (params) => ipcRenderer.invoke('chat:fork', params),
     handoffDraft: (params) => ipcRenderer.invoke('chat:handoff-draft', params),
     handoffCommit: (params) => ipcRenderer.invoke('chat:handoff-commit', params),
+    predictNextPrompt: (sessionId, modelId) => ipcRenderer.invoke('chat:predict-next', { sessionId, modelId }),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
@@ -234,6 +235,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     notify: (data) => ipcRenderer.invoke('system:notify', data),
     clipboardWrite: (text) => ipcRenderer.invoke('system:clipboard-write', text),
     clipboardRead: () => ipcRenderer.invoke('system:clipboard-read'),
+    clipboardWriteImage: (source) => ipcRenderer.invoke('system:clipboard-write-image', source),
+    saveImage: (opts) => ipcRenderer.invoke('system:save-image', opts),
+    readLocalImage: (targetPath) => ipcRenderer.invoke('system:read-local-image', targetPath),
     registerFileAssociations: () => ipcRenderer.invoke('system:register-file-associations'),
     setTitleBarOverlay: (opts) => ipcRenderer.invoke('system:set-title-bar-overlay', opts),
     doctor: (opts) => ipcRenderer.invoke('system:doctor', opts),

@@ -1,12 +1,58 @@
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
-const { execFileSync } = require('child_process')
+const { execFileSync, execFile } = require('child_process')
+const { promisify } = require('util')
+
+const execFileAsync = promisify(execFile)
 
 let db = null
 function setDb(handle) { db = handle }
 
 const _activeTurnSnapshots = new Map()
+// Positive gitRoot cache keyed by resolved directory path (TTL + existence check
+// so deleted or newly-initialized test repos never stick).
+const _gitRootCache = new Map()
+const GIT_ROOT_CACHE_TTL_MS = 30000
+const GIT_ROOT_CACHE_MAX = 256
+
+function clearGitRootCache() {
+  _gitRootCache.clear()
+}
+
+function _getCachedGitRoot(cwd) {
+  const key = process.platform === 'win32' ? path.resolve(cwd).toLowerCase() : path.resolve(cwd)
+  const hit = _gitRootCache.get(key)
+  if (!hit) return null
+  if (Date.now() > hit.expiresAt || !fs.existsSync(hit.root)) {
+    _gitRootCache.delete(key)
+    return null
+  }
+  return hit.root
+}
+
+function _setCachedGitRoot(cwd, root) {
+  if (!cwd || !root) return
+  const key = process.platform === 'win32' ? path.resolve(cwd).toLowerCase() : path.resolve(cwd)
+  if (_gitRootCache.size >= GIT_ROOT_CACHE_MAX) {
+    const oldestKey = _gitRootCache.keys().next().value
+    if (oldestKey !== undefined) _gitRootCache.delete(oldestKey)
+  }
+  _gitRootCache.set(key, { root, expiresAt: Date.now() + GIT_ROOT_CACHE_TTL_MS })
+}
+
+function _validateGitRootOutput(out) {
+  const trimmed = String(out || '').trim()
+  if (!trimmed || /[;&|`$><\r\n\0]/.test(trimmed)) return null
+  let resolved = null
+  try {
+    resolved = fs.realpathSync(trimmed)
+  } catch {
+    resolved = path.resolve(trimmed)
+  }
+  if (!resolved || /[;&|`$><\r\n\0]/.test(resolved) || !fs.existsSync(resolved)) return null
+  return resolved
+}
 
 function extractAffectedPaths(toolName, args, workspaceRoot = null) {
   const paths = []
@@ -30,18 +76,34 @@ function extractAffectedPaths(toolName, args, workspaceRoot = null) {
   return [...new Set(paths)]
 }
 
+function _resolveCwdForStart(start) {
+  try {
+    return fs.existsSync(start) && fs.statSync(start).isDirectory() ? start : path.dirname(start)
+  } catch {
+    return path.dirname(String(start || process.cwd()))
+  }
+}
+
 function nearestGitRoot(start) {
   try {
-    const cwd = fs.existsSync(start) && fs.statSync(start).isDirectory() ? start : path.dirname(start)
-    const out = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim()
-    if (!out || /[;&|`$><\r\n\0]/.test(out)) return null
-    let resolved = null
-    try {
-      resolved = fs.realpathSync(out)
-    } catch {
-      resolved = path.resolve(out)
-    }
-    if (!resolved || /[;&|`$><\r\n\0]/.test(resolved) || !fs.existsSync(resolved)) return null
+    const cwd = _resolveCwdForStart(start)
+    const cached = _getCachedGitRoot(cwd)
+    if (cached) return cached
+    const out = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+    const resolved = _validateGitRootOutput(out)
+    if (resolved) _setCachedGitRoot(cwd, resolved)
+    return resolved
+  } catch { return null }
+}
+
+async function nearestGitRootAsync(start) {
+  try {
+    const cwd = _resolveCwdForStart(start)
+    const cached = _getCachedGitRoot(cwd)
+    if (cached) return cached
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, windowsHide: true })
+    const resolved = _validateGitRootOutput(stdout)
+    if (resolved) _setCachedGitRoot(cwd, resolved)
     return resolved
   } catch { return null }
 }
@@ -59,6 +121,21 @@ function captureGitDiff(paths) {
   return out
 }
 
+async function captureGitDiffAsync(paths) {
+  const foundRoots = await Promise.all(paths.map(nearestGitRootAsync))
+  const roots = [...new Set(foundRoots.filter(Boolean))]
+  const out = {}
+  await Promise.all(roots.map(async (root) => {
+    try {
+      const { stdout } = await execFileAsync('git', ['diff', '--', '.'], { cwd: root, encoding: 'utf-8', maxBuffer: 1024 * 1024, timeout: 10000, windowsHide: true })
+      out[root] = stdout
+    } catch (e) {
+      out[root] = `[git diff failed: ${e.message}]`
+    }
+  }))
+  return out
+}
+
 function captureFiles(paths) {
   return paths.map(p => {
     try {
@@ -70,6 +147,21 @@ function captureFiles(paths) {
       return { path: p, existed: false, isDirectory: false, content: null, error: e.message }
     }
   })
+}
+
+async function captureFilesAsync(paths) {
+  return Promise.all(paths.map(async (p) => {
+    try {
+      let stat = null
+      try { stat = await fs.promises.stat(p) } catch { stat = null }
+      if (!stat) return { path: p, existed: false, isDirectory: false, content: null }
+      if (stat.isDirectory()) return { path: p, existed: true, isDirectory: true, content: null }
+      const content = await fs.promises.readFile(p, 'utf-8')
+      return { path: p, existed: true, isDirectory: false, content }
+    } catch (e) {
+      return { path: p, existed: false, isDirectory: false, content: null, error: e.message }
+    }
+  }))
 }
 
 function sanitizeTurnId(turnId) {
@@ -87,54 +179,7 @@ function sanitizeTurnId(turnId) {
  * Always deduplicates per `(turnId, path)` so multiple writes to the same file in a turn
  * preserve the true pre-turn state.
  */
-function createPreWriteSnapshot({ workspaceRoot, turnId, affectedPaths = [], toolName = 'edit' } = {}) {
-  const root = workspaceRoot ? path.resolve(String(workspaceRoot)) : (affectedPaths[0] ? path.dirname(affectedPaths[0]) : process.cwd())
-  const safeTurnId = sanitizeTurnId(turnId)
-  const filesMeta = captureFiles(affectedPaths)
-
-  const probeDir = affectedPaths[0] || root
-  const gitRoot = nearestGitRoot(probeDir)
-  if (gitRoot) {
-    let stashHash = null
-    let treeHash = null
-    let headHash = null
-    try {
-      const out = execFileSync(
-        'git',
-        ['-c', 'user.name=Aether', '-c', 'user.email=aether@local', 'stash', 'create'],
-        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
-      ).trim()
-      if (out) stashHash = out
-    } catch {}
-    try {
-      headHash = execFileSync(
-        'git',
-        ['rev-parse', 'HEAD'],
-        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
-      ).trim() || null
-    } catch {}
-    const refToTree = stashHash || headHash
-    if (refToTree) {
-      try {
-        treeHash = execFileSync(
-          'git',
-          ['rev-parse', `${refToTree}^{tree}`],
-          { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
-        ).trim() || null
-      } catch {}
-      return {
-        method: 'git_stash_create',
-        turnId: safeTurnId,
-        gitRoot,
-        stashHash: stashHash || headHash,
-        treeHash,
-        hadDirtyStash: Boolean(stashHash),
-        files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory, content: f.content })),
-      }
-    }
-  }
-
-  // Non-Git directory: incremental backup in memory & disk file backups (no sidecar manifest.json)
+function _storeDirIncrementalSnapshot(root, safeTurnId, filesMeta, toolName) {
   const snapshotDir = path.join(root, '.aether', 'snapshots', safeTurnId)
   const filesBackupDir = path.join(snapshotDir, 'files')
   let currentSnap = _activeTurnSnapshots.get(safeTurnId)
@@ -191,6 +236,107 @@ function createPreWriteSnapshot({ workspaceRoot, turnId, affectedPaths = [], too
       files: filesMeta,
     }
   }
+}
+
+async function createPreWriteSnapshotAsync({ workspaceRoot, turnId, affectedPaths = [], toolName = 'edit' } = {}) {
+  const root = workspaceRoot ? path.resolve(String(workspaceRoot)) : (affectedPaths[0] ? path.dirname(affectedPaths[0]) : process.cwd())
+  const safeTurnId = sanitizeTurnId(turnId)
+  const filesMeta = await captureFilesAsync(affectedPaths)
+
+  const probeDir = affectedPaths[0] || root
+  const gitRoot = await nearestGitRootAsync(probeDir)
+  if (gitRoot) {
+    let stashHash = null
+    let headHash = null
+    const [stashRes, headRes] = await Promise.all([
+      execFileAsync(
+        'git',
+        ['-c', 'user.name=Aether', '-c', 'user.email=aether@local', 'stash', 'create'],
+        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, windowsHide: true }
+      ).catch(() => null),
+      execFileAsync(
+        'git',
+        ['rev-parse', 'HEAD'],
+        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, windowsHide: true }
+      ).catch(() => null),
+    ])
+    if (stashRes && stashRes.stdout && stashRes.stdout.trim()) stashHash = stashRes.stdout.trim()
+    if (headRes && headRes.stdout && headRes.stdout.trim()) headHash = headRes.stdout.trim()
+
+    const refToTree = stashHash || headHash
+    if (refToTree) {
+      let treeHash = null
+      try {
+        const { stdout } = await execFileAsync(
+          'git',
+          ['rev-parse', `${refToTree}^{tree}`],
+          { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, windowsHide: true }
+        )
+        treeHash = stdout.trim() || null
+      } catch {}
+      return {
+        method: 'git_stash_create',
+        turnId: safeTurnId,
+        gitRoot,
+        stashHash: stashHash || headHash,
+        treeHash,
+        hadDirtyStash: Boolean(stashHash),
+        files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory, content: f.content })),
+      }
+    }
+  }
+
+  return _storeDirIncrementalSnapshot(root, safeTurnId, filesMeta, toolName)
+}
+
+function createPreWriteSnapshot({ workspaceRoot, turnId, affectedPaths = [], toolName = 'edit' } = {}) {
+  const root = workspaceRoot ? path.resolve(String(workspaceRoot)) : (affectedPaths[0] ? path.dirname(affectedPaths[0]) : process.cwd())
+  const safeTurnId = sanitizeTurnId(turnId)
+  const filesMeta = captureFiles(affectedPaths)
+
+  const probeDir = affectedPaths[0] || root
+  const gitRoot = nearestGitRoot(probeDir)
+  if (gitRoot) {
+    let stashHash = null
+    let treeHash = null
+    let headHash = null
+    try {
+      const out = execFileSync(
+        'git',
+        ['-c', 'user.name=Aether', '-c', 'user.email=aether@local', 'stash', 'create'],
+        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
+      ).trim()
+      if (out) stashHash = out
+    } catch {}
+    try {
+      headHash = execFileSync(
+        'git',
+        ['rev-parse', 'HEAD'],
+        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
+      ).trim() || null
+    } catch {}
+    const refToTree = stashHash || headHash
+    if (refToTree) {
+      try {
+        treeHash = execFileSync(
+          'git',
+          ['rev-parse', `${refToTree}^{tree}`],
+          { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
+        ).trim() || null
+      } catch {}
+      return {
+        method: 'git_stash_create',
+        turnId: safeTurnId,
+        gitRoot,
+        stashHash: stashHash || headHash,
+        treeHash,
+        hadDirtyStash: Boolean(stashHash),
+        files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory, content: f.content })),
+      }
+    }
+  }
+
+  return _storeDirIncrementalSnapshot(root, safeTurnId, filesMeta, toolName)
 }
 
 function rollbackPreWriteSnapshot(meta, targetPaths = null) {
@@ -333,6 +479,36 @@ function createCheckpoint({ sessionId, messageId, turnId, workspaceRoot, toolNam
   return row?.lastInsertRowid ? Number(row.lastInsertRowid) : null
 }
 
+async function createCheckpointAsync({ sessionId, messageId, turnId, workspaceRoot, toolName, args }) {
+  const resolvedRoot = workspaceRoot || (() => {
+    try { return require('../tools/sandbox').getWorkspaceRoot(sessionId) } catch { return null }
+  })()
+  const affectedPaths = extractAffectedPaths(toolName, args, resolvedRoot)
+  const [filesMeta, preWrite, gitDiff] = await Promise.all([
+    captureFilesAsync(affectedPaths),
+    createPreWriteSnapshotAsync({ workspaceRoot: resolvedRoot, turnId: turnId || messageId, affectedPaths, toolName }),
+    captureGitDiffAsync(affectedPaths),
+  ])
+
+  if (!db) return null
+
+  const gitCaptured = Boolean(preWrite && preWrite.method === 'git_stash_create' && (preWrite.stashHash || preWrite.treeHash))
+  const capturedFiles = gitCaptured
+    ? filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory, content: null }))
+    : filesMeta
+
+  const snapshot = {
+    version: 2,
+    turnId: preWrite?.turnId || null,
+    preWrite,
+    files: capturedFiles,
+    gitDiff,
+  }
+
+  const row = db.addAgentCheckpoint({ sessionId, messageId, toolName, args, affectedPaths, snapshot })
+  return row?.lastInsertRowid ? Number(row.lastInsertRowid) : null
+}
+
 function isInsideGitRoot(p, root) {
   const norm = (s) => {
     let x = path.normalize(String(s))
@@ -440,11 +616,17 @@ function rollbackCheckpoint(id, opts = {}) {
 module.exports = {
   setDb,
   createCheckpoint,
+  createCheckpointAsync,
   rollbackCheckpoint,
   createPreWriteSnapshot,
+  createPreWriteSnapshotAsync,
   rollbackPreWriteSnapshot,
   extractAffectedPaths,
   findLatestCheckpointForRoot,
   isInsideGitRoot,
   nearestGitRoot,
+  nearestGitRootAsync,
+  captureGitDiff,
+  captureGitDiffAsync,
+  clearGitRootCache,
 }

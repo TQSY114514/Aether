@@ -41,11 +41,24 @@ function encryptKey(plain) {
   }
 }
 
+const _decryptCache = new Map();
+const MAX_DECRYPT_CACHE = 256;
+
 function decryptKey(encoded) {
   if (!encoded) return encoded;
   if (!safeStorage || !safeStorage.isEncryptionAvailable()) return encoded;
+  if (typeof encoded === "string" && _decryptCache.has(encoded)) {
+    return _decryptCache.get(encoded);
+  }
   try {
-    return safeStorage.decryptString(Buffer.from(encoded, "base64"));
+    const plain = safeStorage.decryptString(Buffer.from(encoded, "base64"));
+    if (typeof encoded === "string") {
+      if (_decryptCache.size >= MAX_DECRYPT_CACHE) {
+        _decryptCache.delete(_decryptCache.keys().next().value);
+      }
+      _decryptCache.set(encoded, plain);
+    }
+    return plain;
   } catch {
     return encoded;
   }
@@ -154,6 +167,7 @@ const { createEmptyDatabase } = require('./db/schema');
 
 function initDatabase() {
   _tableColumnsCache.clear();
+  _decryptCache.clear();
   dbPath = path.join(app.getPath("userData"), "aetherai.db");
   db = createEmptyDatabase(dbPath);
 
@@ -163,6 +177,18 @@ function initDatabase() {
   } catch (e) {
     log.warn("[database] runMigrations failed:", e && e.message);
   }
+
+  const STARTUP_BACKFILL_KEY = "db.startup_backfill_v1";
+  const hasStartupBackfill = (() => {
+    try {
+      const row = db
+        .prepare("SELECT value FROM settings WHERE key = ?")
+        .get(STARTUP_BACKFILL_KEY);
+      return row && row.value === "1";
+    } catch {
+      return false;
+    }
+  })();
 
   try {
     db.exec("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'");
@@ -201,29 +227,34 @@ function initDatabase() {
   // 存量自指清理：历史 bug 中 detectConflict 曾把 conflicts_with 指向行自身
   //（[row.id, row.id]），导致 UI 出现"自己和自己冲突"的二选一，且任一按钮
   // 都会删掉这条记忆。此语句幂等，每次启动跑一遍无害。
-  try {
-    db.prepare(
-      "UPDATE memory SET conflicts_with = NULL WHERE conflicts_with = id",
-    ).run();
-  } catch {}
+  if (!hasStartupBackfill) {
+    try {
+      db.prepare(
+        "UPDATE memory SET conflicts_with = NULL WHERE conflicts_with = id",
+      ).run();
+    } catch {}
+  }
   // 规范化内容列 + 索引：精确查重从全表 LOWER(TRIM(content)) 扫描降为索引
   // 查找；mergeDuplicateMemories 分组同样走它（跨类型，与 findSolidifyTarget
   // 语义一致）。回填必须用共享 memNormalize（含内部空白折叠）：SQL 的
   // LOWER(TRIM()) 不折叠多空格，存量 "user likes  tea" 会得到与新写入
-  // "user likes tea" 不一致的键，精确查重和启动合并都会漏。全量重算幂等，
-  // 值未变的行不写，个人应用规模开销可忽略。
+  // "user likes tea" 不一致的键，精确查重和启动合并都会漏。
   try {
     db.exec("ALTER TABLE memory ADD COLUMN content_norm TEXT");
   } catch {}
+  if (!hasStartupBackfill) {
+    try {
+      const rows = db
+        .prepare("SELECT id, content, content_norm FROM memory")
+        .all();
+      const upd = db.prepare("UPDATE memory SET content_norm = ? WHERE id = ?");
+      for (const r of rows) {
+        const norm = memNormalize(r.content);
+        if (r.content_norm !== norm) upd.run(norm, r.id);
+      }
+    } catch {}
+  }
   try {
-    const rows = db
-      .prepare("SELECT id, content, content_norm FROM memory")
-      .all();
-    const upd = db.prepare("UPDATE memory SET content_norm = ? WHERE id = ?");
-    for (const r of rows) {
-      const norm = memNormalize(r.content);
-      if (r.content_norm !== norm) upd.run(norm, r.id);
-    }
     db.exec(
       "CREATE INDEX IF NOT EXISTS idx_memory_content_norm ON memory(content_norm)",
     );
@@ -236,10 +267,8 @@ function initDatabase() {
       "CREATE INDEX IF NOT EXISTS idx_memory_type_time ON memory (LOWER(TRIM(type)), created_at DESC, id DESC)",
     );
   } catch {}
-  // 启动时自动合并完全重复的记忆（幂等）：历史去重漏洞积累的存量在升级后
-  // 首次启动即清零，无需再手动点"记忆去重"。个人应用规模的全表 GROUP BY
-  // 开销可忽略；函数声明在模块内提升，运行期调用安全。
-  // 注意：workspace 列必须在此之前存在（mergeDuplicateMemories 查询依赖它）。
+  // 启动时自动合并完全重复的记忆（幂等）：首次升级/冷建库时运行一次，
+  // 之后由 db.startup_backfill_v1 标记跳过以加速冷启动。
   try {
     db.exec("ALTER TABLE memory ADD COLUMN workspace TEXT");
   } catch {}
@@ -248,21 +277,27 @@ function initDatabase() {
       "CREATE INDEX IF NOT EXISTS idx_memory_type_workspace ON memory (type, workspace)",
     );
   } catch {}
-  try {
-    mergeDuplicateMemories();
-  } catch {}
+  if (!hasStartupBackfill) {
+    try {
+      mergeDuplicateMemories();
+    } catch {}
+  }
   // Model 去重：历史上 fetch-models 只增不删、且无唯一约束，可能累计出同一
-  // provider_id+model_name 的重复行。启动时按 (provider_id, model_name) 保留
-  // id 最小的一行，删除其余，再建唯一索引防止复发。
+  // provider_id+model_name 的重复行。首次迁移按 (provider_id, model_name)
+  // 保留 id 最小的一行，删除其余，再建唯一索引防止复发。
+  if (!hasStartupBackfill) {
+    try {
+      const dups = db.prepare(`
+        SELECT MIN(id) AS keep_id, provider_id, model_name, COUNT(*) AS c
+        FROM model GROUP BY provider_id, model_name HAVING c > 1
+      `).all()
+      for (const d of dups) {
+        db.prepare('DELETE FROM model WHERE provider_id = ? AND model_name = ? AND id <> ?')
+          .run(d.provider_id, d.model_name, d.keep_id)
+      }
+    } catch {}
+  }
   try {
-    const dups = db.prepare(`
-      SELECT MIN(id) AS keep_id, provider_id, model_name, COUNT(*) AS c
-      FROM model GROUP BY provider_id, model_name HAVING c > 1
-    `).all()
-    for (const d of dups) {
-      db.prepare('DELETE FROM model WHERE provider_id = ? AND model_name = ? AND id <> ?')
-        .run(d.provider_id, d.model_name, d.keep_id)
-    }
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_model_provider_name ON model(provider_id, model_name)')
   } catch {}
   try {
@@ -293,6 +328,9 @@ function initDatabase() {
   try {
     db.exec("CREATE INDEX IF NOT EXISTS idx_message_session_created ON message(session_id, created_at)");
     db.exec("CREATE INDEX IF NOT EXISTS idx_message_session_id_desc ON message(session_id, id DESC)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_message_session_role_id ON message(session_id, role, id)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_agent_exec_log_session_id_desc ON agent_execution_log(session_id, id DESC)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_memory_workspace_time ON memory(workspace, created_at DESC, id DESC)");
     db.exec("CREATE INDEX IF NOT EXISTS idx_agent_task_status_prio ON agent_task(status, priority DESC)");
     db.exec("CREATE INDEX IF NOT EXISTS idx_agent_task_session ON agent_task(session_id, parent_session_id)");
     db.exec("CREATE INDEX IF NOT EXISTS idx_session_updated ON session(updated_at DESC)");
@@ -305,31 +343,33 @@ function initDatabase() {
     db.exec("CREATE INDEX IF NOT EXISTS idx_session_cwd ON session(cwd, updated_at DESC)");
   } catch {}
 
-  // Backfill legacy sessions
-  try {
-    db.exec(`
-      UPDATE session
-      SET cwd = (SELECT root_path FROM project WHERE project.id = session.project_id)
-      WHERE (cwd IS NULL OR cwd = '')
-        AND project_id IS NOT NULL
-        AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='project')
-    `);
-  } catch {}
-  try {
-    const unmapped = db.prepare("SELECT id, config FROM session WHERE (cwd IS NULL OR cwd = '') AND config IS NOT NULL").all();
-    for (const s of unmapped) {
-      try {
-        const cfg = JSON.parse(s.config);
-        const c = cfg?.cwd || cfg?.workspace;
-        if (c && typeof c === 'string' && c.trim()) {
-          db.prepare("UPDATE session SET cwd = ? WHERE id = ?").run(path.resolve(c.trim()), s.id);
-        }
-      } catch {}
-    }
-  } catch {}
-  try {
-    db.prepare("UPDATE session SET cwd = ? WHERE cwd IS NULL OR cwd = ''").run(process.cwd());
-  } catch {}
+  // Backfill legacy sessions (once per DB via STARTUP_BACKFILL_KEY)
+  if (!hasStartupBackfill) {
+    try {
+      db.exec(`
+        UPDATE session
+        SET cwd = (SELECT root_path FROM project WHERE project.id = session.project_id)
+        WHERE (cwd IS NULL OR cwd = '')
+          AND project_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='project')
+      `);
+    } catch {}
+    try {
+      const unmapped = db.prepare("SELECT id, config FROM session WHERE (cwd IS NULL OR cwd = '') AND config IS NOT NULL").all();
+      for (const s of unmapped) {
+        try {
+          const cfg = JSON.parse(s.config);
+          const c = cfg?.cwd || cfg?.workspace;
+          if (c && typeof c === 'string' && c.trim()) {
+            db.prepare("UPDATE session SET cwd = ? WHERE id = ?").run(path.resolve(c.trim()), s.id);
+          }
+        } catch {}
+      }
+    } catch {}
+    try {
+      db.prepare("UPDATE session SET cwd = ? WHERE cwd IS NULL OR cwd = ''").run(process.cwd());
+    } catch {}
+  }
 
   try {
     require("./llm/checkpointManager").createTable(db);
@@ -448,12 +488,14 @@ function initDatabase() {
   addCol("session", "parent_session_id", "INTEGER");
   addCol("session", "session_kind", "TEXT NOT NULL DEFAULT 'chat'");
   addCol("agent_task", "parent_session_id", "INTEGER");
-  try { db.prepare("UPDATE agent_task SET parent_session_id = session_id WHERE parent_session_id IS NULL AND session_id IS NOT NULL").run() } catch {}
-  // Migrate pre-2.0 internal child sessions out of the normal chat list.
-  try {
-    db.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
-    db.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND parent_session_id IS NOT NULL AND (title GLOB 'subagent-*' OR title GLOB 'subagent: *')").run();
-  } catch {}
+  if (!hasStartupBackfill) {
+    try { db.prepare("UPDATE agent_task SET parent_session_id = session_id WHERE parent_session_id IS NULL AND session_id IS NOT NULL").run() } catch {}
+    // Migrate pre-2.0 internal child sessions out of the normal chat list.
+    try {
+      db.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
+      db.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND parent_session_id IS NOT NULL AND (title GLOB 'subagent-*' OR title GLOB 'subagent: *')").run();
+    } catch {}
+  }
   addCol("session", "status", "TEXT NOT NULL DEFAULT 'active'");
   addCol("provider_credential", "disable_reason", "TEXT");
   // Project Brain: workspace 列 —— 项目级记忆(architecture/conventions/decisions)
@@ -508,10 +550,17 @@ function initDatabase() {
     }
   } catch {}
 
-  try {
-    const modelIds = db.prepare("SELECT id FROM model").pluck().all();
-    for (const mid of modelIds) initModelScores(mid);
-  } catch {}
+  if (!hasStartupBackfill) {
+    try {
+      const modelIds = db.prepare("SELECT id FROM model").pluck().all();
+      for (const mid of modelIds) initModelScores(mid);
+    } catch {}
+    try {
+      db.prepare(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')",
+      ).run(STARTUP_BACKFILL_KEY);
+    } catch {}
+  }
 
   const existingKeys = db.prepare("SELECT key FROM settings").pluck().all();
   if (!existingKeys.includes("fallback_timeout_ms"))
@@ -552,6 +601,12 @@ function getProvidersDecrypted() {
     .prepare("SELECT * FROM provider ORDER BY id")
     .all()
     .map((r) => ({ ...r, api_key: decryptKey(r.api_key) }));
+}
+// Metadata-only provider read (no api_key column, zero safeStorage decryption).
+function getProvidersMetadata() {
+  return db
+    .prepare("SELECT id, name, api_url, api_format, enabled, created_at FROM provider ORDER BY id")
+    .all();
 }
 // Returns the DECRYPTED key — internal LLM request path only (chat-send,
 // openaiChatHandler, backgroundTasks, arena, provider test/fetch). Never
@@ -618,6 +673,14 @@ function getAllModels() {
     .all()
     .map((r) => ({ ...r, api_key: decryptKey(r.api_key) }));
 }
+// Metadata-only enabled model list (omits api_key to avoid per-row DPAPI decryption).
+function getAllModelsMetadata() {
+  return db
+    .prepare(
+      "SELECT m.*, p.name as provider_name, p.api_url, p.api_format FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id",
+    )
+    .all();
+}
 function getModel(id) {
   return db.prepare("SELECT * FROM model WHERE id = ?").get(id) || null;
 }
@@ -649,7 +712,9 @@ function addModel({
         input_price_per_1k,
         output_price_per_1k,
       );
-    return { lastInsertRowid: Number(info.lastInsertRowid) };
+    const insertedId = Number(info.lastInsertRowid);
+    try { initModelScores(insertedId); } catch {}
+    return { lastInsertRowid: insertedId };
   } catch (e) {
     if (e && String(e.message).includes("UNIQUE")) {
       const existing = db.prepare("SELECT id FROM model WHERE provider_id = ? AND model_name = ?").get(provider_id, model_name);
@@ -707,9 +772,10 @@ function syncModels(providerId, fetchedNames) {
   // Add new models
   for (const name of names) {
     if (!existingByName.has(name)) {
-      db.prepare(
+      const info = db.prepare(
         "INSERT INTO model (provider_id, model_name, display_name, is_primary, fallback_order, context_window, input_price_per_1k, output_price_per_1k) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(providerId, name, null, 0, null, null, null, null);
+      try { initModelScores(Number(info.lastInsertRowid)); } catch {}
       added.push(name);
     }
   }
@@ -924,7 +990,7 @@ function setActiveProject(id) {
 function getSessions() {
   const rows = db
     .prepare(
-      "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s WHERE COALESCE(s.session_kind, 'chat') = 'chat' ORDER BY s.pinned DESC, s.updated_at DESC",
+      "SELECT s.*, (SELECT SUBSTR(content, 1, 2000) FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s WHERE COALESCE(s.session_kind, 'chat') = 'chat' ORDER BY s.pinned DESC, s.updated_at DESC",
     )
     .all();
   for (const r of rows) {
@@ -1196,6 +1262,59 @@ function getMessages(sessionId) {
     .prepare("SELECT * FROM message WHERE session_id = ? ORDER BY id ASC")
     .all(sessionId);
 }
+// Lightweight history fetch for LLM context assembly (skips attachment blobs and UI metadata).
+function getMessagesForContext(sessionId) {
+  return db
+    .prepare("SELECT id, session_id, role, content FROM message WHERE session_id = ? ORDER BY id ASC")
+    .all(sessionId);
+}
+
+function _extractImageDataUrls(rawAttachment) {
+  if (!rawAttachment || typeof rawAttachment !== 'string') return []
+  try {
+    const parsed = JSON.parse(rawAttachment)
+    if (!parsed || typeof parsed !== 'object') return []
+    const urls = []
+    if (Array.isArray(parsed.all)) {
+      for (const item of parsed.all) {
+        const u = item?.preview || item?.dataUrl || ''
+        if (typeof u === 'string' && u.startsWith('data:image/')) urls.push(u)
+      }
+    }
+    const single = parsed.preview || parsed.dataUrl || ''
+    if (urls.length === 0 && typeof single === 'string' && single.startsWith('data:image/')) {
+      urls.push(single)
+    }
+    return urls
+  } catch {
+    return []
+  }
+}
+
+// Selectively load image data URLs ONLY for the most recent `recentUserWindow`
+// user turns so prior-turn images remain visible to the model without reading
+// ancient base64 blobs across long histories.
+function getRecentUserImageAttachments(sessionId, { recentUserWindow = 6, maxImageMessages = 4 } = {}) {
+  const result = new Map()
+  if (!db) return result
+  try {
+    const lim = Math.max(1, Math.min(20, Number(recentUserWindow) || 6))
+    const rows = db
+      .prepare(
+        "SELECT id, attachment FROM message WHERE session_id = ? AND role = 'user' ORDER BY id DESC LIMIT ?",
+      )
+      .all(sessionId, lim)
+    for (const r of rows) {
+      if (!r.attachment) continue
+      const urls = _extractImageDataUrls(r.attachment)
+      if (urls.length > 0) {
+        result.set(r.id, urls)
+        if (result.size >= maxImageMessages) break
+      }
+    }
+  } catch {}
+  return result
+}
 function getMessage(id) {
   return db.prepare("SELECT * FROM message WHERE id = ?").get(id) || null;
 }
@@ -1437,6 +1556,9 @@ function getModelScores() {
     .all();
 }
 function initModelScores(modelId) {
+  const stmt = db.prepare(
+    "INSERT OR IGNORE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,1000,0,0)",
+  );
   for (const intent of [
     "coding",
     "math",
@@ -1444,9 +1566,7 @@ function initModelScores(modelId) {
     "summary",
     "general",
   ]) {
-    db.prepare(
-      "INSERT OR IGNORE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,1000,0,0)",
-    ).run(modelId);
+    stmt.run(modelId, intent);
   }
 }
 function updateElo(winnerModelId, loserModelIds, intent) {
@@ -1748,18 +1868,19 @@ function getMemories(limit) {
 // + 当前 workspace 行，当前 workspace 行优先(ORDER BY (workspace IS NULL) ASC)，
 // 供 prefetch 的项目块与 memory:list 的 {workspace} 过滤使用。未传 workspace
 // 时回退全量 getMemories()(旧行为)。
-function getMemoriesScoped(scopeKey) {
-  if (scopeKey === undefined) return getMemories();
+function getMemoriesScoped(scopeKey, limit = null) {
+  if (scopeKey === undefined) return getMemories(limit);
+  const limClause = limit && Number(limit) > 0 ? ` LIMIT ${Math.max(1, Math.floor(Number(limit)))}` : "";
   if (scopeKey === null) {
     return db
       .prepare(
-        "SELECT * FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC",
+        `SELECT * FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC${limClause}`,
       )
       .all();
   }
   return db
     .prepare(
-      "SELECT * FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC",
+      `SELECT * FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC${limClause}`,
     )
     .all(String(scopeKey));
 }
@@ -1953,6 +2074,21 @@ function incrementMemoryAccess(id) {
     db.prepare(
       "UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?",
     ).run(localNow(), id);
+  } catch {}
+}
+function incrementMemoryAccessBatch(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  try {
+    const now = localNow();
+    const stmt = db.prepare(
+      "UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?",
+    );
+    const tx = db.transaction((list) => {
+      for (const id of list) {
+        if (id != null) stmt.run(now, id);
+      }
+    });
+    tx(ids);
   } catch {}
 }
 function getMemoryConflicts() {
@@ -2640,6 +2776,7 @@ module.exports = {
   createEmptyDatabase,
   closeDatabase,
   getProviders,
+  getProvidersMetadata,
   getProvidersDecrypted,
   getProvider,
   getProviderDecrypted,
@@ -2649,7 +2786,7 @@ module.exports = {
   maskKey,
   isMaskedOrEmptyKey,
   sanitizeSkillName,
-  getModels, getAllModels, getModel, addModel, updateModel, deleteModel, syncModels, getFallbackChain,
+  getModels, getAllModels, getAllModelsMetadata, getModel, addModel, updateModel, deleteModel, syncModels, getFallbackChain,
   getPersonas,
   getPersona,
   addPersona,
@@ -2667,6 +2804,8 @@ module.exports = {
   updateSession,
   setSessionCwd,
   getMessages,
+  getMessagesForContext,
+  getRecentUserImageAttachments,
   getMessage,
   addMessage,
   updateMessage,
@@ -2713,6 +2852,7 @@ module.exports = {
   updateMemory,
   deleteMemory,
   incrementMemoryAccess,
+  incrementMemoryAccessBatch,
   mergeDuplicateMemories,
   getCompactionState,
   saveCompactionState,

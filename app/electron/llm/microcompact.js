@@ -309,8 +309,16 @@ function orderSystemMessagesForCache(messages) {
   const dynamic = []
   for (const m of sysMessages) {
     const text = String(m?.content || '')
+    const trimmed = text.trimStart()
     const isDynamic =
       m?.cacheHint === 'dynamic' ||
+      trimmed.startsWith('当前时间：') ||
+      trimmed.startsWith('Relevant memories from past conversations') ||
+      trimmed.startsWith('Consolidated memory digest:') ||
+      trimmed.startsWith('Project knowledge (') ||
+      trimmed.startsWith('## Experience replay') ||
+      trimmed.startsWith('## Execution Plan') ||
+      trimmed.startsWith('# Repo Map (') ||
       text.includes('<relevant_memories>') ||
       text.includes('<untrusted_memory>') ||
       text.includes('[Experience Replay') ||

@@ -35,8 +35,7 @@ export default function ChatPage() {
   const backgroundImage = useStore((s) => s.backgroundImage)
   const hasBg = !!backgroundImage
   const sessionConfigs = useStore((s) => s.sessionConfigs)
-  const streamingBySession = useStore((s) => s.streamingBySession)
-  const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
+  const isStreaming = useStore((s) => Boolean(s.currentSessionId && s.streamingBySession[s.currentSessionId]))
   const messages = useStore((s) => s.messages)
   const fileSummariesByMessage = useStore((s) => s.fileSummariesByMessage)
   const [showReview, setShowReview] = useState(false)

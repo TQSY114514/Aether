@@ -5,20 +5,31 @@ import { PROVIDER_PRESETS } from './providerPresets'
 import { buildProviderPayload, isComplete, EMPTY_FORM, presetForChoice, stepAfterImport, type Choice, type Preset, type ProviderForm, type WizardStep } from './wizardLogic'
 import { ArrowRight, Check, Download, Shield, X } from 'lucide-react'
 
-const MODES = [
+const MODES: {
+  key: 'plan' | 'act'
+  titleKey: string
+  fallbackTitle: string
+  descKey: string
+  fallbackDesc: string
+  recommended: boolean
+}[] = [
   {
     key: 'plan',
-    title: 'Plan (只读规划模式)',
-    desc: '允许工作区代码检索、只读 Git 与子代理探路；严格拦截文件修改与变更命令，输出结构化方案。',
+    titleKey: 'onboarding.mode.plan.title',
+    fallbackTitle: 'Plan (Read-Only Planning)',
+    descKey: 'onboarding.mode.plan.desc',
+    fallbackDesc: 'Allows workspace code search, read-only Git, and exploration; blocks file writes and mutating shell commands.',
     recommended: false,
   },
   {
     key: 'act',
-    title: 'Act (默认行动模式)',
-    desc: '工作区内读写编辑（含写前自动快照与一键 Diff 回滚）及常规测试命令自动执行；仅对越界路径、敏感凭证与高危 Shell 弹窗拦截。',
+    titleKey: 'onboarding.mode.act.title',
+    fallbackTitle: 'Act (Default Action Mode)',
+    descKey: 'onboarding.mode.act.desc',
+    fallbackDesc: 'Auto-runs workspace edits (with pre-write snapshots and one-click diff revert) and tests; prompts only on high-risk actions.',
     recommended: true,
   },
-] as const
+]
 
 // First-screen "how do you want to use Aether?" cards. Each routes to the
 // provider step with a preset preselected, or to the template picker.
@@ -67,8 +78,13 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState('')
+  const [selectedMode, setSelectedMode] = useState<'plan' | 'act'>('act')
 
-  const finish = async () => {
+  const finish = async (persistMode = false) => {
+    if (persistMode) {
+      useStore.getState().setAgentMode(selectedMode)
+      try { await window.electronAPI.settings.set('default_agent_mode', selectedMode) } catch {}
+    }
     try { await window.electronAPI.settings.set('onboarding_done', '1') } catch {}
     onDone()
   }
@@ -143,7 +159,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{t('onboarding.title')}</h2>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t('onboarding.subtitle')}</p>
           </div>
-          <button onClick={finish} disabled={importing} aria-label={t('onboarding.skip')} title={t('onboarding.skip')}
+          <button onClick={() => finish()} disabled={importing} aria-label={t('onboarding.skip')} title={t('onboarding.skip')}
             className="p-1 rounded hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50">
             <X size={14} className="text-gray-400" />
           </button>
@@ -173,7 +189,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
               {error && <p className="text-xs mt-2" style={{ color: 'var(--error)' }}>{error}</p>}
             </div>
             <div className="mt-5 flex justify-end">
-              <button onClick={finish} disabled={importing}
+              <button onClick={() => finish()} disabled={importing}
                 className="px-3 py-1.5 text-xs rounded-lg border transition-colors motion-reduce:transition-none disabled:opacity-50"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
             </div>
@@ -188,7 +204,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <div className="flex items-center gap-2 p-2.5 rounded-lg mb-3" style={{ backgroundColor: 'rgba(34,197,94,0.06)', border: '1px solid var(--border)' }}>
               <Check size={13} className="text-green-500 shrink-0" />
               <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-                已有配置? 在终端输入 <code className="font-mono text-[10px]" style={{ color: 'var(--accent)' }}>aether tui</code> 后用 <code className="font-mono text-[10px]" style={{ color: 'var(--accent)' }}>/apikey &lt;provider&gt; &lt;key&gt;</code> 保存密钥, 或在「模型」页手动添加 provider — 完成后向导会自动消失。
+                {t('onboarding.template_cli_hint', 'Already configured? Run `aether tui` and `/apikey <provider> <key>`, or add a provider in Settings - Providers & Routing.')}
               </p>
             </div>
             <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{t('onboarding.template')}</div>
@@ -203,7 +219,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
               ))}
             </div>
             <div className="mt-5 flex justify-end">
-              <button onClick={finish}
+              <button onClick={() => finish()}
                 className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
             </div>
@@ -257,7 +273,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
               {t('onboarding.first_session_desc')}
             </p>
             <div className="mt-5 flex items-center justify-between">
-              <button onClick={finish}
+              <button onClick={() => finish()}
                 className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
               <div className="flex items-center gap-2">
@@ -292,24 +308,40 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             )}
             {importDiagnostics(importResult)}
             <div className="space-y-2">
-              {MODES.map((m) => (
-                <div key={m.key} className="px-3 py-2.5 rounded-lg border"
-                  style={{ borderColor: m.recommended ? 'var(--accent)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{m.title}</span>
-                    {m.recommended && (
-                      <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
-                        <Check size={9} />{t('onboarding.ask_recommended', '推荐默认')}
+              {MODES.map((m) => {
+                const isSelected = selectedMode === m.key
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setSelectedMode(m.key)}
+                    aria-pressed={isSelected}
+                    className="w-full text-left px-3 py-2.5 rounded-lg border transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+                    style={{
+                      borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+                      backgroundColor: isSelected ? 'var(--bg-secondary)' : 'transparent',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {t(m.titleKey as any, m.fallbackTitle)}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>{m.desc}</div>
-                </div>
-              ))}
+                      {m.recommended && (
+                        <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+                          <Check size={9} />{t('onboarding.ask_recommended', '推荐默认')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                      {t(m.descKey as any, m.fallbackDesc)}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
             <div className="mt-5 flex justify-end">
-              <button onClick={finish}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg text-white transition-opacity"
+              <button onClick={() => finish(true)}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg text-white transition-opacity motion-reduce:transition-none cursor-pointer"
                 style={{ backgroundColor: 'var(--accent)' }}>{t('onboarding.complete')}</button>
             </div>
           </div>

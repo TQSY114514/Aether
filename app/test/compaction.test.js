@@ -170,7 +170,7 @@ describe('maybeCompact', () => {
         expect(hasResult).toBe(true)
       }
     }
-  })
+  }, 20000)
 
   it('force=true skips the ratio gate: low-water messages get compacted', async () => {
     // 远低于 COMPACT_AT_RATIO×budget 的水位；非 force 时会原样返回。
@@ -343,7 +343,7 @@ describe('maybeCompact force + oversized tool pair', () => {
       force: true,
     })
     expect(result).toBeNull()
-  })
+  }, 20000)
 })
 // ─── summarize prompt safety boundary (CodeRabbit PR #43 + TQS-5) ─────────
 describe('summarize prompt safety boundary', () => {

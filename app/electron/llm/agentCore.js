@@ -215,7 +215,7 @@ async function runAgent({
   if (db && (personaId != null || injectMemory)) {
     try {
       const { buildSessionContext } = require('./sessionContext')
-      const { prefix, memoryCount } = buildSessionContext({ db, sessionId, personaId, userMessage: String(prompt || '') })
+      const { prefix, memoryCount } = buildSessionContext({ db, sessionId, personaId, userMessage: String(prompt || ''), includeWorkspaceAgentsMd: false })
       if (prefix.length) convo.unshift(...prefix)
       memoryTrace.memoryCount = memoryCount
     } catch {}

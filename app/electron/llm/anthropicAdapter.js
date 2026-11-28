@@ -12,13 +12,12 @@
 const ANTHROPIC_VERSION = '2023-06-01'
 const _credentialPool = require('./credentialPool')
 const { baseUrl, normalizeUsage: _nu } = require('../utils/llmShared')
+const { DEFAULT_REQUEST_TIMEOUT_MS, createIdleTimeout, withRequestTimeout } = require('./streamTimeout')
 
-// 请求总超时: API 挂起时显式中止(与 openaiAdapter/responsesAdapter 同策略)
-const REQUEST_TIMEOUT_MS = 120000
+const REQUEST_TIMEOUT_MS = DEFAULT_REQUEST_TIMEOUT_MS
 
 function withTimeout(signal) {
-  const t = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  return signal ? AbortSignal.any([signal, t]) : t
+  return withRequestTimeout(signal, REQUEST_TIMEOUT_MS)
 }
 const { retryPromise, retryStream } = require('../utils/retry')
 const { applyAnthropicCache } = require('./cachePolicy')
@@ -48,11 +47,19 @@ function toAnthropicMessages(messages) {
       continue
     }
     if (m.role === 'tool') {
-      // tool result → user message with a tool_result block
-      out.push({
-        role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
-      })
+      // tool result → coalesce consecutive tool results into one user message
+      // (Anthropic Messages API requires strict user/assistant turn alternation).
+      const block = {
+        type: 'tool_result',
+        tool_use_id: m.tool_call_id,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      }
+      const prev = out[out.length - 1]
+      if (prev && prev.role === 'user' && Array.isArray(prev.content) && prev.content.length > 0 && prev.content.every(b => b.type === 'tool_result')) {
+        prev.content.push(block)
+      } else {
+        out.push({ role: 'user', content: [block] })
+      }
       continue
     }
     if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length) {
@@ -196,106 +203,113 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
   }
 
   const gen = (async function* () {
-    const res = await fetch(`${baseUrl(provider)}/messages`, {
-      method: 'POST',
-      headers: headers(provider),
-      body: JSON.stringify(body),
-      signal: withTimeout(signal),
-    })
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
-      const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
-      err.status = res.status
-      if (res.status === 429 && provider.id != null) { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
-      throw err
-    }
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let _thinkingText = ''
-    let _thinkingIndex = -1
-    // Per-block accumulator keyed by content_block index. A tool_use block's
-    // name + id arrive at content_block_start, its input arrives as fragments
-    // via input_json_delta, and it is only complete at content_block_stop.
-    let initialUsage = null
-    let deltaUsage = null
-    const _toolBlocks = new Map() // index -> { id, name, inputJson }
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        const evt = parseSSELine(line)
-        if (!evt) continue
-        if (evt.type === 'error') {
-          const errObj = evt.error || {}
-          const err = new Error(errObj.message || 'Anthropic API streaming error')
-          if (errObj.type) err.type = errObj.type
-          if (errObj.type === 'rate_limit_error') err.status = 429
-          else if (errObj.type === 'overloaded_error') err.status = 529
-          else if (errObj.type === 'authentication_error') err.status = 401
-          throw err
-        }
-        if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
-        if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
-        // content_block_start → begin accumulating a block.
-        if (evt.type === 'content_block_start') {
-          const block = evt.block || {}
-          if (block.type === 'thinking') _thinkingIndex = evt.index
-          else if (block.type === 'tool_use') {
-            _toolBlocks.set(evt.index, { id: block.id, name: block.name, inputJson: '' })
-          }
-          continue
-        }
-        // content_block_delta → append the fragment to the active block.
-        if (evt.type === 'content_block_delta') {
-          const d = evt.delta || {}
-          if (d.type === 'thinking_delta') {
-            _thinkingText += d.thinking || ''
-            gen.thinkingBlocks = [{ text: _thinkingText, ts: Date.now() }]
-            // Forward accumulated thinking so the renderer can display it live
-            // (chat.handler slices by lastThinkingLen to emit only new text).
-            if (typeof options?.onThinkingDelta === 'function') {
-              try { options.onThinkingDelta(d.thinking || '') } catch {}
-            }
-          } else if (d.type === 'text_delta') {
-            // Only yield content strings so the plain-chat streaming path (which
-            // concatenates deltas) doesn't get "[object Object]".
-            yield d.text || ''
-          } else if (d.type === 'input_json_delta') {
-            // Append partial JSON to the active tool block. Never overwrite —
-            // fragments MUST be concatenated in order or arguments are lost.
-            const tb = _toolBlocks.get(evt.index)
-            if (tb) tb.inputJson += d.partial_json || ''
-          }
-          continue
-        }
-        // content_block_stop → the block is complete; assemble the full tool_use.
-        if (evt.type === 'content_block_stop') {
-          if (evt.index === _thinkingIndex) { _thinkingIndex = -1; continue }
-          const tb = _toolBlocks.get(evt.index)
-          if (tb) {
-            _toolBlocks.delete(evt.index)
-            let input = {}
-            try { input = tb.inputJson ? JSON.parse(tb.inputJson) : {} } catch {}
-            gen.toolCalls = gen.toolCalls || []
-            gen.toolCalls.push({ id: tb.id, type: 'function', function: { name: tb.name, arguments: JSON.stringify(input) } })
-          }
-          continue
-        }
-        // message_start / other events — no content to yield.
+    const idle = createIdleTimeout(signal, { idleMs: options.idleTimeoutMs, maxMs: options.maxTimeoutMs })
+    try {
+      const res = await fetch(`${baseUrl(provider)}/messages`, {
+        method: 'POST',
+        headers: headers(provider),
+        body: JSON.stringify(body),
+        signal: idle.signal,
+      })
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '')
+        const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
+        err.status = res.status
+        if (res.status === 429 && provider.id != null) { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+        throw err
       }
+      idle.touch()
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let _thinkingText = ''
+      let _thinkingIndex = -1
+      // Per-block accumulator keyed by content_block index. A tool_use block's
+      // name + id arrive at content_block_start, its input arrives as fragments
+      // via input_json_delta, and it is only complete at content_block_stop.
+      let initialUsage = null
+      let deltaUsage = null
+      const _toolBlocks = new Map() // index -> { id, name, inputJson }
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        idle.touch()
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          const evt = parseSSELine(line)
+          if (!evt) continue
+          if (evt.type === 'error') {
+            const errObj = evt.error || {}
+            const err = new Error(errObj.message || 'Anthropic API streaming error')
+            if (errObj.type) err.type = errObj.type
+            if (errObj.type === 'rate_limit_error') err.status = 429
+            else if (errObj.type === 'overloaded_error') err.status = 529
+            else if (errObj.type === 'authentication_error') err.status = 401
+            throw err
+          }
+          if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
+          if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
+          // content_block_start → begin accumulating a block.
+          if (evt.type === 'content_block_start') {
+            const block = evt.block || {}
+            if (block.type === 'thinking') _thinkingIndex = evt.index
+            else if (block.type === 'tool_use') {
+              _toolBlocks.set(evt.index, { id: block.id, name: block.name, inputJson: '' })
+            }
+            continue
+          }
+          // content_block_delta → append the fragment to the active block.
+          if (evt.type === 'content_block_delta') {
+            const d = evt.delta || {}
+            if (d.type === 'thinking_delta') {
+              _thinkingText += d.thinking || ''
+              gen.thinkingBlocks = [{ text: _thinkingText, ts: Date.now() }]
+              // Forward accumulated thinking so the renderer can display it live
+              // (chat.handler slices by lastThinkingLen to emit only new text).
+              if (typeof options?.onThinkingDelta === 'function') {
+                try { options.onThinkingDelta(d.thinking || '') } catch {}
+              }
+            } else if (d.type === 'text_delta') {
+              // Only yield content strings so the plain-chat streaming path (which
+              // concatenates deltas) doesn't get "[object Object]".
+              yield d.text || ''
+            } else if (d.type === 'input_json_delta') {
+              // Append partial JSON to the active tool block. Never overwrite —
+              // fragments MUST be concatenated in order or arguments are lost.
+              const tb = _toolBlocks.get(evt.index)
+              if (tb) tb.inputJson += d.partial_json || ''
+            }
+            continue
+          }
+          // content_block_stop → the block is complete; assemble the full tool_use.
+          if (evt.type === 'content_block_stop') {
+            if (evt.index === _thinkingIndex) { _thinkingIndex = -1; continue }
+            const tb = _toolBlocks.get(evt.index)
+            if (tb) {
+              _toolBlocks.delete(evt.index)
+              let input = {}
+              try { input = tb.inputJson ? JSON.parse(tb.inputJson) : {} } catch {}
+              gen.toolCalls = gen.toolCalls || []
+              gen.toolCalls.push({ id: tb.id, type: 'function', function: { name: tb.name, arguments: JSON.stringify(input) } })
+            }
+            continue
+          }
+          // message_start / other events — no content to yield.
+        }
+      }
+      const rawUsage = (initialUsage || deltaUsage) ? {
+        input_tokens: (initialUsage?.input_tokens || 0),
+        output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
+        cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
+        cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
+      } : null
+      gen.usage = rawUsage ? _nu(rawUsage) : null
+    } finally {
+      idle.cleanup()
     }
-    const rawUsage = (initialUsage || deltaUsage) ? {
-      input_tokens: (initialUsage?.input_tokens || 0),
-      output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
-      cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
-      cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
-    } : null
-    gen.usage = rawUsage ? _nu(rawUsage) : null
   })()
 
   // Attach accumulated state to the generator instance so consumers reading
@@ -401,114 +415,123 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     if (thinkingCfg) { body.thinking = thinkingCfg; body.temperature = 1 }
   }
 
-  const res = await fetch(`${baseUrl(provider)}/messages`, {
-    method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal: withTimeout(signal),
-  })
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '')
-    const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
-    err.status = res.status
-    throw err
-  }
+  const idle = useStream
+    ? createIdleTimeout(signal, { idleMs: options.idleTimeoutMs, maxMs: options.maxTimeoutMs })
+    : null
+  try {
+    const res = await fetch(`${baseUrl(provider)}/messages`, {
+      method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal: idle ? idle.signal : withTimeout(signal),
+    })
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
+      err.status = res.status
+      throw err
+    }
+    if (idle) idle.touch()
 
-  const contentType = (res.headers.get('content-type') || '').toLowerCase()
-  const isSSE = contentType.includes('text/event-stream')
+    const contentType = (res.headers.get('content-type') || '').toLowerCase()
+    const isSSE = contentType.includes('text/event-stream')
 
-  if (!useStream || !isSSE) {
-    const data = await res.json()
-    // Handle both array and object content formats for compatibility
-    const content = Array.isArray(data.content) ? data.content : 
-                    (data.content && typeof data.content === 'object' ? [data.content] : [])
-    const { text, tool_calls } = parseToolUses(content)
-    const usage = data.usage ? _nu(data.usage) : null
-    const reasoning = content
-      .filter(b => b.type === 'thinking' && b.thinking)
-      .map(b => b.thinking)
-      .join('')
-    if (reasoning) { try { onThinking?.(reasoning) } catch {} }
-    if (text) { try { onStream?.(text) } catch {} }
-    return { content: text, tool_calls, usage, reasoning }
-  }
+    if (!useStream || !isSSE) {
+      const data = await res.json()
+      // Handle both array and object content formats for compatibility
+      const content = Array.isArray(data.content) ? data.content : 
+                      (data.content && typeof data.content === 'object' ? [data.content] : [])
+      const { text, tool_calls } = parseToolUses(content)
+      const usage = data.usage ? _nu(data.usage) : null
+      const reasoning = content
+        .filter(b => b.type === 'thinking' && b.thinking)
+        .map(b => b.thinking)
+        .join('')
+      if (reasoning) { try { onThinking?.(reasoning) } catch {} }
+      if (text) { try { onStream?.(text) } catch {} }
+      return { content: text, tool_calls, usage, reasoning }
+    }
 
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let fullContent = ''
-  let fullReasoning = ''
-  let initialUsage = null
-  let deltaUsage = null
-  const _toolBlocks = new Map()
-  const toolCalls = []
-  let _thinkingIndex = -1
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullContent = ''
+    let fullReasoning = ''
+    let initialUsage = null
+    let deltaUsage = null
+    const _toolBlocks = new Map()
+    const toolCalls = []
+    let _thinkingIndex = -1
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-    for (const line of lines) {
-      const evt = parseSSELine(line)
-      if (!evt) continue
-      if (evt.type === 'error') {
-        const errObj = evt.error || {}
-        const err = new Error(errObj.message || 'Anthropic API streaming error')
-        if (errObj.type) err.type = errObj.type
-        if (errObj.type === 'rate_limit_error') err.status = 429
-        else if (errObj.type === 'overloaded_error') err.status = 529
-        else if (errObj.type === 'authentication_error') err.status = 401
-        throw err
-      }
-      if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
-      if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
-      if (evt.type === 'content_block_start') {
-        const block = evt.block || {}
-        if (block.type === 'thinking') _thinkingIndex = evt.index
-        else if (block.type === 'tool_use') {
-          _toolBlocks.set(evt.index, { id: block.id, name: block.name, inputJson: '' })
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (idle) idle.touch()
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const evt = parseSSELine(line)
+        if (!evt) continue
+        if (evt.type === 'error') {
+          const errObj = evt.error || {}
+          const err = new Error(errObj.message || 'Anthropic API streaming error')
+          if (errObj.type) err.type = errObj.type
+          if (errObj.type === 'rate_limit_error') err.status = 429
+          else if (errObj.type === 'overloaded_error') err.status = 529
+          else if (errObj.type === 'authentication_error') err.status = 401
+          throw err
         }
-        continue
-      }
-      if (evt.type === 'content_block_delta') {
-        const d = evt.delta || {}
-        if (d.type === 'thinking_delta') {
-          fullReasoning += d.thinking || ''
-          try { onThinking?.(d.thinking || '') } catch {}
-        } else if (d.type === 'text_delta') {
-          fullContent += d.text || ''
-          try { onStream?.(d.text || '') } catch {}
-        } else if (d.type === 'input_json_delta') {
+        if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
+        if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
+        if (evt.type === 'content_block_start') {
+          const block = evt.block || {}
+          if (block.type === 'thinking') _thinkingIndex = evt.index
+          else if (block.type === 'tool_use') {
+            _toolBlocks.set(evt.index, { id: block.id, name: block.name, inputJson: '' })
+          }
+          continue
+        }
+        if (evt.type === 'content_block_delta') {
+          const d = evt.delta || {}
+          if (d.type === 'thinking_delta') {
+            fullReasoning += d.thinking || ''
+            try { onThinking?.(d.thinking || '') } catch {}
+          } else if (d.type === 'text_delta') {
+            fullContent += d.text || ''
+            try { onStream?.(d.text || '') } catch {}
+          } else if (d.type === 'input_json_delta') {
+            const tb = _toolBlocks.get(evt.index)
+            if (tb) tb.inputJson += d.partial_json || ''
+          }
+          continue
+        }
+        if (evt.type === 'content_block_stop') {
+          if (evt.index === _thinkingIndex) { _thinkingIndex = -1; continue }
           const tb = _toolBlocks.get(evt.index)
-          if (tb) tb.inputJson += d.partial_json || ''
+          if (tb) {
+            _toolBlocks.delete(evt.index)
+            let input = {}
+            try { input = tb.inputJson ? JSON.parse(tb.inputJson) : {} } catch {}
+            toolCalls.push({ id: tb.id, type: 'function', function: { name: tb.name, arguments: JSON.stringify(input) } })
+          }
+          continue
         }
-        continue
-      }
-      if (evt.type === 'content_block_stop') {
-        if (evt.index === _thinkingIndex) { _thinkingIndex = -1; continue }
-        const tb = _toolBlocks.get(evt.index)
-        if (tb) {
-          _toolBlocks.delete(evt.index)
-          let input = {}
-          try { input = tb.inputJson ? JSON.parse(tb.inputJson) : {} } catch {}
-          toolCalls.push({ id: tb.id, type: 'function', function: { name: tb.name, arguments: JSON.stringify(input) } })
-        }
-        continue
       }
     }
-  }
 
-  const rawUsage = (initialUsage || deltaUsage) ? {
-    input_tokens: (initialUsage?.input_tokens || 0),
-    output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
-    cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
-    cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
-  } : null
+    const rawUsage = (initialUsage || deltaUsage) ? {
+      input_tokens: (initialUsage?.input_tokens || 0),
+      output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
+      cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
+      cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
+    } : null
 
-  return {
-    content: fullContent,
-    tool_calls: toolCalls.length ? toolCalls : undefined,
-    usage: rawUsage ? _nu(rawUsage) : null,
-    reasoning: fullReasoning,
+    return {
+      content: fullContent,
+      tool_calls: toolCalls.length ? toolCalls : undefined,
+      usage: rawUsage ? _nu(rawUsage) : null,
+      reasoning: fullReasoning,
+    }
+  } finally {
+    if (idle) idle.cleanup()
   }
 }
 
