@@ -564,6 +564,13 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
     safeSend('chat:question', { reqId, messageId: msgId, sessionId, questions })
   })
 
+  callbacks.checkSavedRule = (name, args) => {
+    if (!allowRules) return null
+    return typeof allowRules.decision === 'function'
+      ? allowRules.decision(sessionId, name, args)
+      : (allowRules.match(sessionId, name, args) ? 'allow' : null)
+  }
+
   // requestPermission: check allow-rules first; otherwise prompt the user via
   // the permission dialog. 60s timeout. `source` field tells the renderer
   // whether this is a 'chat' turn or a 'task' background run. `reason` (when

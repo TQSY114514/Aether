@@ -1521,5 +1521,6 @@
   "ref.type.tool": "Tool",
   "ref.type.command": "Command",
   "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-  "chat.split_run.label": "Split Run"
+  "chat.split_run.label": "Split Run",
+  "arena.no_result_error": "No response returned from model (check model and provider configuration)"
 }

@@ -301,7 +301,7 @@ async function indexWorkspaceAsync(db, rootDir, options = {}) {
   try {
     await yieldLoop()
     const files = listSourceFiles(rootDir, options)
-    const relFiles = new Set(files.map((f) => path.relative(rootDir, f).replace(/\\/g, '/')))
+    const relFiles = files.map((f) => path.relative(rootDir, f).replace(/\\/g, '/'))
     const nodeSet = new Map()
     const edgeSet = new Set()
     const nodes = []

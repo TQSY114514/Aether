@@ -17,8 +17,8 @@ function sanitizeVerifyCommand(cmd) {
   if (typeof cmd !== 'string') return null
   const trimmed = cmd.trim()
   if (!trimmed || trimmed.includes('\0') || trimmed.length > 1000) return null
-  // Disallow shell chaining / redirection / injection metacharacters
-  if (/[;&|`$<>]|\r|\n/.test(trimmed)) return null
+  // Disallow shell chaining / redirection / env expansion metacharacters (including Windows %VAR%)
+  if (/[;&|`$<>%]|\r|\n/.test(trimmed)) return null
   return trimmed
 }
 

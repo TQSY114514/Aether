@@ -177,7 +177,7 @@ Sub-agents & Extended Tools: you may call multiple INDEPENDENT tools in one roun
  * @param {Function} [args.waitIfPaused] - Async function that suspends execution if the loop is paused.
  * @returns {Promise<Object>} The final LLM response message and metrics.
  */
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, onTurnComplete, options = {}, agentMode = 'act', workspaceRoot = null, requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry, findingsLedger = null }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, onTurnComplete, options = {}, agentMode = 'act', workspaceRoot = null, requestPermission, checkSavedRule, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry, findingsLedger = null }) {
   let activeProvider = provider
   let activeModel = model
   const normalizedAgentMode = normalizeAgentMode(agentMode)
@@ -1146,6 +1146,11 @@ Reply in this format:
           // destructive/remote-exec shell commands) prompt the user.
           const effectiveMode = normalizedAgentMode
           let highRiskReason = null
+          const savedRuleDecision = typeof checkSavedRule === 'function' ? checkSavedRule(fn.name, args) : null
+          if (!entry.error && savedRuleDecision === 'deny') {
+            entry.error = `Permission denied by saved rule for '${fn.name}'`
+            entry.failure_kind = 'permission_denied'
+          }
           if (!entry.error) {
             try {
               const { checkToolAllowed } = require('../tools/trustEngine')
@@ -1231,6 +1236,7 @@ Reply ONLY with JSON:
           const promptReason = highRiskReason || runnerUpObjection || null
           const shouldPromptForPermission = Boolean(
             promptReason ||
+            savedRuleDecision === 'ask' ||
             (tool.risk === 'dangerous' && isTainted) ||
             permissionOverride === permissions.PermissionOverride.Ask ||
             permissionOverride === permissions.PermissionOverride.AlwaysAsk

@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
 import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X, Maximize2 } from 'lucide-react'
-import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
+import { renderMarkdown, sanitizeHtml, getHighlightVersion, subscribeHighlightReady } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
@@ -117,6 +117,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const editMessage = useStore(s => s.editMessage)
   const continueMessage = useStore(s => s.continueMessage)
   const forkSession = useStore(s => s.forkSession)
+  const sending = useStore(s => s.sending)
 
   const [memoryPopoverOpen, setMemoryPopoverOpen] = useState(false)
   const [pinnedHitIds, setPinnedHitIds] = useState<Set<number>>(new Set())
@@ -162,11 +163,18 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
 
   const startEdit = useCallback(() => { setDraft(message.content); setEditing(true) }, [message.content])
   const submitEdit = useCallback(async () => {
+    if (sending) return
     const c = draft.trim()
     if (!c || c === message.content) { setEditing(false); return }
     setEditing(false)
     await editMessage(message.id, c)
-  }, [draft, message.id, message.content, editMessage])
+  }, [sending, draft, message.id, message.content, editMessage])
+
+  const [hlVersion, setHlVersion] = useState(getHighlightVersion)
+  useEffect(() => {
+    if (!message.content || !message.content.includes('```')) return
+    return subscribeHighlightReady(() => setHlVersion(getHighlightVersion()))
+  }, [message.content])
 
   const onBubbleClick = useCallback((e: React.MouseEvent) => {
     const fold = (e.target as HTMLElement).closest('.code-fold') as HTMLElement | null
@@ -223,7 +231,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
 
   const renderedContent = useMemo(() => {
     return renderContent(message.content)
-  }, [renderContent, message.content])
+  }, [renderContent, message.content, hlVersion])
 
 
   return (
@@ -245,7 +253,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                   onChange={(e) => setDraft(e.target.value)}
                   autoFocus
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) {
                       e.preventDefault()
                       submitEdit()
                     }
@@ -265,7 +273,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                   </button>
                   <button
                     onClick={submitEdit}
-                    disabled={!draft.trim()}
+                    disabled={!draft.trim() || sending}
                     className="px-2.5 py-1 text-xs rounded-md text-white disabled:opacity-40 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                     style={{ backgroundColor: 'var(--accent)' }}
                   >

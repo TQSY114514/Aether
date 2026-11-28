@@ -6,6 +6,8 @@
 // IPC — the renderer already has the data.
 // ───────────────────────────────────────────────────────────────────────────
 
+import { t } from './i18n'
+
 export type ArenaScoreRow = {
   id: number
   model_id: number
@@ -158,7 +160,7 @@ export function toArenaSlotState(r: RawArenaResultLike | undefined, fallbackLate
   if (!r) {
     return {
       content: '',
-      error: '模型未返回结果（请检查模型与服务商配置）',
+      error: t('arena.no_result_error', '模型未返回结果（请检查模型与服务商配置）'),
       latency_ms: fallbackLatencyMs,
       done: true,
     }

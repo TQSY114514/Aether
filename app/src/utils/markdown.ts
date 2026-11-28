@@ -51,6 +51,7 @@ function ensureHljsLanguage(langId: string): boolean {
           if (mod?.default && !hljsCore.getLanguage(langId)) {
             hljsCore.registerLanguage(langId, mod.default)
             _highlightVersion++
+            notifyHighlightListeners()
           }
         })
         .catch(() => {
@@ -79,6 +80,18 @@ let _hljs: typeof hljsCore | null = null
 let _hljsLoading: Promise<void> | null = null
 let _highlightVersion = 0
 let _hljsCssLoaded = false
+const _highlightListeners = new Set<() => void>()
+
+function notifyHighlightListeners() {
+  for (const cb of _highlightListeners) {
+    try { cb() } catch {}
+  }
+}
+
+export function subscribeHighlightReady(cb: () => void): () => void {
+  _highlightListeners.add(cb)
+  return () => { _highlightListeners.delete(cb) }
+}
 
 async function loadHljsCss() {
   if (_hljsCssLoaded) return

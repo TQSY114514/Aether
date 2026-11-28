@@ -263,7 +263,7 @@ export default function PermissionRulesSettings() {
               <select
                 value={newTool}
                 onChange={(e) => setNewTool(e.target.value)}
-                className="w-full px-2 py-1.5 text-xs rounded-md border outline-none bg-[var(--bg-primary)] font-mono"
+                className="w-full px-2 py-1.5 text-xs rounded-md border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] bg-[var(--bg-primary)] font-mono"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
                 {TOOL_OPTIONS.map((tool) => (
@@ -279,7 +279,7 @@ export default function PermissionRulesSettings() {
                 value={newPattern}
                 onChange={(e) => setNewPattern(e.target.value)}
                 placeholder={t('settings.permissions.pattern_placeholder')}
-                className="w-full px-2 py-1.5 text-xs rounded-md border outline-none bg-[var(--bg-primary)] font-mono"
+                className="w-full px-2 py-1.5 text-xs rounded-md border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] bg-[var(--bg-primary)] font-mono"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               />
             </div>
@@ -290,7 +290,7 @@ export default function PermissionRulesSettings() {
               <select
                 value={newDecision}
                 onChange={(e) => setNewDecision(e.target.value as 'allow' | 'ask' | 'deny')}
-                className="w-full px-2 py-1.5 text-xs rounded-md border outline-none bg-[var(--bg-primary)]"
+                className="w-full px-2 py-1.5 text-xs rounded-md border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] bg-[var(--bg-primary)]"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
                 <option value="allow">{t('settings.permissions.decision.allow')}</option>
@@ -395,8 +395,9 @@ export default function PermissionRulesSettings() {
           <div className="space-y-2">
             {persisted.map((rule) => {
               const isScoped = Array.isArray(rule.sessionIds) && rule.sessionIds.length > 0
-              const isEditing = editingScopeKey === rule.key
-              const isBusy = busyKey === rule.key
+              const compositeKey = `${rule.tool}:${rule.ruleKey}`
+              const isEditing = editingScopeKey === compositeKey || editingScopeKey === rule.key
+              const isBusy = busyKey === compositeKey || busyKey === rule.key
               return (
                 <div
                   key={rule.key}
@@ -421,7 +422,7 @@ export default function PermissionRulesSettings() {
                         value={rule.decision}
                         disabled={isBusy}
                         onChange={(e) => handleSaveRule(rule.tool, rule.ruleKey, e.target.value, rule.sessionIds ?? null)}
-                        className="px-2 py-1 text-[11px] rounded border outline-none bg-[var(--bg-secondary)] cursor-pointer disabled:opacity-40"
+                        className="px-2 py-1 text-[11px] rounded border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] bg-[var(--bg-secondary)] cursor-pointer disabled:opacity-40"
                         style={{
                           borderColor: 'var(--border)',
                           color: rule.decision === 'deny' ? 'var(--error)' : rule.decision === 'ask' ? 'var(--warning)' : 'var(--success)',

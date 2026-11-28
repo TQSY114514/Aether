@@ -231,9 +231,9 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     })
     return () => {
       unsub()
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current)
-      if (mdTimerRef.current) window.clearTimeout(mdTimerRef.current)
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0 }
+      if (thinkingRafRef.current) { cancelAnimationFrame(thinkingRafRef.current); thinkingRafRef.current = 0 }
+      if (mdTimerRef.current) { window.clearTimeout(mdTimerRef.current); mdTimerRef.current = 0 }
     }
   }, [sessionId, isAtBottom, resetLocalState, renderIncrementalContent])
 

@@ -1614,7 +1614,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "zh-CN": {
     "common.browse": "浏览...",
@@ -3139,7 +3140,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "工具",
     "ref.type.command": "指令",
     "ref.hint": "↑↓ 切换 · Enter/Tab 补全",
-    "chat.split_run.label": "双模型对比 (Split Run)"
+    "chat.split_run.label": "双模型对比 (Split Run)",
+    "arena.no_result_error": "模型未返回结果（请检查模型与服务商配置）"
   },
   "es": {
     "app.name": "Aether",
@@ -4371,7 +4373,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "ja": {
     "app.name": "Aether",
@@ -5603,7 +5606,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -6848,7 +6852,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "器",
     "ref.type.command": "令",
     "ref.hint": "↑↓ 擇選 · Enter/Tab 補全",
-    "chat.split_run.label": "雙器並較 (Split Run)"
+    "chat.split_run.label": "雙器並較 (Split Run)",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "fr": {
     "app.name": "Aether",
@@ -8080,7 +8085,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "de": {
     "app.name": "Aether",
@@ -9312,7 +9318,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "pt": {
     "app.name": "Aether",
@@ -10544,7 +10551,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "ru": {
     "app.name": "Aether",
@@ -11776,7 +11784,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -13303,7 +13312,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "工具",
     "ref.type.command": "指令",
     "ref.hint": "↑↓ 切換 · Enter/Tab 補全",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "模型未回傳結果（請檢查模型與服務商設定）"
   },
   "ar": {
     "app.name": "Aether",
@@ -14535,7 +14545,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "uk": {
     "app.name": "Aether",
@@ -15767,7 +15778,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "ko": {
     "app.name": "Aether",
@@ -16999,7 +17011,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   },
   "hi": {
     "app.name": "Aether",
@@ -18231,7 +18244,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "arena.no_result_error": "No response returned from model (check model and provider configuration)"
   }
 }
 
