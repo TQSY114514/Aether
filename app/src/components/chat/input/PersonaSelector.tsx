@@ -14,7 +14,7 @@ import type { Persona } from '@/types'
 export interface PersonaSelectorProps {
   currentPersonaId: number | null | undefined
   personas: Persona[]
-  workspaceSoul: { name: string; prompt?: string } | null
+  workspaceSoul: { name: string; prompt?: string; isWorkspace?: boolean } | null
   onSelect: (personaId: number | null) => void
   disabled?: boolean
 }
@@ -27,6 +27,7 @@ export default function PersonaSelector({
   disabled = false,
 }: PersonaSelectorProps) {
   const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -47,8 +48,10 @@ export default function PersonaSelector({
     }
   }, [open])
 
-  // Determine current active label and icon
-  const isSoulActive = currentPersonaId === -1 || (currentPersonaId == null && workspaceSoul !== null)
+  // Determine current active label and icon (matches backend persona injection rules)
+  const isSoulActive =
+    workspaceSoul !== null &&
+    (currentPersonaId === -1 || (currentPersonaId == null && Boolean(workspaceSoul.isWorkspace)))
   const currentLabel = useMemo(() => {
     if (isSoulActive && workspaceSoul) {
       return `SOUL: ${workspaceSoul.name}`
@@ -60,10 +63,64 @@ export default function PersonaSelector({
     return t('chat.no_persona')
   }, [isSoulActive, workspaceSoul, currentPersonaId, personas])
 
+  const optionIds = useMemo(() => {
+    const ids: { id: number; domId: string }[] = []
+    if (workspaceSoul) ids.push({ id: -1, domId: 'persona-opt-soul' })
+    ids.push({ id: 0, domId: 'persona-opt-none' })
+    for (const p of personas) ids.push({ id: p.id, domId: `persona-opt-${p.id}` })
+    return ids
+  }, [workspaceSoul, personas])
+
+  const listboxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const curVal = isSoulActive ? -1 : currentPersonaId && currentPersonaId > 0 ? currentPersonaId : 0
+    const idx = optionIds.findIndex((o) => o.id === curVal)
+    setActiveIndex(idx >= 0 ? idx : 0)
+  }, [open, optionIds, isSoulActive, currentPersonaId])
+
+  useEffect(() => {
+    if (!open) return
+    const activeOpt = optionIds[activeIndex]
+    if (activeOpt?.domId) {
+      const el = document.getElementById(activeOpt.domId)
+      el?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [open, activeIndex, optionIds])
+
+  const handleListKeyDown = (e: React.KeyboardEvent) => {
+    if (optionIds.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((i) => (i + 1) % optionIds.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((i) => (i - 1 + optionIds.length) % optionIds.length)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      setActiveIndex(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      setActiveIndex(optionIds.length - 1)
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      const activeEl = document.activeElement as HTMLElement | null
+      if (activeEl && activeEl !== e.currentTarget && !activeEl.getAttribute('role')?.includes('option')) {
+        return
+      }
+      const target = optionIds[activeIndex]
+      if (target && !disabled) {
+        e.preventDefault()
+        onSelect(target.id)
+        setOpen(false)
+      }
+    }
+  }
+
   const tooltipText = t('tooltip.persona')
 
   return (
-    <div ref={containerRef} className="relative flex items-center gap-1 shrink-0">
+    <div ref={containerRef} className="relative flex items-center gap-1 shrink-0" onKeyDown={open ? handleListKeyDown : undefined}>
       <Tooltip text={tooltipText}>
         <button
           type="button"
@@ -98,8 +155,11 @@ export default function PersonaSelector({
 
       {open && (
         <div
+          ref={listboxRef}
           role="listbox"
+          tabIndex={-1}
           aria-label={t('sidebar.nav.personas')}
+          aria-activedescendant={optionIds[activeIndex]?.domId}
           className="absolute bottom-full mb-1.5 left-0 w-56 max-h-[300px] overflow-y-auto rounded-[8px] border shadow-lg p-1 z-40 text-xs popover-scale-up space-y-0.5"
           style={{
             backgroundColor: 'var(--bg-primary)',
@@ -113,6 +173,7 @@ export default function PersonaSelector({
           {/* Project SOUL.md option if available in workspace */}
           {workspaceSoul && (
             <button
+              id="persona-opt-soul"
               type="button"
               role="option"
               aria-selected={isSoulActive}
@@ -122,7 +183,7 @@ export default function PersonaSelector({
                 setOpen(false)
               }}
               className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between cursor-pointer"
-              style={isSoulActive ? { backgroundColor: 'var(--content-bg)' } : {}}
+              style={isSoulActive || optionIds[activeIndex]?.id === -1 ? { backgroundColor: 'var(--content-bg)' } : {}}
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 <Sparkles size={11} className="text-[var(--accent)] shrink-0" />
@@ -136,6 +197,7 @@ export default function PersonaSelector({
 
           {/* Clean Slate / Default option */}
           <button
+            id="persona-opt-none"
             type="button"
             role="option"
             aria-selected={!isSoulActive && (!currentPersonaId || currentPersonaId === 0)}
@@ -145,7 +207,7 @@ export default function PersonaSelector({
               setOpen(false)
             }}
             className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between cursor-pointer"
-            style={!isSoulActive && (!currentPersonaId || currentPersonaId === 0) ? { backgroundColor: 'var(--content-bg)' } : {}}
+            style={(!isSoulActive && (!currentPersonaId || currentPersonaId === 0)) || optionIds[activeIndex]?.id === 0 ? { backgroundColor: 'var(--content-bg)' } : {}}
           >
             <div className="flex items-center gap-1.5 min-w-0">
               <User size={11} className="text-[var(--text-muted)] shrink-0" />
@@ -166,6 +228,7 @@ export default function PersonaSelector({
             const isSelected = !isSoulActive && currentPersonaId === p.id
             return (
               <button
+                id={`persona-opt-${p.id}`}
                 key={p.id}
                 type="button"
                 role="option"
@@ -176,7 +239,7 @@ export default function PersonaSelector({
                   setOpen(false)
                 }}
                 className="w-full text-left px-2 py-1.5 rounded-[5px] transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between cursor-pointer"
-                style={isSelected ? { backgroundColor: 'var(--content-bg)' } : {}}
+                style={isSelected || optionIds[activeIndex]?.id === p.id ? { backgroundColor: 'var(--content-bg)' } : {}}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <User size={11} className="text-[var(--text-muted)] shrink-0" />
@@ -198,7 +261,13 @@ export default function PersonaSelector({
                 setTimeout(() => {
                   window.dispatchEvent(new CustomEvent('aether:settings-tab', { detail: 'providers-routing' }))
                   setTimeout(() => {
-                    document.getElementById('settings-personas-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    const prefersReducedMotion =
+                      typeof window !== 'undefined' &&
+                      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+                    document.getElementById('settings-personas-card')?.scrollIntoView({
+                      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+                      block: 'start',
+                    })
                   }, 50)
                 }, 30)
               }}

@@ -71,15 +71,20 @@ function registerSessionHandlers(ipcMain, db) {
     if (sandbox.isForbiddenCwd(canonical)) {
       throw new Error(`Forbidden working directory: ${canonical}`)
     }
-    // Persist configuration & session CWD first before mutating in-memory workspace pin
-    const cfg = db.getSessionConfig(id) || {}
-    cfg.workspace = canonical
-    db.setSessionConfig(id, cfg)
+    // Persist configuration & session CWD atomically before mutating in-memory workspace pin
+    const prevCfg = db.getSessionConfig(id)
+    const nextCfg = { ...(prevCfg || {}), workspace: canonical }
+    db.setSessionConfig(id, nextCfg)
 
-    if (typeof db.setSessionCwd === 'function') {
-      db.setSessionCwd(id, canonical)
-    } else {
-      db.updateSession(id, { cwd: canonical })
+    try {
+      if (typeof db.setSessionCwd === 'function') {
+        db.setSessionCwd(id, canonical)
+      } else {
+        db.updateSession(id, { cwd: canonical })
+      }
+    } catch (err) {
+      try { if (prevCfg != null) db.setSessionConfig(id, prevCfg) } catch {}
+      throw err
     }
 
     try {
@@ -104,9 +109,10 @@ function registerSessionHandlers(ipcMain, db) {
       db.pruneEmptySessions()
       const effectiveCwd = cwd || process.cwd()
       const effectivePid = projectId || project_id || null
-      const sessionRow = db.createSession({ persona_id: personaId || null, cwd: effectiveCwd, project_id: effectivePid })
+      const normalizedPersonaId = personaId ?? null
+      const sessionRow = db.createSession({ persona_id: normalizedPersonaId, cwd: effectiveCwd, project_id: effectivePid })
       const sid = sessionRow.lastInsertRowid || sessionRow.id
-      const cfg = { providerId: providerId || null, modelId: modelId || null, personaId: personaId || null, cwd: effectiveCwd }
+      const cfg = { providerId: providerId || null, modelId: modelId || null, personaId: normalizedPersonaId, cwd: effectiveCwd }
       db.setSessionConfig(sid, cfg)
       const fetched = typeof db.getSession === 'function' ? db.getSession(sid) : null
       return { session: fetched || { ...sessionRow, id: sid, cwd: effectiveCwd, project_id: effectivePid }, config: cfg }

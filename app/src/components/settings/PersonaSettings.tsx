@@ -22,45 +22,65 @@ export default function PersonaSettings() {
   const [draftName, setDraftName] = useState('')
   const [draftPrompt, setDraftPrompt] = useState('')
   const [saving, setSaving] = useState(false)
+  const [savingSoul, setSavingSoul] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const editingIdRef = useRef<number | 'new' | null>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
 
   const startCreate = () => {
+    if (saving) return
+    editingIdRef.current = 'new'
     setEditingId('new')
     setDraftName('')
     setDraftPrompt('')
+    setFormError(null)
   }
 
   const startEdit = (p: Persona) => {
+    if (saving) return
+    editingIdRef.current = p.id
     setEditingId(p.id)
     setDraftName(p.name)
     setDraftPrompt(p.prompt || '')
+    setFormError(null)
   }
 
   const cancelEdit = () => {
+    editingIdRef.current = null
     setEditingId(null)
     setDraftName('')
     setDraftPrompt('')
+    setFormError(null)
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+    const targetId = editingId
     const name = draftName.trim()
     const prompt = draftPrompt.trim()
-    if (!name || saving) return
+    if (!name || saving || targetId === null) return
     setSaving(true)
+    setFormError(null)
     try {
-      if (editingId === 'new') {
+      if (targetId === 'new') {
         await addPersona({ name, prompt, avatar: null })
-      } else if (typeof editingId === 'number') {
-        await updatePersona(editingId, { name, prompt })
+      } else if (typeof targetId === 'number') {
+        await updatePersona(targetId, { name, prompt })
       }
-      cancelEdit()
+      if (editingIdRef.current === targetId) {
+        cancelEdit()
+      }
+    } catch (err: any) {
+      const msg = err?.message || t('persona.save_failed')
+      setFormError(msg)
+      toast(msg, { type: 'error' })
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (p: Persona) => {
+    if (saving) return
     const ok = await confirm({
       title: t('persona.delete'),
       description: t('persona.delete_confirm', p.name),
@@ -68,11 +88,19 @@ export default function PersonaSettings() {
       danger: true,
     })
     if (!ok) return
-    if (defaultPersonaId === p.id) {
-      await setDefaultPersona(null)
+    const wasDefault = defaultPersonaId === p.id
+    try {
+      if (wasDefault) {
+        await setDefaultPersona(null)
+      }
+      await deletePersona(p.id)
+      if (editingIdRef.current === p.id) cancelEdit()
+    } catch (err: any) {
+      if (wasDefault) {
+        try { await setDefaultPersona(p.id) } catch {}
+      }
+      toast(err?.message || t('persona.save_failed'), { type: 'error' })
     }
-    await deletePersona(p.id)
-    if (editingId === p.id) cancelEdit()
   }
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,13 +148,26 @@ export default function PersonaSettings() {
   }
 
   const handleSaveWorkspaceSoul = async () => {
-    if (!workspaceSoul) return
-    await addPersona({
-      name: workspaceSoul.name || 'SOUL',
-      prompt: workspaceSoul.prompt || '',
-      avatar: workspaceSoul.avatar || null,
-    })
-    toast(t('persona.imported_success', workspaceSoul.name || 'SOUL'), { type: 'success' })
+    if (!workspaceSoul || savingSoul) return
+    const name = (workspaceSoul.name || 'SOUL').trim()
+    const prompt = (workspaceSoul.prompt || '').trim()
+    if (personas.some((p) => p.name.trim() === name && (p.prompt || '').trim() === prompt)) {
+      toast(t('persona.imported_success', name), { type: 'info' })
+      return
+    }
+    setSavingSoul(true)
+    try {
+      await addPersona({
+        name,
+        prompt,
+        avatar: workspaceSoul.avatar || null,
+      })
+      toast(t('persona.imported_success', name), { type: 'success' })
+    } catch (err: any) {
+      toast(err?.message || t('persona.save_failed'), { type: 'error' })
+    } finally {
+      setSavingSoul(false)
+    }
   }
 
   return (
@@ -159,8 +200,9 @@ export default function PersonaSettings() {
           />
           <button
             type="button"
+            disabled={saving}
             onClick={() => importInputRef.current?.click()}
-            className="h-7 px-2.5 text-xs rounded-md border flex items-center gap-1.5 transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            className="h-7 px-2.5 text-xs rounded-md border flex items-center gap-1.5 transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
           >
             <Upload size={12} />
@@ -168,6 +210,7 @@ export default function PersonaSettings() {
           </button>
           <button
             type="button"
+            disabled={saving}
             onClick={startCreate}
             className="h-7 px-2.5 text-xs rounded-md font-medium flex items-center gap-1 transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
@@ -233,6 +276,7 @@ export default function PersonaSettings() {
           </div>
           <button
             type="button"
+            disabled={savingSoul || saving}
             onClick={handleSaveWorkspaceSoul}
             className="h-7 px-2.5 text-[11px] rounded-md border shrink-0 transition-colors hover:bg-[var(--content-bg)] active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
             style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
@@ -252,10 +296,14 @@ export default function PersonaSettings() {
           <input
             type="text"
             value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
+            disabled={saving}
+            onChange={(e) => {
+              setDraftName(e.target.value)
+              if (formError) setFormError(null)
+            }}
             placeholder={t('persona.name')}
             autoFocus
-            className="w-full h-8 px-2.5 text-xs rounded-md border outline-none focus:border-[var(--accent)]"
+            className="w-full h-8 px-2.5 text-xs rounded-md border outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50"
             style={{
               borderColor: 'var(--border)',
               backgroundColor: 'var(--content-bg)',
@@ -264,19 +312,29 @@ export default function PersonaSettings() {
           />
           <textarea
             value={draftPrompt}
-            onChange={(e) => setDraftPrompt(e.target.value)}
+            disabled={saving}
+            onChange={(e) => {
+              setDraftPrompt(e.target.value)
+              if (formError) setFormError(null)
+            }}
             placeholder={t('persona.prompt')}
             rows={4}
-            className="w-full px-2.5 py-2 text-xs rounded-md border outline-none resize-y focus:border-[var(--accent)] leading-relaxed"
+            className="w-full px-2.5 py-2 text-xs rounded-md border outline-none resize-y focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50 leading-relaxed"
             style={{
               borderColor: 'var(--border)',
               backgroundColor: 'var(--content-bg)',
               color: 'var(--text-primary)',
             }}
           />
+          {formError && (
+            <p role="alert" className="text-[11px] text-[var(--error)]">
+              {formError}
+            </p>
+          )}
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
+              disabled={saving}
               onClick={cancelEdit}
               className="h-7 px-3 text-xs rounded-md border transition-colors hover:bg-[var(--content-bg)] active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}

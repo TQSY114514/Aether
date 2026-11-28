@@ -1415,7 +1415,8 @@
       "ref.type.tool": "工具",
       "ref.type.command": "指令",
       "ref.hint": "↑↓ 切换 · Enter/Tab 补全",
-      "chat.split_run.label": "双模型对比 (Split Run)"
+      "chat.split_run.label": "双模型对比 (Split Run)",
+      "persona.save_failed": "保存人设失败"
     }
   },
   {
@@ -2650,7 +2651,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -3885,7 +3887,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -5133,7 +5136,8 @@
       "ref.type.tool": "器",
       "ref.type.command": "令",
       "ref.hint": "↑↓ 擇選 · Enter/Tab 補全",
-      "chat.split_run.label": "雙器並較 (Split Run)"
+      "chat.split_run.label": "雙器並較 (Split Run)",
+      "persona.save_failed": "存人設未果"
     }
   },
   {
@@ -6368,7 +6372,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -7603,7 +7608,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -8838,7 +8844,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -10073,7 +10080,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -11325,7 +11333,8 @@
       "chat.review_expand_all": "展開全部差異",
       "chat.review_collapse_all": "收合全部差異",
       "chat.review_copy_path": "複製檔案路徑",
-      "chat.review_path_copied": "路徑已複製"
+      "chat.review_path_copied": "路徑已複製",
+      "persona.save_failed": "儲存人設失敗"
     }
   },
   {
@@ -12560,7 +12569,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -13795,7 +13805,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -15030,7 +15041,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   },
   {
@@ -16265,7 +16277,8 @@
       "ref.type.tool": "Tool",
       "ref.type.command": "Command",
       "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-      "chat.split_run.label": "Split Run"
+      "chat.split_run.label": "Split Run",
+      "persona.save_failed": "Failed to save persona"
     }
   }
 ]

@@ -446,11 +446,15 @@ export default function ChatInput() {
 
   const handleReferenceSelect = ({ prefix, replacement }: { prefix: string; query: string; replacement: string }) => {
     const before = input.slice(0, refCursor)
-    const match = before.match(/([@#!])[^\s]*$/)
+    const match = before.match(/([@#!])(?:"([^"\r\n]*)|([^\s]*))$/)
     if (!match) return
     const start = before.length - match[0].length
     const inserted = prefix + replacement
-    const next = input.slice(0, start) + inserted + input.slice(refCursor)
+    let remaining = input.slice(refCursor)
+    if (replacement.endsWith('"') && remaining.startsWith('"')) {
+      remaining = remaining.slice(1)
+    }
+    const next = input.slice(0, start) + inserted + remaining
     setInput(next)
     const pos = start + inserted.length
     setRefCursor(pos)

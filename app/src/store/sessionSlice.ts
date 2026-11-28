@@ -46,7 +46,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         cfg.modelId = defModel.id
       }
     }
-    if (s.defaultPersonaId) {
+    if (s.defaultPersonaId !== null && s.defaultPersonaId !== undefined && s.defaultPersonaId > 0) {
       cfg.personaId = s.defaultPersonaId
     }
     if (!cfg.providerId && enabledProviders.length > 0) {
@@ -81,6 +81,8 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     if (!currentSessionId) return
     const trimmed = (targetPath || '').trim()
     if (!trimmed) return
+    const isCaseInsensitive = typeof navigator !== 'undefined' && /win|mac/i.test(navigator.platform || navigator.userAgent)
+    const samePath = (a: string, b: string) => (isCaseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b)
     try {
       let resolved = trimmed
       if (window.electronAPI.session.setCwd) {
@@ -88,8 +90,9 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         if (typeof res === 'string' && res.trim()) {
           resolved = res.trim()
         }
+      } else {
+        await window.electronAPI.session.setConfig(currentSessionId, { ...sessionConfigs[currentSessionId], workspace: resolved })
       }
-      await window.electronAPI.session.setConfig(currentSessionId, { ...sessionConfigs[currentSessionId], workspace: resolved })
       set((s) => ({
         sessions: s.sessions.map((sess) => sess.id === currentSessionId ? { ...sess, cwd: resolved } : sess),
         sessionConfigs: {
@@ -100,10 +103,11 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
       try {
         const raw = localStorage.getItem('aether:recent_cwds')
         const prev: string[] = raw ? JSON.parse(raw) : []
-        const next = [resolved, ...prev.filter((p) => p && p.toLowerCase() !== resolved.toLowerCase())].slice(0, 8)
+        const next = [resolved, ...prev.filter((p) => p && !samePath(p, resolved))].slice(0, 8)
         localStorage.setItem('aether:recent_cwds', JSON.stringify(next))
       } catch {}
       await get().loadWorkspaceSoul(resolved)
+      return resolved
     } catch (e) {
       log.error("setSessionCwd failed", e)
       throw e

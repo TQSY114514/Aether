@@ -689,9 +689,11 @@ export function ensureSessionCwdListener() {
       },
     }))
     try {
+      const isCaseInsensitive = typeof navigator !== 'undefined' && /win|mac/i.test(navigator.platform || navigator.userAgent)
+      const samePath = (a: string, b: string) => (isCaseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b)
       const raw = localStorage.getItem('aether:recent_cwds')
       const prev: string[] = raw ? JSON.parse(raw) : []
-      const next = [cwd, ...prev.filter((p) => p && p.toLowerCase() !== cwd.toLowerCase())].slice(0, 8)
+      const next = [cwd, ...prev.filter((p) => p && !samePath(p, cwd))].slice(0, 8)
       localStorage.setItem('aether:recent_cwds', JSON.stringify(next))
     } catch {}
     if (st.getState().currentSessionId === sessionId) {

@@ -14,6 +14,12 @@ import Tooltip from '@/components/Tooltip'
 import { t } from '@/utils/i18n'
 
 const RECENT_CWDS_KEY = 'aether:recent_cwds'
+const IS_CASE_INSENSITIVE_FS =
+  typeof navigator !== 'undefined' && /win|mac/i.test(navigator.platform || navigator.userAgent)
+
+function samePath(a: string, b: string): boolean {
+  return IS_CASE_INSENSITIVE_FS ? a.toLowerCase() === b.toLowerCase() : a === b
+}
 
 type Props = {
   activeCwd: string | null
@@ -36,7 +42,7 @@ function loadRecentCwds(): string[] {
 function saveRecentCwd(dir: string) {
   try {
     const prev = loadRecentCwds()
-    const next = [dir, ...prev.filter((p) => p.toLowerCase() !== dir.toLowerCase())].slice(0, 8)
+    const next = [dir, ...prev.filter((p) => !samePath(p, dir))].slice(0, 8)
     localStorage.setItem(RECENT_CWDS_KEY, JSON.stringify(next))
   } catch {}
 }
@@ -87,6 +93,7 @@ export default function CwdNavigator({
   const setSessionCwd = useStore((s) => s.setSessionCwd)
 
   const [open, setOpen] = useState(false)
+  const [alignRight, setAlignRight] = useState(true)
   const [draft, setDraft] = useState(activeCwd || '')
   const [error, setError] = useState<string | null>(null)
   const [recentCwds, setRecentCwds] = useState<string[]>([])
@@ -101,6 +108,13 @@ export default function CwdNavigator({
   useEffect(() => {
     if (open) {
       setRecentCwds(loadRecentCwds())
+      if (containerRef.current && typeof window !== 'undefined') {
+        const rect = containerRef.current.getBoundingClientRect()
+        const popW = Math.min(390, window.innerWidth - 32)
+        const rightOverflow = rect.left + popW > window.innerWidth - 16
+        const leftHasRoom = rect.right - popW >= 16
+        setAlignRight(rightOverflow && leftHasRoom)
+      }
       requestAnimationFrame(() => inputRef.current?.select())
     }
   }, [open])
@@ -214,7 +228,7 @@ export default function CwdNavigator({
         <div
           role="dialog"
           aria-label={t('cwd.navigator_title')}
-          className="popover-scale-up absolute top-full left-0 mt-1.5 w-[390px] max-w-[calc(100vw-32px)] rounded-[10px] border shadow-xl z-50 p-3 flex flex-col gap-2.5"
+          className={`popover-scale-up absolute top-full ${alignRight ? 'right-0' : 'left-0'} mt-1.5 w-[390px] max-w-[calc(100vw-32px)] rounded-[10px] border shadow-xl z-50 p-3 flex flex-col gap-2.5`}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
         >
           {/* Header + quiet rules badge + quick actions */}
@@ -353,7 +367,7 @@ export default function CwdNavigator({
               <div className="flex flex-col gap-0.5 max-h-[156px] overflow-y-auto">
                 {recentCwds.slice(0, 6).map((dir) => {
                   const { name, parent } = splitNameAndParent(dir)
-                  const isCurrent = !!activeCwd && dir.toLowerCase() === activeCwd.toLowerCase()
+                  const isCurrent = !!activeCwd && samePath(dir, activeCwd)
                   return (
                     <button
                       key={dir}

@@ -1412,5 +1412,6 @@
   "ref.type.tool": "Tool",
   "ref.type.command": "Command",
   "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-  "chat.split_run.label": "Split Run"
+  "chat.split_run.label": "Split Run",
+  "persona.save_failed": "Failed to save persona"
 }
