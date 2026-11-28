@@ -1,5 +1,6 @@
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import FeatureFlagsCard from './FeatureFlagsCard'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Advanced generation + title settings (for power users).
@@ -43,7 +44,7 @@ export default function AdvancedSettings() {
             </div>
             <input type="range" min={0} max={8192} step={256} value={maxTokens}
               onChange={(e) => setMaxTokens(parseInt(e.target.value, 10))}
-              className="w-full accent-black" />
+              className="w-full accent-[var(--accent)]" />
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -52,7 +53,7 @@ export default function AdvancedSettings() {
             </div>
             <input type="range" min={0} max={2} step={0.05} value={temperature}
               onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              className="w-full accent-black" />
+              className="w-full accent-[var(--accent)]" />
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -61,7 +62,7 @@ export default function AdvancedSettings() {
             </div>
             <input type="range" min={0} max={1} step={0.05} value={topP}
               onChange={(e) => setTopP(parseFloat(e.target.value))}
-              className="w-full accent-black" />
+              className="w-full accent-[var(--accent)]" />
           </div>
           <div>
             <p className="text-sm mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.system_prefix')}</p>
@@ -80,21 +81,21 @@ export default function AdvancedSettings() {
         <div className="space-y-3">
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.auto_title')}</span>
-            <input type="checkbox" checked={autoTitle} onChange={(e) => setAutoTitle(e.target.checked)} className="w-4 h-4 accent-black" />
+            <input type="checkbox" checked={autoTitle} onChange={(e) => setAutoTitle(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
             <div>
               <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.auto_commit_test')}</span>
               <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('settings.auto_commit_test_desc')}</p>
             </div>
-            <input type="checkbox" checked={autoCommitOnTestPass} onChange={(e) => setAutoCommitOnTestPass(e.target.checked)} className="w-4 h-4 accent-black" />
+            <input type="checkbox" checked={autoCommitOnTestPass} onChange={(e) => setAutoCommitOnTestPass(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
             <div>
               <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.auto_commit_file')}</span>
               <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('settings.auto_commit_file_desc')}</p>
             </div>
-            <input type="checkbox" checked={autoCommitAfterFileChange} onChange={(e) => setAutoCommitAfterFileChange(e.target.checked)} className="w-4 h-4 accent-black" />
+            <input type="checkbox" checked={autoCommitAfterFileChange} onChange={(e) => setAutoCommitAfterFileChange(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
           </label>
           <div>
             <p className="text-sm mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.title_language')}</p>
@@ -121,6 +122,9 @@ export default function AdvancedSettings() {
           </div>
         </div>
       </div>
+
+      {/* Feature Flags & Mode Presets */}
+      <FeatureFlagsCard />
     </>
   )
 }

@@ -13,6 +13,9 @@ const { estimateMessagesTokens, estimateTextTokens } = require('./compaction')
 
 const TABLE = 'agent_turn_checkpoint'
 const MAX_CHECKPOINTS_PER_SESSION = 20
+// Track last auto-checkpoint step & token estimate per session to avoid
+// re-serializing and writing on every tool step once context >= 8000 tokens.
+const _lastAutoCheckpoint = new Map()
 
 // Create the checkpoint table (idempotent — called from database.js migrations).
 function createTable(db) {
@@ -46,6 +49,14 @@ function save(db, sessionId, turnId, stepIndex, messages, toolTrace = [], meta =
   try {
     const payload = JSON.stringify(messages)
     const trace = JSON.stringify(toolTrace.slice(-20)) // keep last 20 entries
+    try {
+      if (sessionId != null) {
+        _lastAutoCheckpoint.set(sessionId, {
+          stepIndex: Number(stepIndex) || 0,
+          tokens: estimateMessagesTokens(messages || []),
+        })
+      }
+    } catch {}
     let info = null
     if (typeof db.prepare === 'function') {
       info = db.prepare(`INSERT INTO ${TABLE} (session_id, turn_id, step_index, messages, tool_trace, checkpoint_meta) VALUES (?, ?, ?, ?, ?, ?)`).run(
@@ -119,6 +130,7 @@ function listForSession(db, sessionId, limit = 20) {
 
 // Delete all checkpoints for a session (cleanup on session delete).
 function deleteForSession(db, sessionId) {
+  _lastAutoCheckpoint.delete(sessionId)
   try {
     if (typeof db.prepare === 'function') db.prepare(`DELETE FROM ${TABLE} WHERE session_id = ?`).run(sessionId)
     else if (typeof db.run === 'function') db.run(`DELETE FROM ${TABLE} WHERE session_id = ?`, [sessionId])
@@ -136,16 +148,42 @@ function deleteOne(db, id) {
 }
 
 // Auto-checkpoint: called during the tool loop to decide when to save.
-// Heuristic: checkpoint every N tool calls, or when the conversation exceeds
-// a token threshold (so a long tool chain can be resumed from mid-way).
+// Heuristic: checkpoint every N tool calls, or when a meaningful step + token
+// delta has accumulated since the last checkpoint (never firing on every
+// single tool step once context exceeds 8000 tokens).
 const AUTO_CHECKPOINT_EVERY_N_TOOLS = 5
 const AUTO_CHECKPOINT_TOKEN_THRESHOLD = 8000
+const AUTO_CHECKPOINT_TOKEN_DELTA = 4000
+const AUTO_CHECKPOINT_MIN_STEP_DELTA = 2
 
-function shouldAutoCheckpoint(stepIndex, messages) {
-  if (stepIndex > 0 && stepIndex % AUTO_CHECKPOINT_EVERY_N_TOOLS === 0) return true
+function resetAutoCheckpointState(sessionId) {
+  if (sessionId == null) _lastAutoCheckpoint.clear()
+  else _lastAutoCheckpoint.delete(sessionId)
+}
+
+function shouldAutoCheckpoint(stepIndex, messages, opts = {}) {
+  if (stepIndex <= 0) return false
+  if (stepIndex % AUTO_CHECKPOINT_EVERY_N_TOOLS === 0) return true
+  if (!Array.isArray(messages) || messages.length === 0) return false
   try {
     const est = estimateMessagesTokens(messages)
-    return est >= AUTO_CHECKPOINT_TOKEN_THRESHOLD
+    if (est < AUTO_CHECKPOINT_TOKEN_THRESHOLD) return false
+
+    const hasExplicitLast = opts && (opts.lastTokens !== undefined || opts.lastStep !== undefined)
+    const sessionState = opts?.sessionId != null ? _lastAutoCheckpoint.get(opts.sessionId) : null
+    const prev = hasExplicitLast
+      ? { stepIndex: opts.lastStep ?? 0, tokens: opts.lastTokens ?? 0 }
+      : sessionState
+
+    if (prev) {
+      const stepDelta = stepIndex - (Number(prev.stepIndex) || 0)
+      const tokenDelta = est - (Number(prev.tokens) || 0)
+      return stepDelta >= AUTO_CHECKPOINT_MIN_STEP_DELTA && tokenDelta >= AUTO_CHECKPOINT_TOKEN_DELTA
+    }
+
+    // First/stateless check on large context: avoid firing on every step (1,2,3,4);
+    // gate to step-delta intervals until a checkpoint records baseline tokens.
+    return stepIndex % AUTO_CHECKPOINT_MIN_STEP_DELTA === 0
   } catch {
     return false
   }
@@ -159,5 +197,10 @@ module.exports = {
   deleteForSession,
   deleteOne,
   shouldAutoCheckpoint,
+  resetAutoCheckpointState,
   MAX_CHECKPOINTS_PER_SESSION,
+  AUTO_CHECKPOINT_EVERY_N_TOOLS,
+  AUTO_CHECKPOINT_TOKEN_THRESHOLD,
+  AUTO_CHECKPOINT_TOKEN_DELTA,
+  AUTO_CHECKPOINT_MIN_STEP_DELTA,
 }

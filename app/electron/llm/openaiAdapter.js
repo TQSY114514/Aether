@@ -140,14 +140,35 @@ function extractThinkTags(text) {
 const { baseUrl, normalizeUsage } = require('../utils/llmShared')
 const { retryPromise, retryStream } = require('../utils/retry')
 const _credentialPool = require('./credentialPool')
+const { classifyProviderEndpoint } = require('./providerTopology')
+const { DEFAULT_REQUEST_TIMEOUT_MS, createIdleTimeout, withRequestTimeout } = require('./streamTimeout')
 
-// 请求总超时: API 挂起(不返回不报错)时显式中止, 避免客户端无限 spinner。
-// 外部 signal 存在时叠加(AbortSignal.any), 任一方中止都生效。
-const REQUEST_TIMEOUT_MS = 120000
+// Non-streaming request timeout; streaming paths use resettable createIdleTimeout.
+const REQUEST_TIMEOUT_MS = DEFAULT_REQUEST_TIMEOUT_MS
 
 function withTimeout(signal) {
-  const t = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  return signal ? AbortSignal.any([signal, t]) : t
+  return withRequestTimeout(signal, REQUEST_TIMEOUT_MS)
+}
+
+function shouldIncludeStreamUsage(provider, options = {}) {
+  if (options && options.stream_options !== undefined) {
+    return Boolean(options.stream_options)
+  }
+  const url = baseUrl(provider)
+  const { endpointKind } = classifyProviderEndpoint(url, provider?.name || '')
+  return endpointKind === 'official_direct' || endpointKind === 'major_aggregator'
+}
+
+function stripInternalStreamOptions(options = {}) {
+  const {
+    onThinkingDelta: _otd, onStreamDelta: _osd, onToolCall: _otc, onPlanStep: _ops,
+    onPlanSnapshot: _opsn, onStatus: _os, onTodoUpdate: _otu, onAskUser: _oau,
+    onStream: _ostr, onSubagentEvent: _ose, onThinkingStart: _ots, onThinkingEnd: _ote,
+    onUsage: _ou, onBudgetUpdate: _obu, onAudit: _oa, onVerification: _ov,
+    idleTimeoutMs: _itm, maxTimeoutMs: _mtm,
+    ...restOpts
+  } = options
+  return restOpts
 }
 
 function pickKey(provider) {
@@ -186,34 +207,61 @@ function normalizeMessages(messages) {
 function streamChat({ provider, model, messages, signal, options = {} }) {
   const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
   const thinkExtractor = new ThinkTagExtractor()
+  const restOpts = stripInternalStreamOptions(options)
+  if (restOpts.stream_options === undefined && shouldIncludeStreamUsage(provider, options)) {
+    restOpts.stream_options = { include_usage: true }
+  }
   const gen = (async function* () {
-    const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
-      method: 'POST',
-      headers: headers(provider),
-      body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
-      signal: withTimeout(signal),
-    })
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
-      const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
-      err.status = res.status
-      if (err.status === 429 && provider.id != null) {
-        try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+    const idle = createIdleTimeout(signal, { idleMs: options.idleTimeoutMs, maxMs: options.maxTimeoutMs })
+    try {
+      const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
+        method: 'POST',
+        headers: headers(provider),
+        body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...restOpts }),
+        signal: idle.signal,
+      })
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '')
+        const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
+        err.status = res.status
+        if (err.status === 429 && provider.id != null) {
+          try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+        }
+        throw err
       }
-      throw err
-    }
+      idle.touch()
 
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || '' // keep the partial last line
-      for (const line of lines) {
-        const { delta, reasoning, usage } = parseSSELine(line)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        idle.touch()
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // keep the partial last line
+        for (const line of lines) {
+          const { delta, reasoning, usage } = parseSSELine(line)
+          if (usage) {
+            gen.usage = usage
+            try { options?.onUsage?.(usage) } catch {}
+          }
+          if (reasoning) {
+            try { onThinking?.(reasoning) } catch {}
+          }
+          if (delta) {
+            const ext = thinkExtractor.process(delta)
+            if (ext.reasoning) {
+              try { onThinking?.(ext.reasoning) } catch {}
+            }
+            if (ext.content) { yield ext.content }
+          }
+        }
+      }
+      // Flush any trailing buffered line.
+      if (buffer.startsWith('data: ')) {
+        const { delta, reasoning, usage } = parseSSELine(buffer)
         if (usage) {
           gen.usage = usage
           try { options?.onUsage?.(usage) } catch {}
@@ -229,30 +277,14 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
           if (ext.content) { yield ext.content }
         }
       }
-    }
-    // Flush any trailing buffered line.
-    if (buffer.startsWith('data: ')) {
-      const { delta, reasoning, usage } = parseSSELine(buffer)
-      if (usage) {
-        gen.usage = usage
-        try { options?.onUsage?.(usage) } catch {}
+      const flushed = thinkExtractor.flush()
+      if (flushed.reasoning) {
+        try { onThinking?.(flushed.reasoning) } catch {}
       }
-      if (reasoning) {
-        try { onThinking?.(reasoning) } catch {}
-      }
-      if (delta) {
-        const ext = thinkExtractor.process(delta)
-        if (ext.reasoning) {
-          try { onThinking?.(ext.reasoning) } catch {}
-        }
-        if (ext.content) { yield ext.content }
-      }
+      if (flushed.content) { yield flushed.content }
+    } finally {
+      idle.cleanup()
     }
-    const flushed = thinkExtractor.flush()
-    if (flushed.reasoning) {
-      try { onThinking?.(flushed.reasoning) } catch {}
-    }
-    if (flushed.content) { yield flushed.content }
   })()
   gen.usage = null
   return gen
@@ -337,101 +369,37 @@ async function _completeChatMessage({ provider, model, messages, signal, options
 
   // Use streaming when callbacks are requested, but respect explicit options.stream
   const useStream = options.stream !== false
-  // Strip ALL callback functions from the request body to avoid sending
-  // non-serializable or unexpected fields to the API.
-  const {
-    onThinkingDelta: _otd, onStreamDelta: _osd, onToolCall: _otc, onPlanStep: _ops,
-    onPlanSnapshot: _opsn, onStatus: _os, onTodoUpdate: _otu, onAskUser: _oau,
-    onStream: _ostr, onSubagentEvent: _ose, onThinkingStart: _ots, onThinkingEnd: _ote,
-    onUsage: _ou, onBudgetUpdate: _obu, onAudit: _oa, onVerification: _ov,
-    ...restOpts
-  } = options
-  const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
-    method: 'POST',
-    headers: headers(provider),
-    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: useStream, ...restOpts }),
-    signal: withTimeout(signal),
-  })
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '')
-    const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
-    err.status = res.status
-    throw err
+  // Strip ALL callback functions and internal timeout options from the request body
+  // to avoid sending non-serializable or unexpected fields to the API.
+  const restOpts = stripInternalStreamOptions(options)
+  if (useStream && restOpts.stream_options === undefined && shouldIncludeStreamUsage(provider, options)) {
+    restOpts.stream_options = { include_usage: true }
   }
-
-  const contentType = (res.headers.get('content-type') || '').toLowerCase()
-  const isSSE = contentType.includes('text/event-stream')
-
-  // Fast path for non-SSE JSON responses (e.g. mock test servers or non-streaming endpoints)
-  if (!isSSE && !useStream) {
-    const data = await res.json()
-    const msg = data.choices?.[0]?.message || {}
-    let content = msg.content || ''
-    let reasoning = msg.reasoning_content || msg.reasoning || ''
-    if (!reasoning && /<(think|thought|scratchpad)>/i.test(content)) {
-      const ext = extractThinkTags(content)
-      content = ext.content
-      reasoning = ext.reasoning
+  const idle = useStream
+    ? createIdleTimeout(signal, { idleMs: options.idleTimeoutMs, maxMs: options.maxTimeoutMs })
+    : null
+  try {
+    const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
+      method: 'POST',
+      headers: headers(provider),
+      body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: useStream, ...restOpts }),
+      signal: idle ? idle.signal : withTimeout(signal),
+    })
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
+      err.status = res.status
+      throw err
     }
-    if (reasoning) { try { onThinking?.(reasoning) } catch {} }
-    if (content) { try { onStream?.(content) } catch {} }
-    return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning }
-  }
+    if (idle) idle.touch()
 
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let fullContent = ''
-  let fullReasoning = ''
-  let finalUsage = null
-  let finalFinishReason = undefined
-  const toolCallsMap = {}
-  let isJsonDetected = false
+    const contentType = (res.headers.get('content-type') || '').toLowerCase()
+    const isSSE = contentType.includes('text/event-stream')
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-
-    // Check if the response is standard JSON rather than SSE
-    if (!isJsonDetected && buffer.trim().startsWith('{')) {
-      isJsonDetected = true
-    }
-
-    if (!isJsonDetected) {
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        const { delta, reasoning, tool_calls, finish_reason, usage } = parseSSELine(line)
-        if (usage) finalUsage = usage
-        if (finish_reason) finalFinishReason = finish_reason
-        if (reasoning) {
-          fullReasoning += reasoning
-          try { onThinking?.(reasoning) } catch {}
-        }
-        if (delta) {
-          const ext = thinkExtractor.process(delta)
-          if (ext.reasoning) {
-            fullReasoning += ext.reasoning
-            try { onThinking?.(ext.reasoning) } catch {}
-          }
-          if (ext.content) {
-            fullContent += ext.content
-            try { onStream?.(ext.content) } catch {}
-          }
-        }
-        if (tool_calls) {
-          mergeToolCallDeltas(toolCallsMap, tool_calls)
-        }
-      }
-    }
-  }
-
-  if (isJsonDetected || (buffer.trim().startsWith('{') && !fullContent && Object.keys(toolCallsMap).length === 0)) {
-    try {
-      const data = JSON.parse(buffer.trim())
+    // Fast path for non-SSE JSON responses (e.g. mock test servers or non-streaming endpoints)
+    if (!isSSE && !useStream) {
+      const data = await res.json()
       const msg = data.choices?.[0]?.message || {}
-      const finish_reason = data.choices?.[0]?.finish_reason || undefined
       let content = msg.content || ''
       let reasoning = msg.reasoning_content || msg.reasoning || ''
       if (!reasoning && /<(think|thought|scratchpad)>/i.test(content)) {
@@ -441,51 +409,121 @@ async function _completeChatMessage({ provider, model, messages, signal, options
       }
       if (reasoning) { try { onThinking?.(reasoning) } catch {} }
       if (content) { try { onStream?.(content) } catch {} }
-      return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning, finish_reason }
-    } catch {}
-  }
-
-  if (buffer.startsWith('data: ')) {
-    const { delta, reasoning, tool_calls, finish_reason, usage } = parseSSELine(buffer)
-    if (usage) finalUsage = usage
-    if (finish_reason) finalFinishReason = finish_reason
-    if (reasoning) {
-      fullReasoning += reasoning
-      try { onThinking?.(reasoning) } catch {}
+      return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning }
     }
-    if (delta) {
-      const ext = thinkExtractor.process(delta)
-      if (ext.reasoning) {
-        fullReasoning += ext.reasoning
-        try { onThinking?.(ext.reasoning) } catch {}
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullContent = ''
+    let fullReasoning = ''
+    let finalUsage = null
+    let finalFinishReason = undefined
+    const toolCallsMap = {}
+    let isJsonDetected = false
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (idle) idle.touch()
+      buffer += decoder.decode(value, { stream: true })
+
+      // Check if the response is standard JSON rather than SSE
+      if (!isJsonDetected && buffer.trim().startsWith('{')) {
+        isJsonDetected = true
       }
-      if (ext.content) {
-        fullContent += ext.content
-        try { onStream?.(ext.content) } catch {}
+
+      if (!isJsonDetected) {
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          const { delta, reasoning, tool_calls, finish_reason, usage } = parseSSELine(line)
+          if (usage) finalUsage = usage
+          if (finish_reason) finalFinishReason = finish_reason
+          if (reasoning) {
+            fullReasoning += reasoning
+            try { onThinking?.(reasoning) } catch {}
+          }
+          if (delta) {
+            const ext = thinkExtractor.process(delta)
+            if (ext.reasoning) {
+              fullReasoning += ext.reasoning
+              try { onThinking?.(ext.reasoning) } catch {}
+            }
+            if (ext.content) {
+              fullContent += ext.content
+              try { onStream?.(ext.content) } catch {}
+            }
+          }
+          if (tool_calls) {
+            mergeToolCallDeltas(toolCallsMap, tool_calls)
+          }
+        }
       }
     }
-    if (tool_calls) {
-      mergeToolCallDeltas(toolCallsMap, tool_calls)
+
+    if (isJsonDetected || (buffer.trim().startsWith('{') && !fullContent && Object.keys(toolCallsMap).length === 0)) {
+      try {
+        const data = JSON.parse(buffer.trim())
+        const msg = data.choices?.[0]?.message || {}
+        const finish_reason = data.choices?.[0]?.finish_reason || undefined
+        let content = msg.content || ''
+        let reasoning = msg.reasoning_content || msg.reasoning || ''
+        if (!reasoning && /<(think|thought|scratchpad)>/i.test(content)) {
+          const ext = extractThinkTags(content)
+          content = ext.content
+          reasoning = ext.reasoning
+        }
+        if (reasoning) { try { onThinking?.(reasoning) } catch {} }
+        if (content) { try { onStream?.(content) } catch {} }
+        return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning, finish_reason }
+      } catch {}
     }
-  }
 
-  const flushed = thinkExtractor.flush()
-  if (flushed.reasoning) {
-    fullReasoning += flushed.reasoning
-    try { onThinking?.(flushed.reasoning) } catch {}
-  }
-  if (flushed.content) {
-    fullContent += flushed.content
-    try { onStream?.(flushed.content) } catch {}
-  }
+    if (buffer.startsWith('data: ')) {
+      const { delta, reasoning, tool_calls, finish_reason, usage } = parseSSELine(buffer)
+      if (usage) finalUsage = usage
+      if (finish_reason) finalFinishReason = finish_reason
+      if (reasoning) {
+        fullReasoning += reasoning
+        try { onThinking?.(reasoning) } catch {}
+      }
+      if (delta) {
+        const ext = thinkExtractor.process(delta)
+        if (ext.reasoning) {
+          fullReasoning += ext.reasoning
+          try { onThinking?.(ext.reasoning) } catch {}
+        }
+        if (ext.content) {
+          fullContent += ext.content
+          try { onStream?.(ext.content) } catch {}
+        }
+      }
+      if (tool_calls) {
+        mergeToolCallDeltas(toolCallsMap, tool_calls)
+      }
+    }
 
-  const toolCallsArray = Object.values(toolCallsMap)
-  return {
-    content: fullContent,
-    tool_calls: toolCallsArray.length > 0 ? toolCallsArray : undefined,
-    usage: finalUsage,
-    reasoning: fullReasoning,
-    finish_reason: finalFinishReason,
+    const flushed = thinkExtractor.flush()
+    if (flushed.reasoning) {
+      fullReasoning += flushed.reasoning
+      try { onThinking?.(flushed.reasoning) } catch {}
+    }
+    if (flushed.content) {
+      fullContent += flushed.content
+      try { onStream?.(flushed.content) } catch {}
+    }
+
+    const toolCallsArray = Object.values(toolCallsMap)
+    return {
+      content: fullContent,
+      tool_calls: toolCallsArray.length > 0 ? toolCallsArray : undefined,
+      usage: finalUsage,
+      reasoning: fullReasoning,
+      finish_reason: finalFinishReason,
+    }
+  } finally {
+    if (idle) idle.cleanup()
   }
 }
 
@@ -636,6 +674,6 @@ async function streamChatMessage(args) { return apiLimit.run(() => _streamChatMe
 async function completeChatMessage(args) { return apiLimit.run(() => _completeChatMessage(args)) }
 module.exports = {
   streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage,
-  normalizeMessages, parseSSELine, ThinkTagExtractor, extractThinkTags,
+  normalizeMessages, parseSSELine, ThinkTagExtractor, extractThinkTags, shouldIncludeStreamUsage,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }

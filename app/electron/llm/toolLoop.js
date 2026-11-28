@@ -85,7 +85,6 @@ const hooks = require('./hooks')
 const { stream: eventStream } = require('./agentEvents')
 const skillSelfCreate = require('./skillSelfCreate')
 const steering = require('./steering')
-const trajectory = require('./trajectory')
 const planControl = require('./planControl')
 
 const checkpoints = require('./checkpoints')
@@ -387,7 +386,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     const firstContent = firstSysIdx >= 0 ? String(convo[firstSysIdx].content || '') : ''
     const firstIsAuxiliary =
       firstSysIdx === -1 ||
-      /^(?:当前时间：|<available_skills|<available_providers_and_models|Relevant memories|## Relevant|\[Memory)/i.test(
+      /^(?:当前时间：|<available_skills|<available_providers_and_models|Relevant memories|## Relevant|\[Memory|\[Workspace Context:|Consolidated memory digest:|Project knowledge \(|<untrusted_memory>|<relevant_memories>|## Experience replay|## Execution Plan|# Repo Map \()/i.test(
         firstContent.trim()
       )
     if (firstIsAuxiliary) {
@@ -409,12 +408,25 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
 
   // Inject static project & protocol instructions right after the core system
   // prompt so the immutable prefix maximizes provider KV/Prompt Cache hits.
-  pushStaticSystem(buildProjectContextMessage(sessionId))
+  // If sessionContext already injected `[Workspace Context: AGENTS.md]`, replace
+  // it in-place with the full cascading project context (or leave it if none)
+  // so AGENTS.md is never injected twice.
+  const projectCtxMsg = buildProjectContextMessage(workspaceRoot || sessionId)
+  const existingAgentsIdx = convo.findIndex(
+    (m) => m?.role === 'system' && typeof m.content === 'string' && m.content.startsWith('[Workspace Context: AGENTS.md]')
+  )
+  if (existingAgentsIdx >= 0) {
+    if (projectCtxMsg) {
+      convo[existingAgentsIdx] = { ...projectCtxMsg, cacheHint: 'stable' }
+    }
+  } else if (projectCtxMsg) {
+    pushStaticSystem({ ...projectCtxMsg, cacheHint: 'stable' })
+  }
 
   // P1-10: 注入仓库级配置规则 (.aether/config.json / .aether.json)
   try {
     const { getProjectRules } = require('../config/projectConfig')
-    const ws = getWorkspaceRoot(sessionId)
+    const ws = workspaceRoot || getWorkspaceRoot(sessionId)
     const rules = getProjectRules(ws)
     if (rules && rules.length > 0) {
       pushStaticSystem({
@@ -453,7 +465,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       maxTokens: isPoorMode ? 512 : 1024,
     })
     if (repoMapMsg) {
-      convo.splice(getLeadingSystemEnd(), 0, repoMapMsg)
+      convo.splice(getLeadingSystemEnd(), 0, { ...repoMapMsg, cacheHint: 'dynamic' })
     }
   } catch {}
 
@@ -462,7 +474,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       const replay = require('./replay')
       const replayCtx = replay.buildReplayContext(db, userText)
       if (replayCtx) {
-        convo.splice(getLeadingSystemEnd(), 0, { role: 'system', content: replayCtx })
+        convo.splice(getLeadingSystemEnd(), 0, { role: 'system', content: replayCtx, cacheHint: 'dynamic' })
       }
     }
   } catch {}
@@ -650,10 +662,10 @@ Reply in this format:
     }
   }
 
-  // Inject plan into system context (whether freshly generated or resumed)
+  // Inject plan into dynamic system suffix (after static prefix, preserving KV cache)
   if (planningMode && plan && plan.tasks.length > 1) {
     const planBlock = planning.planSystemBlock(plan)
-    convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
+    convo.splice(getLeadingSystemEnd(), 0, { role: 'system', content: `\n\n${planBlock}`, cacheHint: 'dynamic' })
     // Full plan snapshot for the renderer's sticky deck (steps + statuses).
     try {
       onPlanSnapshot?.(plan)
@@ -1319,14 +1331,17 @@ Reply ONLY with JSON:
                 }
               } catch {}
               try {
-                entry.checkpointId = checkpoints.createCheckpoint({
+                const ckArgs = {
                   sessionId,
                   messageId: messageId || tc.id,
                   turnId,
                   workspaceRoot: getWorkspaceRoot(sessionId) || wsRoot,
                   toolName: fn.name,
                   args,
-                })
+                }
+                entry.checkpointId = typeof checkpoints.createCheckpointAsync === 'function'
+                  ? await checkpoints.createCheckpointAsync(ckArgs)
+                  : checkpoints.createCheckpoint(ckArgs)
               } catch {}
             }
             // Feature C: emit a "started" placeholder before running the tool so
@@ -1742,23 +1757,15 @@ Reply ONLY with JSON:
       if (sessionId) {
         try {
           const stepIndex = depth
-          if (checkpointMgr.shouldAutoCheckpoint(stepIndex, convo)) {
+          if (checkpointMgr.shouldAutoCheckpoint(stepIndex, convo, { sessionId })) {
             checkpointMgr.save(db, sessionId, 0, stepIndex, convo, auditTrail, { totalChars, planId: plan?.id })
           }
         } catch {}
       }
 
-      // Trajectory compression: proactively compress mechanical messages
-      if (sessionId) {
-        try {
-          const compressed = trajectory.maybeCompressTrajectory(sessionId, convo)
-          if (compressed !== convo) {
-            convo.length = 0
-            convo.push(...compressed)
-            eventStream.compactEnd({ sessionId, type: 'trajectory', stats: trajectory.getCompressionStats(sessionId) })
-          }
-        } catch {}
-      }
+      // Context management relies on the unified 2-stage pipeline
+      // (microcompact/foldStaleToolOutputs -> compaction.js) without destructive
+      // keyMessages trajectory reordering.
       try { onTurnComplete?.(convo) } catch {}
       if (totalChars > MAX_TOTAL_CHARS) {
         emitFileSummary()

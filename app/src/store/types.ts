@@ -8,6 +8,16 @@ export function applyLangDir(code: LangCode) {
 
 export const LANGS_CODES = LANGS.map(l => l.code)
 
+export type QueuedAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
+export type QueuedSnippet = { id: number; content: string; preview: string }
+export type QueuedMessageItem = {
+  id: number
+  content: string
+  sessionId?: number
+  attachments?: QueuedAttachment[]
+  snippets?: QueuedSnippet[]
+}
+
 // ── Unified 5-Tier Reasoning Scale (R3: Hermes-Aligned) ───────────────────
 export type EffortLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'
 
@@ -323,12 +333,13 @@ export interface AppState {
   resolveHabit: (key: string, accept: boolean) => void
   // Message queue: when the user sends while a turn is streaming, the message
   // is queued (not lost, not interrupting) and auto-sent after the current turn.
-  queuedMessages: { id: number; content: string; sessionId?: number }[]
-  enqueueMessage: (content: string, sessionId?: number) => void
+  queuedMessages: QueuedMessageItem[]
+  enqueueMessage: (content: string, sessionId?: number, extras?: { attachments?: QueuedAttachment[]; snippets?: QueuedSnippet[] }) => void
   removeQueued: (id: number) => void
   reorderQueued: (fromIndex: number, toIndex: number) => void
   updateQueued: (id: number, content: string) => void
   clearQueued: () => void
+  lastMessagesLoaded: { sessionId: number; at: number } | null
   // Session navigation history (browser-style back/forward). selectSession pushes;
   // goBack/goForward move the pointer without pushing.
   sessionHistory: number[]
@@ -386,11 +397,12 @@ export interface AppState {
   stopGeneration: () => Promise<void>
   continueMessage: () => Promise<void>
 
-  regenerate: () => Promise<void>
+  regenerate: (messageId?: number) => Promise<void>
   editLastUserMessage: () => void
   undoLastEdit: () => void
   redo: () => void
   editMessage: (messageId: number, newContent: string) => Promise<void>
+  editAndForkMessage: (messageId: number, newContent: string) => Promise<void>
   sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[], overrides?: { agentMode?: AgentMode; targetSessionId?: number; throwOnError?: boolean }) => Promise<void>
   loadMessages: (sessionId: number, opts?: { silentIfUnchanged?: boolean }) => Promise<void>
 

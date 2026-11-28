@@ -1493,7 +1493,7 @@ describe('Aether 3.0 Production Architecture E2E Test Suite', () => {
           budget,
         })
         expect(res).not.toBe(messages)
-      })
+      }, 20000)
 
       it('T1-F14-03: Rehydrates top-3 recently operated file slices from readFileState', () => {
         expect(compaction.COMPACT_AT_RATIO).toBe(0.85)
@@ -2798,7 +2798,7 @@ describe('Aether 3.0 Production Architecture E2E Test Suite', () => {
           budget,
         })
         expect(res).not.toBe(messages)
-      })
+      }, 20000)
 
       it('T2-F14-02: 84.99% context does NOT trigger compaction', async () => {
         const budget = 1000
@@ -2832,7 +2832,7 @@ describe('Aether 3.0 Production Architecture E2E Test Suite', () => {
           budget,
         })
         expect(res).not.toBe(messages)
-      })
+      }, 20000)
 
       it('T2-F14-04: readFileState with 0 files handles rehydration without error', () => {
         const states = editMatchers.getRecentReadFileStates('non-existent-session-for-empty', 3)

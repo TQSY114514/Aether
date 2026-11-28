@@ -243,6 +243,7 @@ interface Window {
       fork: (params: { sessionId: number; messageId?: number | null; title?: string }) => Promise<{ id: number; title: string }>
       handoffDraft: (params: { sessionId: number; goal?: string }) => Promise<{ ok: boolean; title?: string; draftPrompt?: string; source?: 'llm' | 'fallback'; modelUsed?: string | null; error?: string }>
       handoffCommit: (params: { sessionId: number; prompt: string; title?: string | null; modelId?: number | null; insertInitialMessage?: boolean }) => Promise<{ ok: boolean; id?: number; sessionId?: number; parentSessionId?: number; title?: string; initialPrompt?: string; error?: string }>
+      predictNextPrompt: (sessionId: number | string, modelId?: number | string | null) => Promise<{ suggestion: string }>
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[]; cancelled?: boolean }>
@@ -341,6 +342,9 @@ interface Window {
       notify: (data: { title?: string; body?: string; sessionId?: number; taskId?: string }) => Promise<{ ok: boolean; error?: string }>
       clipboardWrite: (text: string) => Promise<{ ok: boolean; error?: string }>
       clipboardRead: () => Promise<{ ok: boolean; text?: string; error?: string }>
+      clipboardWriteImage: (source: string) => Promise<{ ok: boolean; error?: string }>
+      saveImage: (opts: { source: string; defaultName?: string }) => Promise<{ ok: boolean; filePath?: string; canceled?: boolean; error?: string }>
+      readLocalImage: (targetPath: string) => Promise<{ ok: boolean; dataUrl?: string; error?: string }>
       registerFileAssociations: () => Promise<{ ok: boolean; error?: string }>
       setTitleBarOverlay: (opts?: { color?: string; symbolColor?: string; height?: number }) => Promise<{ ok: boolean; error?: string }>
       onSwitchSession: (cb: (payload: { sessionId: number; taskId?: string }) => void) => () => void

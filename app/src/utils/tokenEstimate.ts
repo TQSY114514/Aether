@@ -13,6 +13,32 @@ export function estimateTextTokens(text: string): number {
   return Math.ceil(tokens)
 }
 
+const _msgTokenCache = new WeakMap<object, { content: unknown; tokens: number }>()
+
+/**
+ * Memoized token count for a chat message object (including role overhead).
+ * Preserves O(1) incremental updates when new messages are appended.
+ */
+export function estimateMessageTokens(
+  msg: { role?: string; content?: unknown },
+  overheads: { system?: number; tool?: number; default?: number } = {}
+): number {
+  const cached = _msgTokenCache.get(msg)
+  let baseTokens: number
+  if (cached && cached.content === msg.content) {
+    baseTokens = cached.tokens
+  } else {
+    const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || '')
+    baseTokens = estimateTextTokens(text)
+    _msgTokenCache.set(msg, { content: msg.content, tokens: baseTokens })
+  }
+  const sysOv = overheads.system ?? 100
+  const toolOv = overheads.tool ?? 30
+  const defOv = overheads.default ?? 20
+  const overhead = msg.role === 'system' ? sysOv : msg.role === 'tool' ? toolOv : defOv
+  return baseTokens + overhead
+}
+
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`

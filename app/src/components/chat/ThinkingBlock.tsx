@@ -113,9 +113,32 @@ export default function ThinkingBlock({
   }, [])
 
   const needsFormattedBody = open || preview
+  const [throttledText, setThrottledText] = useState(text)
+  const lastFmtAtRef = useRef(0)
+
+  // Throttle regex cleanup over growing reasoning text while actively streaming
+  useEffect(() => {
+    if (!streaming || !needsFormattedBody) {
+      lastFmtAtRef.current = Date.now()
+      setThrottledText(text)
+      return
+    }
+    const elapsedMs = Date.now() - lastFmtAtRef.current
+    if (elapsedMs >= 250) {
+      lastFmtAtRef.current = Date.now()
+      setThrottledText(text)
+      return
+    }
+    const timer = setTimeout(() => {
+      lastFmtAtRef.current = Date.now()
+      setThrottledText(text)
+    }, 250 - elapsedMs)
+    return () => clearTimeout(timer)
+  }, [text, streaming, needsFormattedBody])
+
   const cleanText = useMemo(
-    () => (needsFormattedBody ? separateGluedReasoningBlocks(text) : text),
-    [text, needsFormattedBody]
+    () => (needsFormattedBody ? separateGluedReasoningBlocks(throttledText) : text),
+    [throttledText, text, needsFormattedBody]
   )
 
   // Auto-scroll to bottom only if user hasn't scrolled up to read earlier thoughts

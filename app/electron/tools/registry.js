@@ -2,7 +2,7 @@
 const fs = require('fs')
 const path = require('path')
 const { spawn, spawnSync } = require('child_process')
-const { runCommand, runCommandSync } = require('./exec')
+const { runCommand, runCommandSync, killTree } = require('./exec')
 const {
   checkWritePath,
   checkCommand,
@@ -357,7 +357,10 @@ function formatShellResult(stdout, stderr, exitCode, timedOut) {
 // Code-style). Resolves with the same shape as runCommand so the existing
 // formatShellResult path is unchanged. Used by run_command when ctx.onStream
 // is available; falls back to the buffered runCommand otherwise.
-function runCommandStreaming(cmd, { cwd, timeoutMs, onChunk }) {
+function runCommandStreaming(cmd, { cwd, timeoutMs, signal, onChunk }) {
+  if (signal?.aborted) {
+    return Promise.reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+  }
   const { spawn } = require('child_process')
   const needsShell = /[|&;`$(){}!\\]/.test(cmd)
   const shellExe = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
@@ -365,21 +368,38 @@ function runCommandStreaming(cmd, { cwd, timeoutMs, onChunk }) {
   const command = needsShell ? shellExe : cmd
   const args = needsShell ? shellArgs : []
   return new Promise((resolve, reject) => {
-    let stdout = '', stderr = '', timedOut = false
+    let stdout = '', stderr = '', timedOut = false, settled = false
     const child = spawn(command, args, { cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    const cleanup = () => {
+      clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onAbort)
+    }
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      killTree(child.pid)
+      reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+    }
+    if (signal) signal.addEventListener('abort', onAbort, { once: true })
     child.stdout.on('data', (d) => { const s = d.toString(); stdout += s; try { onChunk?.(s) } catch {} })
     child.stderr.on('data', (d) => { const s = d.toString(); stderr += s; try { onChunk?.(s) } catch {} })
     const timer = setTimeout(() => {
       timedOut = true
-      try {
-        const { spawnSync } = require('child_process')
-        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 })
-      } catch {
-        try { child.kill() } catch {}
-      }
+      killTree(child.pid)
     }, timeoutMs)
-    child.on('error', (e) => { clearTimeout(timer); reject(e) })
-    child.on('close', (code) => { clearTimeout(timer); resolve({ stdout, stderr, exitCode: code || 0, timedOut }) })
+    child.on('error', (e) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(e)
+    })
+    child.on('close', (code) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve({ stdout, stderr, exitCode: code || 0, timedOut })
+    })
   })
 }
 
@@ -502,15 +522,92 @@ function maybeInvalidateRuleCaches(filePath, sessionId) {
   }
 }
 
+function readFileSliced(filePath, offset, limit, maxBytes = MAX_READ_BYTES) {
+  const { StringDecoder } = require('string_decoder')
+  const stat = fs.statSync(filePath)
+  const startLine = offset > 1 ? offset - 1 : 0
+  const maxLines = limit > 0 ? limit : Infinity
+
+  // Fast path: full read without offset/limit
+  if (startLine === 0 && maxLines === Infinity) {
+    if (stat.size <= maxBytes) {
+      return { text: fs.readFileSync(filePath, 'utf-8'), totalBytes: stat.size, truncated: false, stat }
+    }
+    const fd = fs.openSync(filePath, 'r')
+    try {
+      const buf = Buffer.allocUnsafe(maxBytes)
+      const n = fs.readSync(fd, buf, 0, maxBytes, 0)
+      const decoder = new StringDecoder('utf8')
+      // Use write() without end() so an incomplete multi-byte char at the byte cap is omitted rather than emitting U+FFFD
+      return { text: decoder.write(buf.subarray(0, n)), totalBytes: stat.size, truncated: true, stat }
+    } finally {
+      fs.closeSync(fd)
+    }
+  }
+
+  // Line-sliced read: scan line-by-line from byte 0 and apply offset/limit BEFORE
+  // capping the returned slice at maxBytes so offsets past 64KB work cleanly.
+  const endLine = maxLines === Infinity ? Infinity : startLine + maxLines
+  const collected = []
+  let collectedBytes = 0
+  let truncated = false
+  const CHUNK_SIZE = 64 * 1024
+  const fd = fs.openSync(filePath, 'r')
+  const decoder = new StringDecoder('utf8')
+  try {
+    const buf = Buffer.allocUnsafe(CHUNK_SIZE)
+    let filePos = 0
+    let currentLine = 0
+    let leftover = ''
+    while (currentLine < endLine) {
+      const bytesRead = fs.readSync(fd, buf, 0, CHUNK_SIZE, filePos)
+      if (bytesRead <= 0) break
+      filePos += bytesRead
+      const chunkText = leftover + decoder.write(buf.subarray(0, bytesRead))
+      const parts = chunkText.split('\n')
+      leftover = parts.pop() ?? ''
+      for (const line of parts) {
+        if (currentLine >= startLine && currentLine < endLine) {
+          const lineBytes = Buffer.byteLength(line, 'utf-8') + (collected.length > 0 ? 1 : 0)
+          if (collectedBytes + lineBytes > maxBytes) {
+            truncated = true
+            break
+          }
+          collected.push(line)
+          collectedBytes += lineBytes
+        }
+        currentLine++
+        if (currentLine >= endLine) break
+      }
+      if (truncated) break
+    }
+    if (!truncated) {
+      const tail = decoder.end()
+      if (tail) leftover += tail
+    }
+    if (!truncated && leftover.length > 0 && currentLine >= startLine && currentLine < endLine) {
+      const lineBytes = Buffer.byteLength(leftover, 'utf-8') + (collected.length > 0 ? 1 : 0)
+      if (collectedBytes + lineBytes > maxBytes) {
+        truncated = true
+      } else {
+        collected.push(leftover)
+      }
+    }
+  } finally {
+    fs.closeSync(fd)
+  }
+
+  return { text: collected.join('\n'), totalBytes: stat.size, truncated, stat }
+}
+
 // ──  ─────────────────────────────────────────────────────────
 const TOOLS = [
   // ──  ─────────────────────────────────────────────────────────
   { name: 'read_file', description: 'Read file content (up to 64KB).', risk: 'safe', parameters: { type: 'object', properties: { path: { type: 'string' }, offset: { type: 'number' }, limit: { type: 'number' } }, required: ['path'] }, run: (args, ctx) => {
     const p = String(args.path || ''); if (!p) throw new Error('path is required'); guardWorkspaceRead(p, ctx, 'path')
-    const buf = fs.readFileSync(p); let text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
     const offset = Number(args.offset) || 0; const limit = Number(args.limit) || 0
+    const { text, totalBytes, truncated, stat } = readFileSliced(p, offset, limit, MAX_READ_BYTES)
     try {
-      const stat = fs.statSync(p)
       const { recordReadFileState } = require('./editMatchers')
       recordReadFileState(ctx?.sessionId, p, { offset: offset || 1, limit: limit || undefined, mtimeMs: stat.mtimeMs })
     } catch {}
@@ -518,8 +615,7 @@ const TOOLS = [
       const { recordFileActivity } = require('../llm/sessionContext')
       recordFileActivity(ctx?.sessionId, p, 'read')
     } catch {}
-    if (offset > 1 || limit > 0) { const lines = text.split('\n'); const start = Math.max(0, (offset ? offset - 1 : 0)); text = (limit > 0 ? lines.slice(start, start + limit) : lines.slice(start)).join('\n') }
-    return text + (buf.length > MAX_READ_BYTES ? `\n\n[truncated, ${buf.length} bytes total]` : '')
+    return text + (truncated ? `\n\n[truncated, ${totalBytes} bytes total]` : '')
   }},
   { name: 'list_dir', description: 'List directory entries.', risk: 'safe', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }, run: (args, ctx) => {
     const p = String(args.path || ''); if (!p) throw new Error('path is required'); guardWorkspaceRead(p, ctx, 'path')
@@ -721,7 +817,7 @@ const TOOLS = [
   }},
 
   // ── Execution tools ─────────────────────────────────────────────────
-  { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: async (args, ctx) => {
+  { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', noRetry: true, parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: async (args, ctx) => {
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
     if (!isUnrestrictedMode(ctx?.agentMode) && !ctx?.highRiskApproved) { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
@@ -781,6 +877,7 @@ const TOOLS = [
           return runCommandStreaming(cmd, {
             cwd: effectiveCwd,
             timeoutMs,
+            signal: ctx?.signal,
             onChunk: (text) => { try { onStream({ text, type: 'chunk' }) } catch {} },
           }).then(({ stdout, stderr, exitCode, timedOut }) => {
             try { onStream({ text: '', type: 'done' }) } catch {}
@@ -789,8 +886,13 @@ const TOOLS = [
         }
         const shellExe = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
         const shellArgs = process.platform === 'win32' ? ['/c', cmd] : ['-c', cmd]
-        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand(shellExe, shellArgs, { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: false }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
-          .then(({ stdout, stderr, exitCode, timedOut }) => tapWrap(stdout, stderr, exitCode, timedOut))
+        return (/[|&;`$(){}!\\]/.test(cmd)
+          ? runCommand(shellExe, shellArgs, { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: false, signal: ctx?.signal })
+          : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, signal: ctx?.signal }))
+          .then(({ stdout, stderr, exitCode, timedOut, aborted }) => {
+            if (aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+            return tapWrap(stdout, stderr, exitCode, timedOut)
+          })
       }
       return runInDocker(cmd, timeoutMs, ctx?.db).then((dockerOut) => {
         if (typeof dockerOut === 'string' && /^\[(FAILED|COMMAND NOT FOUND|KILLED BY SIGNAL)/.test(dockerOut)) {

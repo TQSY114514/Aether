@@ -1,9 +1,11 @@
-import { useState, memo, useMemo, useCallback, useEffect } from 'react'
+import { useState, memo, useMemo, useCallback, useEffect, useRef, Fragment } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
-import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X, Maximize2 } from 'lucide-react'
+import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X, Quote, FileText } from 'lucide-react'
 import { renderMarkdown, sanitizeHtml, getHighlightVersion, subscribeHighlightReady } from '@/utils/markdown'
+import { handleMarkdownContainerClick, useLocalImageFallback } from '@/utils/markdownDom'
+import { stripMarkdownToPlainText, parseInlineTextAttachments } from '@/utils/exportMarkdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
@@ -12,7 +14,9 @@ import ThinkingBlock from './ThinkingBlock'
 import AgentTimeline from './AgentTimeline'
 import FileSummaryDeck from './FileSummaryDeck'
 import SubagentDeck from './SubagentDeck'
-import ImageLightboxModal from './ImageLightboxModal'
+import ImageLightboxModal, { type LightboxImage } from './ImageLightboxModal'
+import MessageImageGrid from './MessageImageGrid'
+import UserAttachmentCards from './UserAttachmentCards'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
@@ -78,9 +82,11 @@ const ForkContinueActions = memo(function ForkContinueActions({
 /** Render one conversation message with its rich content and status metadata. */
 function MessageBubble({ message, searchHighlight, active }: { message: Message; searchHighlight?: string; active?: boolean }) {
   const [copied, setCopied] = useState(false)
+  const [copiedPlain, setCopiedPlain] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [lightboxState, setLightboxState] = useState<{ images: LightboxImage[]; index: number } | null>(null)
+  const assistantBodyRef = useRef<HTMLDivElement>(null)
 
   const attachment = useMemo(() => {
     if (!message.attachment) return null
@@ -94,12 +100,21 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
     return message.attachment
   }, [message.attachment])
 
-  const imageList = useMemo(() => {
-    if (!attachment || attachment.kind !== 'image') return []
-    const list = attachment.all && attachment.all.length > 0
-      ? attachment.all
-      : [{ name: attachment.name, preview: attachment.preview || attachment.mime }]
-    return list.filter((img: any) => Boolean(img?.preview))
+  const imageList = useMemo<LightboxImage[]>(() => {
+    if (!attachment) return []
+    const all = Array.isArray(attachment.all) ? attachment.all : []
+    if (all.length > 0) {
+      return all.filter((img: any) =>
+        Boolean(img?.preview) &&
+        (attachment.kind === 'image' ||
+          /^data:image\//i.test(String(img.preview)) ||
+          /\.(png|jpe?g|gif|webp|bmp|avif|ico|svg)$/i.test(String(img.name || '')))
+      )
+    }
+    if (attachment.kind === 'image' && (attachment.preview || attachment.mime)) {
+      return [{ name: attachment.name, preview: attachment.preview || attachment.mime }]
+    }
+    return []
   }, [attachment])
 
   const bubbleWidth = useStore(s => s.bubbleWidth)
@@ -115,6 +130,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
 
   const regenerate = useStore(s => s.regenerate)
   const editMessage = useStore(s => s.editMessage)
+  const editAndForkMessage = useStore(s => s.editAndForkMessage)
   const continueMessage = useStore(s => s.continueMessage)
   const forkSession = useStore(s => s.forkSession)
   const sending = useStore(s => s.sending)
@@ -161,6 +177,22 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
     setTimeout(() => setCopied(false), 2000)
   }, [message.content])
 
+  const handleCopyPlain = useCallback(async () => {
+    try { await navigator.clipboard.writeText(stripMarkdownToPlainText(message.content)) } catch {}
+    setCopiedPlain(true)
+    setTimeout(() => setCopiedPlain(false), 2000)
+  }, [message.content])
+
+  const handleQuote = useCallback(() => {
+    const sel = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() : ''
+    const source = sel || stripMarkdownToPlainText(message.content)
+    const snippet = source.slice(0, 400)
+    if (!snippet) return
+    window.dispatchEvent(new CustomEvent('aether:quote-message', {
+      detail: { role: message.role, content: snippet, messageId: message.id },
+    }))
+  }, [message.content, message.role, message.id])
+
   const startEdit = useCallback(() => { setDraft(message.content); setEditing(true) }, [message.content])
   const submitEdit = useCallback(async () => {
     if (sending) return
@@ -170,68 +202,74 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
     await editMessage(message.id, c)
   }, [sending, draft, message.id, message.content, editMessage])
 
+  const submitEditAndFork = useCallback(async () => {
+    if (sending) return
+    const c = draft.trim()
+    if (!c) { setEditing(false); return }
+    setEditing(false)
+    await editAndForkMessage(message.id, c)
+  }, [sending, draft, message.id, editAndForkMessage])
+
   const [hlVersion, setHlVersion] = useState(getHighlightVersion)
   useEffect(() => {
     if (!message.content || !message.content.includes('```')) return
     return subscribeHighlightReady(() => setHlVersion(getHighlightVersion()))
   }, [message.content])
 
+  useLocalImageFallback(assistantBodyRef, message.content)
+
   const onBubbleClick = useCallback((e: React.MouseEvent) => {
-    const fold = (e.target as HTMLElement).closest('.code-fold') as HTMLElement | null
-    if (fold) {
-      const pre = fold.closest('pre.code-block')
-      if (pre) {
-        const collapsed = pre.classList.toggle('collapsed')
-        const n = fold.getAttribute('data-lines') || ''
-        fold.textContent = collapsed ? '▸' : '▾'
-        fold.setAttribute('data-folded', collapsed ? '1' : '0')
-        if (collapsed) fold.setAttribute('title', `${n} lines — click to expand`)
-      }
-      return
-    }
-    const target = (e.target as HTMLElement).closest('.code-copy') as HTMLElement | null
-    if (!target) return
-    const raw = target.getAttribute('data-code') || ''
-    // getAttribute() already resolves HTML entities — decoding again here
-    // would corrupt code that literally contains e.g. "&amp;" (double-escape).
-    navigator.clipboard.writeText(raw)
-    const prev = target.textContent
-    target.textContent = 'Copied!'
-    target.classList.add('copied')
-    setTimeout(() => { target.textContent = prev; target.classList.remove('copied') }, 1200)
-  }, [])
+    handleMarkdownContainerClick(
+      e,
+      assistantBodyRef.current,
+      (images, index) => setLightboxState({ images, index }),
+      imageList
+    )
+  }, [imageList])
+
+  const { attachments: inlineAttachments, rest: userDisplayText } = useMemo(
+    () => (isUser ? parseInlineTextAttachments(message.content) : { attachments: [], rest: message.content }),
+    [isUser, message.content]
+  )
 
   const renderContent = useCallback((text: string) => {
-    if (!searchHighlight) {
+    if (!searchHighlight || !hlRe) {
       return isUser ? text : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
     }
     const q = searchHighlight.toLowerCase()
-    const idx = text.toLowerCase().indexOf(q)
-    if (idx === -1) {
+    if (!text.toLowerCase().includes(q)) {
       return isUser ? text : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
     }
-    const before = text.slice(0, idx)
-    const match = text.slice(idx, idx + q.length)
-    const after = text.slice(idx + q.length)
     if (isUser) {
-      return <>{before}<mark className="px-0.5 rounded-sm" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>{match}</mark>{after}</>
+      const parts = text.split(hlRe)
+      return (
+        <>
+          {parts.map((part, i) =>
+            i % 2 === 1 ? (
+              <mark key={i} className="px-0.5 rounded-sm" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+                {part}
+              </mark>
+            ) : (
+              <Fragment key={i}>{part}</Fragment>
+            )
+          )}
+        </>
+      )
     }
     const html = renderMarkdown(text)
-    if (hlRe) {
-      // String substitution over sanitized HTML can re-form markup (e.g. a
-      // keyword matching inside a tag or entity); re-sanitize the result so
-      // only the allowed <mark> highlight survives. mark/style are in
-      // DOMPurify's default allowlist, so the highlight itself is kept.
-      const highlighted = sanitizeHtml(html.replace(hlRe,
-        '<mark class="search-hl" style="background:var(--accent);color:#fff;border-radius:2px;padding:0 1px">$1</mark>'))
-      return <div className="mc" dangerouslySetInnerHTML={{ __html: highlighted }} />
-    }
-    return <div className="mc" dangerouslySetInnerHTML={{ __html: html }} />
+    // Split by HTML tags so highlight markup never corrupts tag attributes like src/href.
+    const highlighted = sanitizeHtml(
+      html
+        .split(/(<[^>]+>)/g)
+        .map((seg) => (seg.startsWith('<') ? seg : seg.replace(hlRe, '<mark class="search-hl" style="background:var(--accent);color:#fff;border-radius:2px;padding:0 1px">$1</mark>')))
+        .join('')
+    )
+    return <div className="mc" dangerouslySetInnerHTML={{ __html: highlighted }} />
   }, [searchHighlight, isUser, hlRe])
 
   const renderedContent = useMemo(() => {
-    return renderContent(message.content)
-  }, [renderContent, message.content, hlVersion])
+    return renderContent(userDisplayText)
+  }, [renderContent, userDisplayText, hlVersion])
 
 
   return (
@@ -263,13 +301,24 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                   className="w-full px-2.5 py-1.5 text-[13px] rounded-md border outline-none resize-none bg-[var(--content-bg)]"
                   style={{ borderColor: 'var(--accent)' }}
                 />
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-2 justify-end flex-wrap">
                   <button
                     onClick={() => setEditing(false)}
                     className="px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                   >
                     {t('chat.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitEditAndFork}
+                    disabled={!draft.trim() || sending}
+                    className="px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] disabled:opacity-40 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer flex items-center gap-1"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    title={t('chat.edit.fork_tooltip', '保留原会话并分叉到新分支重发')}
+                  >
+                    <GitFork size={11} />
+                    <span>{t('chat.edit.fork_submit', '编辑并分叉')}</span>
                   </button>
                   <button
                     onClick={submitEdit}
@@ -284,89 +333,18 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             ) : (
               <>
                 {imageList.length > 0 && (
-                  <div className={`flex flex-col items-end ${message.content ? 'mb-2' : ''}`}>
-                    {imageList.length === 1 ? (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        aria-label={t('chat.attachment.double_click_zoom')}
-                        className="rounded-[6px] overflow-hidden border max-w-[280px] max-h-[220px] cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5 focus-visible:ring-2 focus-visible:ring-[var(--accent)] outline-none"
-                        style={{ borderColor: 'var(--border)' }}
-                        onClick={() => setLightboxIndex(0)}
-                        onDoubleClick={() => setLightboxIndex(0)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            setLightboxIndex(0)
-                          }
-                        }}
-                        title={t('chat.attachment.double_click_zoom')}
-                      >
-                        <img
-                          src={imageList[0].preview}
-                          alt={imageList[0].name || 'image'}
-                          className="max-w-full max-h-[220px] object-contain select-none"
-                        />
-                        <div className="absolute top-1.5 right-1.5 p-1 rounded bg-black/60 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm pointer-events-none shadow-sm">
-                          <Maximize2 size={11} />
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        className={`grid gap-1.5 ${
-                          imageList.length === 2
-                            ? 'grid-cols-2 max-w-[260px]'
-                            : imageList.length === 3
-                            ? 'grid-cols-3 max-w-[280px]'
-                            : 'grid-cols-2 max-w-[260px]'
-                        }`}
-                      >
-                        {(imageList.length > 4 ? imageList.slice(0, 4) : imageList).map((att: any, i: number) => {
-                          const isOverflowTile = imageList.length > 4 && i === 3
-                          const remainingCount = imageList.length - 3
-                          const sizeClass = imageList.length === 3 ? 'w-22 h-22' : 'w-28 h-28'
-
-                          return (
-                            <div
-                              key={i}
-                              role="button"
-                              tabIndex={0}
-                              aria-label={att.name || `image-${i + 1}`}
-                              className={`aspect-square ${sizeClass} rounded-[6px] overflow-hidden border cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5 flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[var(--accent)] outline-none`}
-                              style={{ borderColor: 'var(--border)' }}
-                              onClick={() => setLightboxIndex(i)}
-                              onDoubleClick={() => setLightboxIndex(i)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault()
-                                  setLightboxIndex(i)
-                                }
-                              }}
-                              title={t('chat.attachment.double_click_zoom')}
-                            >
-                              <img
-                                src={att.preview}
-                                alt={att.name || `image-${i + 1}`}
-                                className="w-full h-full object-cover select-none"
-                              />
-                              {!isOverflowTile && (
-                                <div className="absolute top-1 right-1 p-0.5 rounded bg-black/60 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm pointer-events-none shadow-sm">
-                                  <Maximize2 size={10} />
-                                </div>
-                              )}
-                              {isOverflowTile && (
-                                <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center text-white font-mono font-semibold text-base transition-colors hover:bg-black/70">
-                                  +{remainingCount}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                  <div className={userDisplayText || inlineAttachments.length > 0 ? 'mb-2' : ''}>
+                    <MessageImageGrid
+                      images={imageList}
+                      align="end"
+                      onOpen={(idx) => setLightboxState({ images: imageList, index: idx })}
+                    />
                   </div>
                 )}
-                {renderedContent}
+                {inlineAttachments.length > 0 && (
+                  <UserAttachmentCards attachments={inlineAttachments} />
+                )}
+                {userDisplayText && renderedContent}
               </>
             )}
           </div>
@@ -383,6 +361,14 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               aria-label={t('chat.copy')}
             >
               {copied ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
+            </button>
+            <button
+              onClick={handleQuote}
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+              title={t('chat.quote', '引用回复')}
+              aria-label={t('chat.quote', '引用回复')}
+            >
+              <Quote size={12} />
             </button>
             <ForkContinueActions
               messageId={message.id}
@@ -510,6 +496,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
           )}
 
           <div
+            ref={assistantBodyRef}
             onClick={onBubbleClick}
             className={`w-full text-[13.5px] leading-[1.7] tracking-[-0.005em] break-words relative ${
               isError ? 'p-3.5 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400' : ''
@@ -527,6 +514,15 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
             {subagents && subagents.length > 0 && (
               <SubagentDeck items={subagents} />
+            )}
+            {imageList.length > 0 && (
+              <div className={message.content ? 'mb-2' : ''}>
+                <MessageImageGrid
+                  images={imageList}
+                  align="start"
+                  onOpen={(idx) => setLightboxState({ images: imageList, index: idx })}
+                />
+              </div>
             )}
             {renderedContent}
             {fileSummary && (
@@ -582,12 +578,28 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               >
                 {copied ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
               </button>
+              <button
+                onClick={handleCopyPlain}
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                title={t('chat.copy_plain', '复制纯文本')}
+                aria-label={t('chat.copy_plain', '复制纯文本')}
+              >
+                {copiedPlain ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <FileText size={12} />}
+              </button>
+              <button
+                onClick={handleQuote}
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                title={t('chat.quote', '引用回复')}
+                aria-label={t('chat.quote', '引用回复')}
+              >
+                <Quote size={12} />
+              </button>
               {!isStreaming && !isError && (
                 <button
                   className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                   title={t('chat.regenerate')}
                   aria-label={t('chat.regenerate')}
-                  onClick={() => regenerate()}
+                  onClick={() => regenerate(message.id)}
                 >
                   <RefreshCw size={12} />
                 </button>
@@ -605,7 +617,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                   style={{ backgroundColor: 'var(--error)', color: '#fff' }}
                   title={t('chat.retry')}
                   aria-label={t('chat.retry')}
-                  onClick={() => regenerate()}
+                  onClick={() => regenerate(message.id)}
                 >
                   <RefreshCw size={10} />
                   <span>{t('chat.retry')}</span>
@@ -615,11 +627,11 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
         </div>
         </div>
       )}
-      {lightboxIndex !== null && imageList.length > 0 && (
+      {lightboxState && lightboxState.images.length > 0 && (
         <ImageLightboxModal
-          images={imageList}
-          initialIndex={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
+          images={lightboxState.images}
+          initialIndex={lightboxState.index}
+          onClose={() => setLightboxState(null)}
         />
       )}
     </div>

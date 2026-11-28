@@ -164,6 +164,34 @@ describe('anthropic toAnthropicMessages', () => {
     ])
   })
 
+  it('coalesces consecutive tool_result messages into a single user message', () => {
+    const { messages } = toAnthropicMessages([
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          { id: 't1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a"}' } },
+          { id: 't2', type: 'function', function: { name: 'read_file', arguments: '{"path":"b"}' } },
+        ],
+      },
+      { role: 'tool', tool_call_id: 't1', content: 'alpha' },
+      { role: 'tool', tool_call_id: 't2', content: 'beta' },
+      { role: 'assistant', content: 'got both' },
+      { role: 'user', content: 'next' },
+    ])
+    expect(messages).toHaveLength(4)
+    expect(messages[0].role).toBe('assistant')
+    expect(messages[1]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'tool_result', tool_use_id: 't1', content: 'alpha' },
+        { type: 'tool_result', tool_use_id: 't2', content: 'beta' },
+      ],
+    })
+    expect(messages[2]).toEqual({ role: 'assistant', content: 'got both' })
+    expect(messages[3]).toEqual({ role: 'user', content: 'next' })
+  })
+
   it('converts assistant tool_calls to multiple tool_use blocks', () => {
     const { messages } = toAnthropicMessages([
       {

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { FileCode, Folder, Sparkles, Wrench, Terminal } from 'lucide-react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import type { ActiveReferenceSuggestion } from '@/utils/ghostCompletion'
 
 const PREFIXES = {
   '@': { labelKey: 'ref.prefix.at', color: 'text-blue-400' },
@@ -18,6 +19,7 @@ type InputReferenceProps = {
   cursorPos: number
   visible: boolean
   onSelect: (sel: { prefix: string; query: string; replacement: string }) => void
+  onActiveSuggestionChange?: (suggestion: ActiveReferenceSuggestion | null) => void
 }
 
 // Built-in tool list
@@ -53,7 +55,7 @@ function parseAtPathQuery(rawQuery: string): { isPathMode: boolean; dirPart: str
   return { isPathMode: false, dirPart: '', namePrefix: rawQuery.toLowerCase(), displayBase: '', sep }
 }
 
-export default function InputReference({ value, cursorPos, onSelect, visible }: InputReferenceProps) {
+export default function InputReference({ value, cursorPos, onSelect, visible, onActiveSuggestionChange }: InputReferenceProps) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [prefix, setPrefix] = useState<string | null>(null)
@@ -106,6 +108,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
     setSelectedIdx(0)
 
     let cancelled = false
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     const buildSuggestions = async () => {
       let items: Suggestion[] = []
@@ -170,15 +173,22 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
       }
     }
 
-    buildSuggestions()
+    if (p === '@') {
+      // Debounce workspace file search / listDir IPC so typing @path never stalls keystrokes.
+      debounceTimer = setTimeout(() => { buildSuggestions() }, 150)
+    } else {
+      buildSuggestions()
+    }
 
     return () => {
       cancelled = true
+      if (debounceTimer) clearTimeout(debounceTimer)
     }
   }, [value, cursorPos, visible, skills, commands, activeCwd, currentSessionId])
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.isComposing || e.keyCode === 229) return
     if (!visible || suggestions.length === 0) return
     e.stopPropagation()
     if (e.key === 'ArrowDown') {
@@ -197,6 +207,25 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
       setSuggestions([])
     }
   }, [visible, suggestions, selectedIdx, onSelect, prefix, query])
+
+  // Emit the highlighted suggestion so ChatInput can render live gray ghost suffix.
+  useEffect(() => {
+    if (!visible || !prefix || (prefix !== '@' && prefix !== '#' && prefix !== '!') || suggestions.length === 0) {
+      onActiveSuggestionChange?.(null)
+      return
+    }
+    const active = suggestions[selectedIdx] || suggestions[0]
+    if (!active) {
+      onActiveSuggestionChange?.(null)
+      return
+    }
+    onActiveSuggestionChange?.({
+      prefix,
+      query,
+      replacement: active.replacement || active.text,
+      displayText: active.text,
+    })
+  }, [visible, prefix, query, suggestions, selectedIdx, onActiveSuggestionChange])
 
   // Attach keyboard listener
   useEffect(() => {

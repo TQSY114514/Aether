@@ -81,7 +81,6 @@ function findKeepPoint(messages, budget) {
 
 const SUMMARIZATION_OVERHEAD = 2048 // reserve for the summary prompt + system + reply
 const SUMMARIZATION_TIMEOUT_MS = 15000 // guard timeout for the summarization HTTP call
-const FETCH_CONNECT_TIMEOUT_MS = 3000   // short guard: reject before the test framework times out
 
 // ── Incremental compaction state ──────────────────────────────────────────
 // Keyed by sessionId. Tracks the last compaction boundary so subsequent
@@ -116,16 +115,30 @@ function isImportantMessage(msg) {
   return false
 }
 
+const IMAGE_TOKENS_LOW = 85
+const IMAGE_TOKENS_DEFAULT = 765
+const IMAGE_TOKENS_HIGH = 1105
+
+function estimateImagePartTokens(part) {
+  const detail = part?.image_url?.detail || part?.detail || 'auto'
+  if (detail === 'low') return IMAGE_TOKENS_LOW
+  if (detail === 'high') return IMAGE_TOKENS_HIGH
+  return IMAGE_TOKENS_DEFAULT
+}
+
 // Estimate token count for a single message. Content may be a string or a
-// multimodal parts array (OpenAI shape). Image parts cost nothing here — we
-// can't accurately price them and they're rare in long history.
+// multimodal parts array (OpenAI/Anthropic shapes), including image token pricing.
 function estimateMessageTokens(msg, provider, model) {
   const c = msg && msg.content
   if (typeof c === 'string') return tokenizer.countTokens(c, provider, model)
   if (Array.isArray(c)) {
     let t = 0
     for (const part of c) {
-      if (part && typeof part.text === 'string') t += tokenizer.countTokens(part.text, provider, model)
+      if (!part) continue
+      if (typeof part.text === 'string') t += tokenizer.countTokens(part.text, provider, model)
+      else if (part.type === 'image_url' || part.image_url || part.type === 'image' || part.type === 'input_image') {
+        t += estimateImagePartTokens(part)
+      }
     }
     return t
   }
@@ -404,22 +417,68 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
   }
 
   const older = messages.slice(0, split)
-  let nonSystemOlder = pruneOlderBlock(older.filter(m => m.role !== 'system'), provider, model)
+  const rawNonSystemOlder = older.filter(m => m.role !== 'system')
+  const nonSystemOlderCount = rawNonSystemOlder.length
+  const prunedOlder = pruneOlderBlock(rawNonSystemOlder, provider, model)
   const systemMsgs = older.filter(m => m.role === 'system')
   const recent = messages.slice(split)
 
-  // Identify important messages in the older block and move them to recent
-  const important = []
-  const rest = []
-  for (const m of nonSystemOlder) {
-    if (isImportantMessage(m)) important.push(m)
-    else rest.push(m)
+  // Group older non-system messages into atomic units so assistant(tool_calls)
+  // and its matching role:'tool' results are never split or reordered by smart retention.
+  const olderGroups = []
+  let curGroup = null
+  for (let idx = 0; idx < prunedOlder.length; idx++) {
+    const m = prunedOlder[idx]
+    if (!m) continue
+    if (m.role === 'tool' && curGroup && curGroup.callIds.size > 0 && (!m.tool_call_id || curGroup.callIds.has(m.tool_call_id))) {
+      curGroup.msgs.push({ msg: m, origIdx: idx })
+    } else {
+      curGroup = {
+        origIdx: idx,
+        msgs: [{ msg: m, origIdx: idx }],
+        callIds: new Set(
+          m.role === 'assistant' && Array.isArray(m.tool_calls)
+            ? m.tool_calls.map(tc => tc && tc.id).filter(Boolean)
+            : []
+        ),
+        important: false,
+      }
+      olderGroups.push(curGroup)
+    }
   }
-  // If we found important messages, keep them with the recent block
-  if (important.length > 0) {
-    nonSystemOlder = rest
-    recent.unshift(...important)
+  for (const g of olderGroups) {
+    g.important = g.msgs.some(item => isImportantMessage(item.msg))
   }
+
+  // On force=true (overflow self-heal), only retain important groups that fit
+  // alongside recent so oversized retained history cannot prevent shrinking.
+  const importantItems = []
+  const restItems = []
+  if (force) {
+    const retainedRoom = Math.max(0, Math.floor((budget - SUMMARIZATION_OVERHEAD - estimateMessagesTokens(recent, provider, model)) / SAFETY_MARGIN))
+    let usedTokens = 0
+    const keepFlags = new Array(olderGroups.length).fill(false)
+    for (let gi = olderGroups.length - 1; gi >= 0; gi--) {
+      if (!olderGroups[gi].important) continue
+      const gTokens = olderGroups[gi].msgs.reduce((s, item) => s + estimateMessageTokens(item.msg, provider, model), 0)
+      if (usedTokens + gTokens <= retainedRoom) {
+        usedTokens += gTokens
+        keepFlags[gi] = true
+      }
+    }
+    for (let gi = 0; gi < olderGroups.length; gi++) {
+      const target = keepFlags[gi] ? importantItems : restItems
+      target.push(...olderGroups[gi].msgs)
+    }
+  } else {
+    for (const g of olderGroups) {
+      const target = g.important ? importantItems : restItems
+      target.push(...g.msgs)
+    }
+  }
+
+  const important = importantItems.map(item => item.msg)
+  let nonSystemOlder = restItems.map(item => item.msg)
 
   // ── Incremental compaction: only summarize new messages ─────────────────
   let summary
@@ -450,26 +509,35 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     } catch {
       const { rehydrationBlock, planBlock, errorBlock } = buildRehydrationAndPlanBlocks()
       const fallbackSplit = findKeepPoint(nonSystemOlder, budget)
-      const dropCount = Math.max(1, fallbackSplit > 0 ? fallbackSplit : Math.ceil(nonSystemOlder.length / 2))
-      const keep = nonSystemOlder.slice(dropCount)
-      const dropped = dropCount
+      const rawDropCount = Math.max(1, fallbackSplit > 0 ? fallbackSplit : Math.ceil(nonSystemOlder.length / 2))
+      const safeDropIdx = fallbackSplit > 0
+        ? fallbackSplit
+        : safeSplitIndex(nonSystemOlder, Math.max(0, nonSystemOlder.length - rawDropCount))
+      const keepRestItems = restItems.slice(safeDropIdx)
+      // Reconstruct retained messages in strict original chronological order
+      const chronologicalKeep = [...importantItems, ...keepRestItems]
+        .sort((a, b) => a.origIdx - b.origIdx)
+        .map(item => item.msg)
+      const dropped = Math.max(0, nonSystemOlder.length - keepRestItems.length)
       const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
       const baseTruncated =
         '[context compaction] Earlier messages could not be summarized (the summarizer failed) and were dropped from the window. ' +
-        `Anything referenced there may be missing — re-read files before editing and continue from the most recent user request.[${keep.length} of ${nonSystemOlder.length} older messages retained${note}]`
+        `Anything referenced there may be missing — re-read files before editing and continue from the most recent user request.[${chronologicalKeep.length} of ${nonSystemOlderCount} older messages retained${note}]`
 
-      const tailMsgs = [...keep, ...recent]
+      const tailMsgs = [...chronologicalKeep, ...recent]
       const fbSummaryMsg = buildBudgetedSystemMessage(baseTruncated, { errorBlock, rehydrationBlock, planBlock, tailMsgs })
-      let fbResult = [...systemMsgs, fbSummaryMsg, ...keep, ...recent]
+      let fbResult = [...systemMsgs, fbSummaryMsg, ...chronologicalKeep, ...recent]
       if (fbResult.length >= messages.length) {
-        const forcedKeep = keep.slice(Math.max(0, keep.length - Math.max(1, messages.length - systemMsgs.length - 2)))
+        const maxKeep = Math.max(0, messages.length - systemMsgs.length - 2)
+        let trimmedKeep = chronologicalKeep.slice(Math.max(0, chronologicalKeep.length - maxKeep))
+        while (trimmedKeep.length > 0 && trimmedKeep[0].role === 'tool') trimmedKeep.shift()
         const forcedSummaryMsg = buildBudgetedSystemMessage(baseTruncated, {
           errorBlock,
           rehydrationBlock,
           planBlock,
-          tailMsgs: [...forcedKeep, ...recent],
+          tailMsgs: [...trimmedKeep, ...recent],
         })
-        fbResult = [...systemMsgs, forcedSummaryMsg, ...forcedKeep, ...recent]
+        fbResult = [...systemMsgs, forcedSummaryMsg, ...trimmedKeep, ...recent]
       }
       if (force && fbResult.length >= messages.length) return null
       return fbResult
@@ -489,9 +557,9 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     errorBlock,
     rehydrationBlock,
     planBlock,
-    tailMsgs: recent,
+    tailMsgs: [...important, ...recent],
   })
-  let result = [...systemMsgs, summaryMsg, ...recent]
+  let result = [...systemMsgs, summaryMsg, ...important, ...recent]
 
   if (force && (result.length >= messages.length || estimateMessagesTokens(result) > budget)) return null
 
@@ -607,24 +675,34 @@ async function summarizeHistory({ provider, model, history, signal, prevSummary,
 
   async function invokeWithTarget(targetProvider, targetModel) {
     const ctrl = new AbortController()
-    const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
-    const fetchPromise = providerAdapter.completeChat({
-      provider: targetProvider,
-      model: targetModel,
-      messages: msgs,
-      signal: ctrl.signal,
-      options: { max_tokens: 1400, temperature: 0.2 },
-    })
+    const onParentAbort = () => ctrl.abort()
+    if (signal) {
+      if (signal.aborted) {
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+      }
+      signal.addEventListener('abort', onParentAbort, { once: true })
+    }
+    let timedOut = false
+    const guard = setTimeout(() => {
+      timedOut = true
+      ctrl.abort()
+    }, SUMMARIZATION_TIMEOUT_MS)
     try {
-      const out = await Promise.race([
-        fetchPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('summarize fetch timeout')), FETCH_CONNECT_TIMEOUT_MS)),
-      ])
-      clearTimeout(guard)
-      return out
+      return await providerAdapter.completeChat({
+        provider: targetProvider,
+        model: targetModel,
+        messages: msgs,
+        signal: ctrl.signal,
+        options: { max_tokens: 1400, temperature: 0.2 },
+      })
     } catch (e) {
-      clearTimeout(guard)
+      if (timedOut) {
+        throw new Error(`summarize timeout after ${SUMMARIZATION_TIMEOUT_MS}ms`)
+      }
       throw e
+    } finally {
+      clearTimeout(guard)
+      if (signal) signal.removeEventListener('abort', onParentAbort)
     }
   }
 

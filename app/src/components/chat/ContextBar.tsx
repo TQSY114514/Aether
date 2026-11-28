@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
-import { estimateTextTokens } from '@/utils/tokenEstimate'
+import { estimateMessageTokens } from '@/utils/tokenEstimate'
 import { DEFAULT_CONTEXT_WINDOW } from '@/utils/constants'
 import { ChevronDown, ChevronUp, AlertCircle, Sparkles } from 'lucide-react'
 
@@ -13,10 +13,7 @@ const ROLE_COLORS: Record<string, string> = {
 }
 
 function tokenFor(msg: { role: string; content: string }): number {
-  const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || '')
-  // System messages carry a ~100 token overhead (role header + instructions)
-  const overhead = msg.role === 'system' ? 100 : msg.role === 'tool' ? 30 : 20
-  return estimateTextTokens(text) + overhead
+  return estimateMessageTokens(msg, { system: 100, tool: 30, default: 20 })
 }
 
 function formatTokens(n: number): string {

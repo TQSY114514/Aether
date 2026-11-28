@@ -7,6 +7,7 @@ import AgentTaskDeck from './AgentTaskDeck'
 import QueueDock from './QueueDock'
 import QuestionDialog from './QuestionDialog'
 import { t } from '@/utils/i18n'
+import { showConfirm } from '@/components/ui/feedback'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
 import SessionUsageRollbackBadge from './input/SessionUsageRollbackBadge'
@@ -14,12 +15,16 @@ import { useShallow } from 'zustand/react/shallow'
 import { useFeatureFlag } from '@/utils/featureFlags'
 
 import { DEFAULT_COMMANDS, executeTypedSlashCommand, type SlashCommand, type AgentMode } from './slashCommands'
+import { composePromptWithSnippets } from '@/utils/exportMarkdown'
+import type { QueuedMessageItem } from '@/store/types'
 import ModelSelector from './input/ModelSelector'
 import PersonaSelector from './input/PersonaSelector'
 import EffortControl from './input/EffortControl'
 import AgentModeSelector from './input/AgentModeSelector'
 import StreamingStatusBar from './input/StreamingStatusBar'
 import SlashCommandMenu from './input/SlashCommandMenu'
+import GhostTextMirror from './input/GhostTextMirror'
+import { useComposerGhost } from './input/useComposerGhost'
 import AttachmentBar, { type PendingAttachment, type Snippet, SENSITIVE_FILE_PATTERN } from './input/AttachmentBar'
 
 function classifyFile(file: File): 'text' | 'image' {
@@ -81,7 +86,7 @@ export default function ChatInput() {
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const poorMode = useFeatureFlag('agent.poorMode')
-  const [slashIndex, setSlashIndex] = useState(0)
+  const nextPromptEnabled = useFeatureFlag('composer.nextPromptPrediction', false)
   const [pending, setPending] = useState<PendingAttachment[]>([])
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
@@ -94,17 +99,17 @@ export default function ChatInput() {
   // Batch store selectors with shallow comparison to reduce re-render triggers.
   const {
     sendMessage, enqueueMessage, removeQueued, stopGeneration,
-    streamingBySession, currentSessionId, createSession,
+    isStreaming, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     thinkingEnabled, setThinkingEnabled,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
     loopingSessions, btwOpen, toggleBtw, sessions, setSessionCwd,
-    personas, workspaceSoul, defaultPersonaId,
+    personas, workspaceSoul, defaultPersonaId, messages,
   } = useStore(useShallow((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
-    streamingBySession: s.streamingBySession,
+    isStreaming: Boolean(s.currentSessionId && s.streamingBySession[s.currentSessionId]),
     currentSessionId: s.currentSessionId, createSession: s.createSession,
     chatMode: s.chatMode, arenaModelIds: s.arenaModelIds,
     runArena: s.runArena, effortLevel: s.effortLevel,
@@ -122,6 +127,7 @@ export default function ChatInput() {
     personas: s.personas,
     workspaceSoul: s.workspaceSoul,
     defaultPersonaId: s.defaultPersonaId,
+    messages: s.messages,
   })))
 
   // ELO score map for model selector display
@@ -131,7 +137,6 @@ export default function ChatInput() {
     return map
   }, [scores])
 
-  const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
   const isArenaRunning = chatMode === 'arena' && isStreaming
   const isLooping = isStreaming && loopingSessions.has(currentSessionId ?? -1)
   const currentSession = useMemo(() => sessions.find((s) => s.id === currentSessionId), [sessions, currentSessionId])
@@ -206,28 +211,78 @@ export default function ChatInput() {
 
   const sessionIdRef = useRef(currentSessionId)
   useEffect(() => { sessionIdRef.current = currentSessionId }, [currentSessionId])
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDraftRef = useRef<{ key: string; value: string } | null>(null)
 
-  useEffect(() => {
+  const flushPendingDraft = useCallback(() => {
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current)
+      draftTimerRef.current = null
+    }
+    const pendingDraft = pendingDraftRef.current
+    if (!pendingDraft) return
+    pendingDraftRef.current = null
     try {
-      const sid = sessionIdRef.current
-      const key = `draft:${sid ?? 'new'}`
-      if (input.trim()) localStorage.setItem(key, input)
-      else localStorage.removeItem(key)
+      if (pendingDraft.value.trim()) localStorage.setItem(pendingDraft.key, pendingDraft.value)
+      else localStorage.removeItem(pendingDraft.key)
     } catch {}
-  }, [input])
+  }, [])
 
   useEffect(() => {
-    const handler = (e: Event) => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    const sid = sessionIdRef.current
+    const key = `draft:${sid ?? 'new'}`
+    pendingDraftRef.current = { key, value: input }
+    draftTimerRef.current = setTimeout(() => {
+      flushPendingDraft()
+    }, 250)
+    return () => {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current)
+        draftTimerRef.current = null
+      }
+    }
+  }, [input, flushPendingDraft])
+
+  useEffect(() => () => flushPendingDraft(), [flushPendingDraft])
+
+  useEffect(() => {
+    const onEditLast = (e: Event) => {
       const { content } = (e as CustomEvent).detail
       setInput(content)
       textareaRef.current?.focus()
     }
-    window.addEventListener('aether:edit-last-user', handler)
-    return () => window.removeEventListener('aether:edit-last-user', handler)
+    const onQuoteMessage = (e: Event) => {
+      const { content: quoted } = (e as CustomEvent<{ content?: string }>).detail || {}
+      if (!quoted) return
+      const quoteBlock = quoted
+        .split(/\r?\n/)
+        .map((line) => `> ${line}`)
+        .join('\n')
+      setInput((prev) => {
+        const trimmedPrev = prev.trimStart()
+        return trimmedPrev ? `${quoteBlock}\n\n${trimmedPrev}` : `${quoteBlock}\n\n`
+      })
+      requestAnimationFrame(() => {
+        const el = textareaRef.current
+        if (el) {
+          el.focus()
+          const len = el.value.length
+          el.setSelectionRange(len, len)
+        }
+      })
+    }
+    window.addEventListener('aether:edit-last-user', onEditLast)
+    window.addEventListener('aether:quote-message', onQuoteMessage)
+    return () => {
+      window.removeEventListener('aether:edit-last-user', onEditLast)
+      window.removeEventListener('aether:quote-message', onQuoteMessage)
+    }
   }, [])
 
   useEffect(() => {
     if (prevSessionRef.current === currentSessionId) return
+    flushPendingDraft()
     prevSessionRef.current = currentSessionId
     try {
       const draft = localStorage.getItem(`draft:${currentSessionId ?? 'new'}`) || ''
@@ -246,28 +301,32 @@ export default function ChatInput() {
   const snippetTokens = useMemo(() => estimateTextTokens(snippetText), [snippetText])
   const totalInputTokens = inputTokens + snippetTokens
 
-  const slashResults = useMemo(() => {
-    if (!showSlash) return []
-    const q = slashQuery.trim().toLowerCase()
-    if (!q) return slashCommands
-    return slashCommands
-      .map((cmd) => {
-        const haystack = `${cmd.id} ${cmd.name} ${cmd.description}`.toLowerCase()
-        const score = cmd.id.toLowerCase().startsWith(q) ? 0 : cmd.name.toLowerCase().startsWith(q) ? 1 : haystack.includes(q) ? 2 : 3
-        return { cmd, score }
-      })
-      .filter((item) => item.score < 3)
-      .sort((a, b) => a.score - b.score || a.cmd.id.localeCompare(b.cmd.id))
-      .map((item) => item.cmd)
-  }, [showSlash, slashQuery, slashCommands])
-
-  useEffect(() => {
-    setSlashIndex(0)
-  }, [slashQuery, showSlash])
-
-  useEffect(() => {
-    if (slashIndex >= slashResults.length) setSlashIndex(Math.max(0, slashResults.length - 1))
-  }, [slashIndex, slashResults.length])
+  const {
+    slashIndex, setSlashIndex, slashResults,
+    argIndex, setArgIndex, slashArgCandidates,
+    isComposing, setIsComposing,
+    ghostDismissed,
+    setActiveRefSuggestion, textareaScrollTop, setTextareaScrollTop,
+    ghostSuffix, applyComposerText, syncCaret,
+    handleSlashSelect, handleSelectSlashArg,
+    handleCompletionKeyDown,
+  } = useComposerGhost({
+    input,
+    setInput,
+    setRefCursor,
+    showSlash,
+    setShowSlash,
+    slashQuery,
+    setSlashQuery,
+    slashCommands,
+    messages,
+    textareaRef,
+    currentSessionId,
+    activeModelId,
+    isStreaming,
+    isArenaRunning,
+    nextPromptEnabled,
+  })
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -312,17 +371,32 @@ export default function ChatInput() {
 
     if (!overrides || overrides.agentMode !== 'plan') {
       if (isArenaRunning) {
-        if (content) { enqueueMessage(content, currentSessionId ?? undefined); setInput('') }
+        if (content || pending.length > 0 || snippets.length > 0) {
+          enqueueMessage(content, currentSessionId ?? undefined, { attachments: pending, snippets })
+          setInput('')
+          setPending([])
+          setSnippets([])
+        }
         return
       }
       if (isStreaming) {
-        if (content) {
+        if (pending.length > 0 || snippets.length > 0) {
+          enqueueMessage(content, currentSessionId ?? undefined, { attachments: pending, snippets })
+          setInput('')
+          setPending([])
+          setSnippets([])
+        } else if (content) {
           useStore.getState().injectMessage(content)
           setInput('')
         }
         return
       }
     }
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current)
+      draftTimerRef.current = null
+    }
+    pendingDraftRef.current = null
     setInput('')
     try { localStorage.removeItem(`draft:${currentSessionId ?? 'new'}`) } catch {}
 
@@ -334,9 +408,8 @@ export default function ChatInput() {
 
     const atts = pending
     setPending([])
-    const snippetBlocks = snippets.map((s, i) => `\n📎 ${t('paste.snippet_n', i + 1)}:\n\`\`\`\n${s.content}\n\`\`\``).join('\n')
+    const finalContent = composePromptWithSnippets(content, snippets, (n) => t('paste.snippet_n', n))
     setSnippets([])
-    const finalContent = snippetBlocks ? (content ? content + '\n' + snippetBlocks : snippetBlocks) : content
 
     if (chatMode === 'arena') {
       runArena(finalContent)
@@ -414,34 +487,8 @@ export default function ChatInput() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
-    const cursor = e.target.selectionStart ?? val.length
-    setInput(val)
-    setRefCursor(cursor)
-    const lastLine = val.split('\n').pop() || ''
-    if (lastLine === '/') { setShowSlash(true); setSlashQuery('') }
-    else if (lastLine.startsWith('/')) { setShowSlash(true); setSlashQuery(lastLine.slice(1)) }
-    else setShowSlash(false)
-  }
-
-  const handleSlashSelect = (cmd: SlashCommand) => {
-    if (cmd.requiresArg || (!cmd.action && !cmd.prompt)) {
-      const lines = input.split('\n')
-      lines[lines.length - 1] = `/${cmd.id} `
-      setInput(lines.join('\n'))
-      setShowSlash(false)
-      textareaRef.current?.focus()
-      return
-    }
-    if (cmd.action) {
-      setShowSlash(false)
-      cmd.action()
-      return
-    }
-    const lines = input.split('\n')
-    lines[lines.length - 1] = cmd.prompt || `/${cmd.id}`
-    setInput(lines.join('\n'))
-    setShowSlash(false)
-    textareaRef.current?.focus()
+    const pos = e.target.selectionStart ?? val.length
+    applyComposerText(val, pos)
   }
 
   const handleReferenceSelect = ({ prefix, replacement }: { prefix: string; query: string; replacement: string }) => {
@@ -451,14 +498,7 @@ export default function ChatInput() {
     const start = before.length - match[0].length
     const inserted = prefix + replacement
     const next = input.slice(0, start) + inserted + input.slice(refCursor)
-    setInput(next)
-    const pos = start + inserted.length
-    setRefCursor(pos)
-    requestAnimationFrame(() => {
-      const el = textareaRef.current
-      el?.focus()
-      el?.setSelectionRange(pos, pos)
-    })
+    applyComposerText(next, start + inserted.length)
   }
 
   useEffect(() => {
@@ -468,53 +508,17 @@ export default function ChatInput() {
       const before = input.slice(0, refCursor)
       const sp = before && !before.endsWith(' ') ? ' ' : ''
       const next = before + sp + '@' + p + ' ' + input.slice(refCursor)
-      const pos = (before + sp + '@' + p + ' ').length
-      setInput(next)
-      setRefCursor(pos)
-      requestAnimationFrame(() => {
-        const ta = textareaRef.current
-        if (ta) {
-          ta.focus()
-          ta.setSelectionRange(pos, pos)
-        }
-      })
+      applyComposerText(next, (before + sp + '@' + p + ' ').length)
     }
     window.addEventListener('aether:open-file', onOpenFile)
     return () => window.removeEventListener('aether:open-file', onOpenFile)
-  }, [input, refCursor])
+  }, [input, refCursor, applyComposerText])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent?.isComposing || e.keyCode === 229 || isComposing) return
     const el = textareaRef.current
-    if (showSlash && slashResults.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setSlashIndex((i) => (i + 1) % slashResults.length)
-        return
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length)
-        return
-      }
-      if (e.key === 'Tab') {
-        e.preventDefault()
-        const selected = slashResults[slashIndex] || slashResults[0]
-        if (selected) {
-          const lines = input.split('\n')
-          lines[lines.length - 1] = `/${selected.id} `
-          setInput(lines.join('\n'))
-          setShowSlash(false)
-          textareaRef.current?.focus()
-        }
-        return
-      }
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        handleSlashSelect(slashResults[slashIndex] || slashResults[0])
-        return
-      }
-    }
-    if (e.ctrlKey || e.metaKey) {
+    if (handleCompletionKeyDown(e)) return
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       const key = e.key.toLowerCase()
       if (key === 'u' && el) {
         e.preventDefault()
@@ -526,30 +530,11 @@ export default function ChatInput() {
         setInput(el.value)
         return
       }
-      if (key === 'k' && el) {
-        e.preventDefault()
-        const v = el.value
-        const pos = el.selectionStart
-        const lineEnd = v.indexOf('\n', pos)
-        const cutEnd = lineEnd === -1 ? v.length : lineEnd
-        const cut = v.slice(pos, cutEnd)
-        try { navigator.clipboard?.writeText(cut) } catch {}
-        const next = v.slice(0, pos) + v.slice(cutEnd)
-        el.value = next
-        el.selectionStart = el.selectionEnd = pos
-        setInput(next)
-        return
-      }
       if (key === 'enter') { e.preventDefault(); handleSubmit(); return }
-      if (key === 'a') return
+      if (key === 'a' || key === 'k' || key === 'z') return
       if (key === 'e') {
         e.preventDefault()
         useStore.getState().editLastUserMessage()
-        return
-      }
-      if (key === 'z') {
-        e.preventDefault()
-        useStore.getState().undoLastEdit()
         return
       }
     }
@@ -578,17 +563,25 @@ export default function ChatInput() {
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
-    el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px'
-  }, [input, isStreaming, showSlash, pending.length, snippets.length])
+    const rafId = requestAnimationFrame(() => {
+      el.style.height = 'auto'
+      el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+    })
+    return () => cancelAnimationFrame(rafId)
+  }, [input])
 
-  const handleEditQueuedInComposer = (text: string) => {
-    if (input.trim() && input.trim() !== text) {
-      if (!window.confirm(t('queue.overwrite_draft_confirm', '当前输入框已有草稿，是否替换为队列消息？'))) {
-        return false
-      }
+  const handleEditQueuedInComposer = async (item: QueuedMessageItem) => {
+    if ((input.trim() && input.trim() !== item.content) || pending.length > 0 || snippets.length > 0) {
+      const ok = await showConfirm({
+        title: t('queue.overwrite_draft_title', '替换当前草稿？'),
+        description: t('queue.overwrite_draft_confirm', '当前输入框已有草稿，是否替换为队列消息？'),
+        confirmText: t('common.confirm', '确定'),
+      })
+      if (!ok) return false
     }
-    setInput(text)
+    setInput(item.content)
+    setPending(item.attachments ? [...item.attachments] : [])
+    setSnippets(item.snippets ? [...item.snippets] : [])
     setTimeout(() => textareaRef.current?.focus(), 50)
     return true
   }
@@ -639,31 +632,56 @@ export default function ChatInput() {
             boxShadow: 'var(--shadow-card)',
           }}
         >
-          {showSlash && (
+          {( (showSlash && slashResults.length > 0) || (slashArgCandidates.length > 0 && !ghostDismissed) ) && (
             <SlashCommandMenu
-              commands={slashResults}
+              commands={showSlash ? slashResults : []}
               selectedIndex={slashIndex}
               onSelectIndex={setSlashIndex}
               onSelectCommand={handleSlashSelect}
+              argCandidates={!showSlash && !ghostDismissed ? slashArgCandidates : []}
+              selectedArgIndex={argIndex}
+              onSelectArgIndex={setArgIndex}
+              onSelectArg={handleSelectSlashArg}
             />
           )}
 
-          <InputReference value={input} cursorPos={refCursor} visible onSelect={handleReferenceSelect} />
+          <InputReference
+            value={input}
+            cursorPos={refCursor}
+            visible
+            onSelect={handleReferenceSelect}
+            onActiveSuggestionChange={setActiveRefSuggestion}
+          />
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
 
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={currentPlaceholder}
-            rows={1}
-            className="w-full bg-transparent resize-none outline-none text-[13.5px] leading-[1.6] tracking-[-0.005em] py-0.5 max-h-[200px]"
-            style={{ color: 'var(--text-primary)' }}
-            disabled={isArenaRunning}
-          />
+          <div className="relative w-full">
+            <GhostTextMirror
+              value={input}
+              ghostSuffix={ghostSuffix}
+              scrollTop={textareaScrollTop}
+            />
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onSelect={(e) => syncCaret(e.target as HTMLTextAreaElement)}
+              onClick={(e) => syncCaret(e.target as HTMLTextAreaElement)}
+              onKeyUp={(e) => syncCaret(e.target as HTMLTextAreaElement)}
+              onScroll={(e) => setTextareaScrollTop((e.target as HTMLTextAreaElement).scrollTop)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={(e) => {
+                setIsComposing(false)
+                syncCaret(e.target as HTMLTextAreaElement)
+              }}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder={ghostSuffix ? '' : currentPlaceholder}
+              rows={1}
+              className="relative z-[1] w-full bg-transparent resize-none outline-none text-[13.5px] leading-[1.6] tracking-[-0.005em] py-0.5 max-h-[200px]"
+              style={{ color: 'var(--text-primary)' }}
+              disabled={isArenaRunning}
+            />
+          </div>
 
           {/* Integrated Bottom Toolbar inside Composer */}
           <div className="flex items-center justify-between gap-1.5 pt-2 mt-1.5 border-t flex-nowrap min-w-0" style={{ borderColor: 'color-mix(in srgb, var(--border) 65%, transparent)' }}>
@@ -691,7 +709,6 @@ export default function ChatInput() {
                 activeModelId={activeModelId}
                 modelSuggestion={modelSuggestion}
                 scoreByModel={scoreByModel}
-                currentPrompt={input}
                 onSelect={(mid, pid) => {
                   if (currentSessionId) {
                     saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
@@ -751,7 +768,7 @@ export default function ChatInput() {
                 <MessageSquareDashed size={13.5} />
               </button>
 
-              {isArenaRunning || (isStreaming && !input.trim()) ? (
+              {isArenaRunning || (isStreaming && !input.trim() && pending.length === 0 && snippets.length === 0) ? (
                 <button
                   onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }}
                   className="shrink-0 h-6.5 w-6.5 flex items-center justify-center rounded-[6px] bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors active:scale-[0.96] cursor-pointer"
@@ -760,14 +777,17 @@ export default function ChatInput() {
                 >
                   <Square size={11} fill="currentColor" />
                 </button>
-              ) : isStreaming && input.trim() ? (
+              ) : isStreaming && (input.trim() || pending.length > 0 || snippets.length > 0) ? (
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
-                      if (input.trim()) {
-                        enqueueMessage(input.trim(), currentSessionId ?? undefined)
+                      const trimmed = input.trim()
+                      if (trimmed || pending.length > 0 || snippets.length > 0) {
+                        enqueueMessage(trimmed, currentSessionId ?? undefined, { attachments: pending, snippets })
                         setInput('')
+                        setPending([])
+                        setSnippets([])
                       }
                     }}
                     className="h-6.5 px-2 rounded-[6px] bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors active:scale-[0.97] text-[11px] flex items-center gap-1 font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
@@ -777,16 +797,18 @@ export default function ChatInput() {
                     <ListPlus size={12} />
                     <span className="hidden sm:inline">{t('queue.add_button', '排队')}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSubmit()}
-                    className="h-6.5 px-2 rounded-[6px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity active:scale-[0.97] text-[11px] flex items-center gap-1 font-medium cursor-pointer"
-                    title={t('inject.send_hint', '立即插队到当前回合')}
-                    aria-label={t('inject.send_hint', '立即插队到当前回合')}
-                  >
-                    <Zap size={12} />
-                    <span className="hidden sm:inline">{t('queue.inject_button', '插队')}</span>
-                  </button>
+                  {input.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => handleSubmit()}
+                      className="h-6.5 px-2 rounded-[6px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity active:scale-[0.97] text-[11px] flex items-center gap-1 font-medium cursor-pointer"
+                      title={t('inject.send_hint', '立即插队到当前回合')}
+                      aria-label={t('inject.send_hint', '立即插队到当前回合')}
+                    >
+                      <Zap size={12} />
+                      <span className="hidden sm:inline">{t('queue.inject_button', '插队')}</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button

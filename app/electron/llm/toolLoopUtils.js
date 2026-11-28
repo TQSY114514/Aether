@@ -339,6 +339,9 @@ async function runToolWithTimeout(tool, args, ctx, signal) {
     lastResult = result
     if (!result.error) return result
     if (tool?.noRetry) return result
+    if ((tool?.name === 'run_command' || tool?.name === 'exec') && /timed?\s*out|timeout|aborted/i.test(String(result.error))) {
+      return result
+    }
     const verdict = classifyError(new Error(result.error))
     if (!verdict.retryable || verdict.kind === 'abort' || verdict.kind === 'auth') return result
     if (attempt < TOOL_RETRY_MAX) {

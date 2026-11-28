@@ -115,7 +115,9 @@ function loadHljs() {
 // remembered the last input, so alternating between two messages re-parsed
 // both on every render. LRU keeps hot messages cached.
 const _mdCache = new Map<string, { html: string; version: number }>()
-const MD_CACHE_SIZE = 128
+const MD_CACHE_SIZE = 512
+const _tailCache = new Map<string, { html: string; version: number }>()
+const MD_TAIL_CACHE_SIZE = 32
 
 export function getHighlightVersion(): number {
   return _highlightVersion
@@ -202,7 +204,11 @@ export function renderMarkdown(text: string): string {
   text = stripChannelMarkers(text)
   if (!text) return ''
   const cached = _mdCache.get(text)
-  if (cached && cached.version === _highlightVersion) return cached.html
+  if (cached && cached.version === _highlightVersion) {
+    _mdCache.delete(text)
+    _mdCache.set(text, cached)
+    return cached.html
+  }
   const html = _hljs
     ? renderInner(text, _hljs, false)
     : (() => { const t = renderInner(text, null, false); loadHljs(); return t })()
@@ -222,7 +228,18 @@ export function renderMarkdownTail(text: string): string {
   const cleaned = stripChannelMarkers(text)
   if (!cleaned) return ''
   if (!_hljs) loadHljs()
-  return renderInner(cleaned, _hljs, true)
+  const cached = _tailCache.get(cleaned)
+  if (cached && cached.version === _highlightVersion) {
+    _tailCache.delete(cleaned)
+    _tailCache.set(cleaned, cached)
+    return cached.html
+  }
+  const html = renderInner(cleaned, _hljs, true)
+  if (_tailCache.size >= MD_TAIL_CACHE_SIZE) {
+    _tailCache.delete(_tailCache.keys().next().value!)
+  }
+  _tailCache.set(cleaned, { html, version: _highlightVersion })
+  return html
 }
 
 // Map common shorthand language names to hljs language IDs.
@@ -300,6 +317,44 @@ function renderInner(raw: string, hljs: typeof hljsCore | null, skipAutoHighligh
     return ''
   }
 
+  const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|avif|ico|svg)(\?[^#]*)?(#.*)?$/i
+  const safeImageUrl = (u: string): { src: string; localPath: string } | null => {
+    const s = u.trim()
+    if (!s || /^(javascript:|vbscript:)/i.test(s)) return null
+    if (/^data:/i.test(s)) {
+      return /^data:image\/(png|jpe?g|gif|webp|bmp|avif|x-icon|vnd\.microsoft\.icon|svg\+xml);/i.test(s)
+        ? { src: escapeAttr(s), localPath: '' }
+        : null
+    }
+    if (/^(https?:\/\/|\/|\.\/|\.\.\/|#)/i.test(s)) {
+      return { src: escapeAttr(s), localPath: '' }
+    }
+    // Local Windows drive path or file:///C:/... image reference
+    let winPath = ''
+    if (/^file:\/\/\/?[a-zA-Z]:[\\/]/i.test(s)) {
+      winPath = s.replace(/^file:\/\/\/?/i, '')
+    } else if (/^[a-zA-Z]:[\\/]/.test(s)) {
+      winPath = s
+    }
+    if (!winPath) return null
+    if (/^\\{2}/.test(winPath) || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(winPath) || /[<>"{}|^`\r\n]/.test(winPath)) {
+      return null
+    }
+    if (!IMAGE_EXT_RE.test(winPath)) return null
+    const cleanPath = winPath.replace(/[?#].*$/, '')
+    const normalizedFwd = cleanPath.replace(/\\/g, '/')
+    let decodedFwd = normalizedFwd
+    let cleanLocalPath = cleanPath
+    try {
+      decodedFwd = decodeURIComponent(normalizedFwd)
+      cleanLocalPath = decodeURIComponent(cleanPath)
+    } catch {
+      // Keep raw path if percent sequences are literal/malformed
+    }
+    const fileUrl = `file:///${encodeURI(decodedFwd).replace(/#/g, '%23')}`
+    return { src: escapeAttr(fileUrl), localPath: escapeAttr(cleanLocalPath) }
+  }
+
   // Code blocks with syntax highlighting via hljs.
   t = t.replace(RE_CODE_BLOCK, (_, lang, code) => {
     const trimmed = code.trim()
@@ -351,8 +406,11 @@ function renderInner(raw: string, hljs: typeof hljsCore | null, skipAutoHighligh
     return html
   })
   t = t.replace(RE_IMAGE, (_, alt, url) => {
-    const s = safeUrl(url)
-    return s ? `<img src="${s}" alt="${alt}" style="max-width:100%;max-height:400px;object-fit:contain">` : '<span>[image blocked]</span>'
+    const img = safeImageUrl(url)
+    if (!img) return '<span>[image blocked]</span>'
+    const localAttr = img.localPath ? ` data-local-path="${img.localPath}"` : ''
+    const safeAlt = escapeAttr(alt)
+    return `<img src="${img.src}"${localAttr} alt="${safeAlt}" class="mc-zoomable-img" style="max-width:100%;max-height:400px;object-fit:contain;cursor:zoom-in">`
   })
   t = t.replace(RE_H5, '<h5>$1</h5>')
   t = t.replace(RE_H4, '<h4>$1</h4>')

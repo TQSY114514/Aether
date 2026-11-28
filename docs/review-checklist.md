@@ -86,3 +86,18 @@ Follow the skill's Deliver format, plus one section it does not ask for:
 Verification claims stay literal: `cd app && npm run build` is the only build
 gate; `node -e "require('./electron/ipc/<file>')"` proves a main-process module
 loads. Source inspection is never reported as a passing test.
+
+## External PR merge gate
+
+Applies to changes you did not write (contributor PRs, another agent's patch).
+
+- The author's "fixed", "tests pass", CI green, or a clean CodeRabbit report
+  are claims, not evidence. Reproduce the original defect first, then read the
+  diff hunk by hunk, then re-run the gates above yourself.
+- Write at least one materially cleaner alternative and compare. If it is
+  simpler without sacrificing the requirement, the verdict is "request
+  changes", not "it works".
+- List what the change still leaves broken or unverified. UI without a render
+  is "visual not verified", never "clean".
+- Verdict is one of: merge / request changes / needs verification. Never merge
+  because a checker stayed quiet.

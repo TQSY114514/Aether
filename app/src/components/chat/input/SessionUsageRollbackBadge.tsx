@@ -8,7 +8,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '@/store'
 import { RotateCcw, Minimize2, History } from 'lucide-react'
-import { estimateTextTokens, formatTokens } from '@/utils/tokenEstimate'
+import { estimateMessageTokens, formatTokens } from '@/utils/tokenEstimate'
 import { DEFAULT_CONTEXT_WINDOW } from '@/utils/constants'
 import { t } from '@/utils/i18n'
 
@@ -25,6 +25,8 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
   const loadMessages = useStore((s) => s.loadMessages)
   const allModels = useStore((s) => s.allModels)
   const sessionConfigs = useStore((s) => s.sessionConfigs)
+  const usageBySession = useStore((s) => s.usageBySession)
+  const sessionUsage = sessionId ? usageBySession[sessionId] : undefined
 
   const [hasCheckpoints, setHasCheckpoints] = useState(false)
   const [checkpointCount, setCheckpointCount] = useState(0)
@@ -47,13 +49,11 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
 
   const contextWindow = activeModel?.context_window || DEFAULT_CONTEXT_WINDOW
 
-  // Token estimate
+  // Token estimate (memoized per message object for O(1) incremental appends)
   const usedTokens = useMemo(() => {
     let total = 0
     for (const m of messages) {
-      const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')
-      const overhead = m.role === 'system' ? 100 : 20
-      total += estimateTextTokens(text) + overhead
+      total += estimateMessageTokens(m, { system: 100, tool: 20, default: 20 })
     }
     return total
   }, [messages])
@@ -63,15 +63,24 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
   const ringColor = pct >= 90 ? 'var(--error)' : pct >= 75 ? 'var(--warning)' : 'var(--text-secondary)'
   const labelColor = pct >= 90 ? 'var(--error)' : pct >= 75 ? 'var(--warning)' : 'var(--text-muted)'
 
-  // Check recent checkpoints for session
+  // Check recent checkpoints for session on mount/session switch and when popover opens
+  // (avoids firing an IPC call on every optimistic user message append).
+  const lastCheckpointFetchRef = useRef<{ sid: number | null; wasOpen: boolean }>({ sid: null, wasOpen: false })
   useEffect(() => {
     let cancelled = false
     if (!sessionId) {
+      lastCheckpointFetchRef.current = { sid: null, wasOpen: false }
       setHasCheckpoints(false)
       setCheckpointCount(0)
       setLatestCheckpointId(null)
       return
     }
+    const prev = lastCheckpointFetchRef.current
+    if (prev.sid === sessionId && (!popoverOpen || prev.wasOpen)) {
+      lastCheckpointFetchRef.current = { sid: sessionId, wasOpen: popoverOpen }
+      return
+    }
+    lastCheckpointFetchRef.current = { sid: sessionId, wasOpen: popoverOpen }
     window.electronAPI.agentCheckpoint?.list?.({ sessionId })
       .then((list: any[]) => {
         if (cancelled) return
@@ -102,7 +111,7 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
     return () => {
       cancelled = true
     }
-  }, [sessionId, messages.length])
+  }, [sessionId, popoverOpen])
 
   // Close popover on outside click or Escape
   useEffect(() => {
@@ -218,6 +227,11 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
           />
         </svg>
         {pct >= 75 && <span className="tabular-nums font-medium">{pct}%</span>}
+        {sessionUsage && sessionUsage.costUsd > 0 && (
+          <span className="tabular-nums text-[10px] opacity-85" style={{ color: 'var(--text-secondary)' }}>
+            ${sessionUsage.costUsd < 0.01 ? sessionUsage.costUsd.toFixed(4) : sessionUsage.costUsd.toFixed(2)}
+          </span>
+        )}
       </button>
 
       {/* Popover: Token details + One-Click Compact + Outputs Drawer */}
@@ -233,6 +247,15 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
             <span>{formatTokens(usedTokens)} / {formatTokens(contextWindow)}</span>
             <span className="tabular-nums font-semibold" style={{ color: ringColor }}>{pct}%</span>
           </div>
+          {sessionUsage && (sessionUsage.costUsd > 0 || sessionUsage.inputTokens > 0 || sessionUsage.outputTokens > 0) && (
+            <div className="flex items-center justify-between text-[10.5px] font-mono mb-2" style={{ color: 'var(--text-muted)' }}>
+              <span>{t('usage.session_total', 'Session')}</span>
+              <span className="tabular-nums">
+                {formatTokens((sessionUsage.inputTokens || 0) + (sessionUsage.outputTokens || 0))} tok
+                {sessionUsage.costUsd > 0 ? ` · $${sessionUsage.costUsd < 0.01 ? sessionUsage.costUsd.toFixed(4) : sessionUsage.costUsd.toFixed(2)}` : ''}
+              </span>
+            </div>
+          )}
           <div className="h-1.5 w-full rounded-[6px] overflow-hidden mb-3" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             <div
               className="h-full rounded-[6px] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"

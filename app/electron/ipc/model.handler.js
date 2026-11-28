@@ -5,8 +5,10 @@ function registerModelHandlers(ipcMain, db) {
     // needs model metadata for dropdowns/lists; all LLM requests go through the
     // main process. Leaking keys to the renderer means an XSS (#2) could steal
     // every provider key, so we never forward them.
-    const models = db.getAllModels()
-    return models.map(m => { const { api_key, ...rest } = m; return rest })
+    const models = typeof db.getAllModelsMetadata === 'function'
+      ? db.getAllModelsMetadata()
+      : db.getAllModels().map(m => { const { api_key, ...rest } = m; return rest })
+    return models
   })
   ipcMain.handle('model:primary', () => db.getPrimaryModel())
   ipcMain.handle('model:create', (_e, data) => {

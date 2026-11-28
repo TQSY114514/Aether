@@ -77,6 +77,163 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
     }
   })
 
+  // Shared image resolution helpers for clipboard image copy, save-as, and safe local preview
+  const IMAGE_EXT_MIME = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.ico': 'image/x-icon',
+    '.avif': 'image/avif',
+    '.svg': 'image/svg+xml',
+  }
+  const MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
+  function isPathInsideDir(parentDir, targetPath) {
+    const path = require('path')
+    const fs = require('fs')
+    if (!parentDir || !targetPath) return false
+    let realParent = path.resolve(parentDir)
+    try { if (fs.existsSync(realParent)) realParent = fs.realpathSync(realParent) } catch {}
+    const rel = path.relative(
+      process.platform === 'win32' ? realParent.toLowerCase() : realParent,
+      process.platform === 'win32' ? targetPath.toLowerCase() : targetPath
+    )
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+  }
+
+  function resolveLocalImagePath(rawPath) {
+    const path = require('path')
+    const fs = require('fs')
+    const os = require('os')
+    const { fileURLToPath } = require('url')
+    const { hasUnsafeWindowsPrefix, isSensitivePath, isDangerousRoot, getWorkspaceRoot } = require('../tools/sandbox')
+    if (!rawPath || typeof rawPath !== 'string') return { ok: false, error: 'path required' }
+    let local = rawPath.trim()
+    if (/^file:\/\//i.test(local)) {
+      try { local = fileURLToPath(local) } catch { return { ok: false, error: 'invalid file url' } }
+    }
+    if (hasUnsafeWindowsPrefix(local) || isSensitivePath(local) || isDangerousRoot(local)) {
+      return { ok: false, error: 'unsafe or sensitive path' }
+    }
+    const ext = path.extname(local).toLowerCase()
+    const mime = IMAGE_EXT_MIME[ext]
+    if (!mime) return { ok: false, error: 'unsupported image extension' }
+    const abs = path.resolve(local)
+    if (!fs.existsSync(abs)) return { ok: false, error: 'file not found' }
+    let real
+    try { real = fs.realpathSync(abs) } catch { return { ok: false, error: 'cannot resolve path' } }
+    if (hasUnsafeWindowsPrefix(real) || isSensitivePath(real) || isDangerousRoot(real)) {
+      return { ok: false, error: 'unsafe resolved path' }
+    }
+    const allowedRoots = [os.tmpdir(), getWorkspaceRoot()]
+    try { if (app && typeof app.getPath === 'function') allowedRoots.push(app.getPath('userData')) } catch {}
+    try {
+      if (db && typeof db.prepare === 'function') {
+        for (const r of db.prepare('SELECT cwd FROM session WHERE cwd IS NOT NULL').all()) {
+          if (r && r.cwd) allowedRoots.push(r.cwd)
+        }
+        for (const r of db.prepare('SELECT config FROM session WHERE config IS NOT NULL').all()) {
+          try { const c = JSON.parse(r.config); if (c && c.workspace) allowedRoots.push(c.workspace) } catch {}
+        }
+        for (const r of db.prepare('SELECT root_path FROM project WHERE root_path IS NOT NULL').all()) {
+          if (r && r.root_path) allowedRoots.push(r.root_path)
+        }
+      }
+    } catch {}
+    if (!allowedRoots.some((root) => isPathInsideDir(root, real))) {
+      return { ok: false, error: 'path outside authorized directories' }
+    }
+    const stat = fs.statSync(real)
+    if (!stat.isFile() || stat.size > MAX_IMAGE_BYTES) {
+      return { ok: false, error: 'image too large or not a file' }
+    }
+    return { ok: true, real, mime, ext }
+  }
+
+  async function resolveImageBuffer(source) {
+    const fs = require('fs')
+    if (!source || typeof source !== 'string') return { ok: false, error: 'image source required' }
+    const s = source.trim()
+    const dataMatch = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i.exec(s)
+    if (dataMatch) {
+      const buf = Buffer.from(dataMatch[2].replace(/\s+/g, ''), 'base64')
+      if (buf.length === 0 || buf.length > MAX_IMAGE_BYTES) return { ok: false, error: 'invalid or oversized image data' }
+      return { ok: true, buf, mime: dataMatch[1].toLowerCase() }
+    }
+    if (/^https?:\/\//i.test(s)) {
+      const res = await fetch(s, { signal: AbortSignal.timeout(10000) })
+      if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
+      const len = Number(res.headers.get('content-length') || 0)
+      if (len > MAX_IMAGE_BYTES) return { ok: false, error: 'remote image too large' }
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length === 0 || buf.length > MAX_IMAGE_BYTES) return { ok: false, error: 'empty or oversized remote image' }
+      const ct = (res.headers.get('content-type') || 'image/png').split(';')[0].trim().toLowerCase()
+      return { ok: true, buf, mime: ct.startsWith('image/') ? ct : 'image/png' }
+    }
+    const localRes = resolveLocalImagePath(s)
+    if (!localRes.ok) return localRes
+    const buf = await fs.promises.readFile(localRes.real)
+    return { ok: true, buf, mime: localRes.mime }
+  }
+
+  ipcMain.handle('system:read-local-image', async (_e, targetPath) => {
+    try {
+      const fs = require('fs')
+      const resolved = resolveLocalImagePath(targetPath)
+      if (!resolved.ok) return { ok: false, error: resolved.error }
+      const buf = await fs.promises.readFile(resolved.real)
+      return { ok: true, dataUrl: `data:${resolved.mime};base64,${buf.toString('base64')}` }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
+
+  ipcMain.handle('system:clipboard-write-image', async (_e, source) => {
+    try {
+      const { clipboard, nativeImage } = require('electron')
+      const res = await resolveImageBuffer(source)
+      if (!res.ok) return { ok: false, error: res.error }
+      const img = nativeImage.createFromBuffer(res.buf)
+      if (!img || img.isEmpty()) return { ok: false, error: 'unsupported image format' }
+      clipboard.writeImage(img)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
+
+  ipcMain.handle('system:save-image', async (_e, { source, defaultName } = {}) => {
+    try {
+      const fs = require('fs')
+      const path = require('path')
+      const { dialog } = require('electron')
+      const res = await resolveImageBuffer(source)
+      if (!res.ok) return { ok: false, error: res.error }
+      const fallbackExt = res.mime === 'image/jpeg' ? '.jpg'
+        : res.mime === 'image/webp' ? '.webp'
+        : res.mime === 'image/gif' ? '.gif'
+        : res.mime === 'image/svg+xml' ? '.svg'
+        : '.png'
+      const rawName = path.basename(String(defaultName || `image${fallbackExt}`).replace(/[<>:"/\\|?*]+/g, '_'))
+      const safeName = path.extname(rawName) ? rawName : `${rawName}${fallbackExt}`
+      const picked = await dialog.showSaveDialog({
+        defaultPath: safeName,
+        filters: [
+          { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      })
+      if (picked.canceled || !picked.filePath) return { ok: false, canceled: true }
+      await fs.promises.writeFile(picked.filePath, res.buf)
+      return { ok: true, filePath: picked.filePath }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
+
   // 文件关联: 生成填充当前 exe 路径的 reg 文件并以管理员导入。
   // 注册 aetherai:// 协议 + 右键「用 Aether 打开」(.cs/.js/.ts/.tsx/.md/.json + 文件夹)。
   ipcMain.handle('system:register-file-associations', async () => {

@@ -88,6 +88,12 @@ function extractOne(absPath) {
   return extractFile(absPath, content)
 }
 
+async function extractOneAsync(absPath) {
+  let content = ''
+  try { content = await fs.promises.readFile(absPath, 'utf-8') } catch { return null }
+  return extractFile(absPath, content)
+}
+
 /**
  * Build a nested directory tree from scanned files, attaching each file's
  * extracted symbols/exports to its node.
@@ -139,6 +145,11 @@ function buildFileTree(files, rootDir, extractionByAbs) {
  * @returns {{ rootDir: string, tree: object, files: Array<object>, stats: object, generatedAt: number }}
  */
 async function generateRepoMap(rootDir, options = {}) {
+  const maxAgeMs = Number(options.maxAgeMs) || 0
+  const cachedEntry = _cache.get(rootDir)
+  if (!options.force && cachedEntry?.map && maxAgeMs > 0 && (Date.now() - (cachedEntry.map.generatedAt || 0)) < maxAgeMs) {
+    return cachedEntry.map
+  }
   if (!options.force && !(await isIndexStale(rootDir))) {
     const cached = getCachedMap(rootDir)
     if (cached) return cached
@@ -168,7 +179,7 @@ async function generateRepoMap(rootDir, options = {}) {
     if (cached && cached.extraction && !isChanged) {
       extractionByAbs.set(f.absPath, cached.extraction)
     } else {
-      const extraction = extractOne(f.absPath)
+      const extraction = await extractOneAsync(f.absPath)
       if (extraction) {
         entry.fileCache.set(f.absPath, { mtime: f.modified, extraction })
         extractionByAbs.set(f.absPath, extraction)
@@ -256,22 +267,21 @@ function scoreFileNode(node, gitChangedSet, inDegreeMap = null, queryKeywords = 
   return score
 }
 
-let _tokenizer = null
-/** Count tokens with the shared tokenizer, falling back to a character estimate. */
+/**
+ * Fast CJK-aware token count estimate for repo map sizing. Avoids synchronously
+ * loading the multi-MB js-tiktoken BPE dictionary on the hot turn-start path.
+ */
 function countTokens(text) {
   if (!text) return 0
-  if (_tokenizer === null) {
-    try {
-      const { getEncoding } = require('js-tiktoken')
-      _tokenizer = getEncoding('cl100k_base')
-    } catch {
-      _tokenizer = false
-    }
+  let tokens = 0
+  for (let i = 0; i < text.length; i++) {
+    const code = text.codePointAt(i)
+    if ((code >= 0x3400 && code <= 0x9fff) || (code >= 0xf900 && code <= 0xfaff) ||
+        (code >= 0x3040 && code <= 0x309f) || (code >= 0x30a0 && code <= 0x30ff) ||
+        (code >= 0xac00 && code <= 0xd7af)) tokens += 1.5
+    else tokens += 0.25
   }
-  if (_tokenizer && typeof _tokenizer.encode === 'function') {
-    try { return _tokenizer.encode(text).length } catch {}
-  }
-  return Math.ceil(text.length / 4)
+  return Math.max(1, Math.ceil(tokens))
 }
 
 /**
@@ -416,13 +426,25 @@ function buildRepoMapText(map, optsOrMaxLines = 160) {
  * Build a system-message object for the current workspace, generating the map
  * on first use (cached thereafter). Returns null when no workspace is set.
  */
+const REPO_MAP_TTL_MS = 15_000
+
 async function buildRepoMapMessage(options = {}) {
   const { getWorkspaceRoot } = require('../tools/sandbox')
   const root = options.rootDir || getWorkspaceRoot()
   if (!root) return null
   const userMsg = options.userMessage || options.query || ''
   const budget = options.maxTokens || computeBudgetForRequest(userMsg)
-  const map = await generateRepoMap(root, options)
+  let map = getCachedMap(root)
+  if (map && !options.force) {
+    const age = Date.now() - (map.generatedAt || 0)
+    if (age >= REPO_MAP_TTL_MS) {
+      setImmediate(() => {
+        generateRepoMap(root, { ...options, maxAgeMs: REPO_MAP_TTL_MS }).catch(() => {})
+      })
+    }
+  } else {
+    map = await generateRepoMap(root, { ...options, maxAgeMs: REPO_MAP_TTL_MS })
+  }
   const text = buildRepoMapText(map, { ...options, maxTokens: budget, query: userMsg })
   if (!text) return null
   return { role: 'system', content: text }

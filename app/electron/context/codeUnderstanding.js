@@ -59,6 +59,44 @@ function listSourceFiles(rootDir, options = {}) {
   return out
 }
 
+/**
+ * Async non-blocking variant of listSourceFiles using fs.promises with periodic
+ * event-loop yields so large repository walks never freeze IPC or streaming.
+ */
+async function listSourceFilesAsync(rootDir, options = {}) {
+  const maxFiles = options.maxFiles || 5000
+  const maxDepth = options.depth == null ? 8 : options.depth
+  const ignoreDirs = new Set([...DEFAULT_IGNORE_DIRS, ...(options.ignoreDirs || [])])
+  const extensions = options.extensions || DEFAULT_EXTENSIONS
+  const out = []
+  if (!rootDir) return out
+  let dirsVisited = 0
+  const yieldLoop = () => new Promise((r) => setImmediate(r))
+
+  const walk = async (dir, depth) => {
+    if (depth > maxDepth || out.length >= maxFiles) return
+    dirsVisited++
+    if (dirsVisited % 20 === 0) await yieldLoop()
+    let entries
+    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }) } catch { return }
+    for (const entry of entries) {
+      if (out.length >= maxFiles) return
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (!ignoreDirs.has(entry.name)) await walk(full, depth + 1)
+      } else if (entry.isFile() && extensions.includes(path.extname(entry.name).toLowerCase())) {
+        out.push(full)
+      }
+    }
+  }
+
+  try {
+    const st = await fs.promises.stat(rootDir)
+    if (st.isDirectory()) await walk(rootDir, 0)
+  } catch (e) { log.warn('codeUnderstanding: walk failed:', e && e.message) }
+  return out
+}
+
 // ─── Per-language extraction ────────────────────────────────────────────────
 
 // Module specs from import/require/from lines. Bare package names (no slash,
@@ -300,7 +338,7 @@ async function indexWorkspaceAsync(db, rootDir, options = {}) {
   const yieldLoop = () => new Promise((r) => setImmediate(r))
   try {
     await yieldLoop()
-    const files = listSourceFiles(rootDir, options)
+    const files = await listSourceFilesAsync(rootDir, options)
     const relFiles = files.map((f) => path.relative(rootDir, f).replace(/\\/g, '/'))
     const nodeSet = new Map()
     const edgeSet = new Set()
@@ -354,8 +392,21 @@ async function indexWorkspaceAsync(db, rootDir, options = {}) {
       if (scanned % chunkSize === 0) await yieldLoop()
     }
 
-    await yieldLoop()
-    return { ...writeCodeUnderstanding(db, { nodes, edges, fileCount: relFiles.length }), skipped: false }
+    // Chunk SQLite transactions so persisting thousands of nodes/edges never blocks the event loop.
+    const dbBatchSize = options.dbBatchSize || 150
+    let totalNodes = 0
+    let totalEdges = 0
+    for (let i = 0; i < nodes.length; i += dbBatchSize) {
+      await yieldLoop()
+      const res = writeCodeUnderstanding(db, { nodes: nodes.slice(i, i + dbBatchSize), edges: [] })
+      totalNodes += res.nodes
+    }
+    for (let i = 0; i < edges.length; i += dbBatchSize) {
+      await yieldLoop()
+      const res = writeCodeUnderstanding(db, { nodes: [], edges: edges.slice(i, i + dbBatchSize) })
+      totalEdges += res.edges
+    }
+    return { nodes: totalNodes, edges: totalEdges, skipped: false }
   } catch (e) {
     log.warn('codeUnderstanding: async index failed:', e && e.message)
     return { nodes: 0, edges: 0, skipped: false }
@@ -366,6 +417,7 @@ module.exports = {
   DEFAULT_IGNORE_DIRS,
   DEFAULT_EXTENSIONS,
   listSourceFiles,
+  listSourceFilesAsync,
   extractModuleSpecs,
   extractPythonImports,
   extractSymbols,
