@@ -1,35 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal, Sparkles, Copy, Folder, HelpCircle } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, RotateCcw, Info, FileDiff, FileText, Terminal, Sparkles, Copy, Folder, HelpCircle } from 'lucide-react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { cleanDiffLines, countDiffLines } from '@/utils/diff'
+import { stripAnsi, detectCommandFailure, formatToolLabel, type ToolEntry } from './timelineHelpers'
 
-export function stripAnsi(text: string): string {
-  if (!text) return ''
-  return String(text).replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g, '')
-}
+export { stripAnsi } from './timelineHelpers'
 
-type ToolCall = {
-  name: string
-  args: unknown
-  result: string | null
-  error: string | null
-  failureKind?: string | null
-  recoveryHint?: { action?: string; hint?: string } | null
-  risk?: string | null
-  latencyMs?: number | null
-  startedAt?: number | null
-  checkpointId?: number | null
-  diff?: string | null
-  afterSnapshot?: { path: string; content: string; truncated: boolean } | null
-  liveOutput?: string
-  liveOutputDone?: boolean
-  exitCode?: number | null
-  commandFailed?: boolean
-  timedOut?: boolean
-  added?: number | null
-  removed?: number | null
-}
+type ToolCall = ToolEntry
 
 const FAILURE_LABELS: Record<string, string> = {
   timeout: 'tool.failure.timeout',
@@ -41,82 +19,17 @@ const FAILURE_LABELS: Record<string, string> = {
   unknown: 'tool.failure.unknown',
 }
 
-function detectCommandFailure(tool: ToolCall): { failed: boolean; exitCode?: number; reason: string } {
-  if (tool.name !== 'run_command' && !tool.name.includes('exec') && !tool.name.includes('terminal')) {
-    return { failed: false, reason: '' }
-  }
-  if (tool.exitCode != null && tool.exitCode !== 0) {
-    return { failed: true, exitCode: tool.exitCode, reason: `exit ${tool.exitCode}` }
-  }
-  const text = (tool.error || tool.result || '') + ''
-  const exitMatch = text.match(/(?:\[FAILED:\s*exit\s+|exit\s+code:\s*)(-?\d+)/i)
-  if (exitMatch) {
-    const code = parseInt(exitMatch[1], 10)
-    if (code !== 0) return { failed: true, exitCode: code, reason: `exit ${code}` }
-  }
-  if (text.includes('[TIMED OUT]') || tool.timedOut) {
-    return { failed: true, reason: 'timeout' }
-  }
-  if (text.includes('[COMMAND NOT FOUND]')) {
-    return { failed: true, exitCode: 127, reason: 'command not found' }
-  }
-  if (tool.commandFailed) {
-    return { failed: true, reason: 'failed' }
-  }
-  return { failed: false, reason: '' }
-}
-
-// Human-phrased status label for a tool call: "Reading api.md", "Searching the
-// web for …", "Running git status", etc. Falls back to the raw tool name when
-// there is no specific phrasing or the primary arg is missing. The raw name is
-// kept as the title attribute so it's still discoverable.
-function toolLabel(tool: ToolCall): string {
-  const a = (tool.args && typeof tool.args === 'object' ? tool.args : {}) as any
-  const basename = (p: string) => { try { return String(p).replace(/\\/g, '/').split('/').pop() } catch { return p } }
-  const first = (s: string, n = 40) => { const x = String(s || '').trim().replace(/\s+/g, ' '); return x.length > n ? x.slice(0, n) + '…' : x }
-  switch (tool.name) {
-    case 'read_file': return a.path ? `${t('tool.read_file')} ${basename(a.path)}` : t('tool.read_file')
-    case 'list_dir': return a.path ? `${t('tool.list_dir')} ${basename(a.path)}` : t('tool.list_dir')
-    case 'glob_find': return a.pattern ? `${t('tool.glob_find')} ${first(a.pattern, 30)}` : t('tool.glob_find')
-    case 'grep_search': return a.pattern ? `${t('tool.grep_search')} ${first(a.pattern, 30)}` : t('tool.grep_search')
-    case 'web_search': return a.query ? `${t('tool.web_search')} ${first(a.query)}` : t('tool.web_search')
-    case 'web_fetch': return a.url ? `${t('tool.web_fetch')} ${first(a.url, 40)}` : t('tool.web_fetch')
-    case 'agent_browser': {
-      const act = a.action ? `[${a.action}]` : ''
-      const target = a.url ? ` ${first(a.url, 35)}` : (a.ref ? ` ${a.ref}` : (a.selector ? ` ${first(a.selector, 25)}` : ''))
-      return `${t('tool.agent_browser') || 'Browser'} ${act}${target}`.trim()
-    }
-    case 'write_file': return a.path ? `${t('tool.write_file')} ${basename(a.path)}` : t('tool.write_file')
-    case 'edit_file': return a.path ? `${t('tool.edit_file')} ${basename(a.path)}` : t('tool.edit_file')
-    case 'run_command': return a.command ? `${t('tool.run_command')} ${first((a.command + '').split(' ').slice(0, 3).join(' '), 30)}` : t('tool.run_command')
-    case 'git_status': return t('tool.git_status')
-    case 'git_diff': return t('tool.git_diff')
-    case 'git_log': return a.count ? `${t('tool.git_log')} (${a.count})` : t('tool.git_log')
-    case 'git_commit': return a.message ? `${t('tool.git_commit')}: ${first(a.message, 30)}` : t('tool.git_commit')
-    case 'memory_save': return t('tool.memory_save')
-    case 'memory_list': return t('tool.memory_list')
-    case 'use_skill': return a.name ? `${t('tool.use_skill')} ${first(a.name, 30)}` : t('tool.use_skill')
-    case 'ask_user': return t('tool.ask_user')
-    case 'history_search': return a.query ? `${t('tool.history_search')}: ${first(a.query, 30)}` : t('tool.history_search')
-    case 'todo_write': return t('tool.todo_write')
-    default: return tool.name
-  }
-}
-
 function argsCount(args: unknown): number {
   return (args && typeof args === 'object' && !Array.isArray(args) ? Object.keys(args as Record<string, unknown>).length : 0)
 }
 
-// Renders one tool invocation as a collapsible block: a human status label,
-// expandable to show the arguments the model supplied and the result we got back.
-// Shows a risk badge (dangerous vs safe), failure type, recovery hint, and the elapsed time when available.
-export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
+// Renders one tool invocation as a collapsible block (or ultra-clean compact row
+// inside AgentTimeline). Expanding reveals args, Warp terminal output,
+// clean copy, Explain/Quick Fix actions, inline diff preview, and snapshot revert.
+export default function ToolCallBlock({ tool, compact = false }: { tool: ToolCall; compact?: boolean }) {
   const [open, setOpen] = useState(false)
   const [rollbackState, setRollbackState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const running = tool.result == null && tool.error == null
-  // Live elapsed timer while the tool is running (Feature C). Only ticks when a
-  // startedAt timestamp is present; once the tool completes we fall back to the
-  // server-reported latencyMs, so this state is just for the running phase.
   const [elapsed, setElapsed] = useState<number | null>(null)
   useEffect(() => {
     const started = tool.startedAt
@@ -125,8 +38,6 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
     const iv = setInterval(() => setElapsed(Math.max(0, Date.now() - started)), 500)
     return () => clearInterval(iv)
   }, [running, tool.startedAt])
-  // Long results default to a collapsed single line with a click-to-expand
-  // toggle (Feature C2). Short results render fully as before.
   const [collapsed, setCollapsed] = useState(true)
   const rawRes = tool.result as any
   let extractedImageUrl: string | null = null
@@ -151,9 +62,12 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
     : { icon: Wrench, color: 'var(--text-muted)', label: t('tool.status.running') }
   const StatusIcon = status.icon
   const dangerous = tool.risk === 'dangerous'
-  const label = toolLabel(tool)
-  // Auto-expand when there's an error or command failure so the user can see what went wrong.
-  useEffect(() => { if (tool.error || cmdFailure.failed) setOpen(true) }, [tool.error, cmdFailure.failed])
+  const label = formatToolLabel(tool, t)
+  // Auto-expand when there's an error in standalone mode; compact mode keeps a
+  // single-line failure badge inline and expands full details on click.
+  useEffect(() => {
+    if (!compact && (tool.error || cmdFailure.failed)) setOpen(true)
+  }, [compact, tool.error, cmdFailure.failed])
   const rollback = async (e?: React.MouseEvent) => {
     e?.stopPropagation()
     if (!tool.checkpointId || rollbackState === 'running' || rollbackState === 'done') return
@@ -217,6 +131,45 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const diffAdded = tool.added ?? fallbackDiffCounts.added
   const diffRemoved = tool.removed ?? fallbackDiffCounts.removed
   const isElevated = open || isFailed || dangerous || Boolean(tool.diff) || Boolean(tool.afterSnapshot)
+
+  if (compact && !open && !tool.diff && !tool.afterSnapshot) {
+    const compactText = isCommand ? (cmdString ? `${label} · ${cmdString}` : label) : label
+    return (
+      <div className="py-0.5">
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={() => setOpen(true)}
+          title={cmdString || tool.name}
+          className="inline-flex items-center gap-1.5 max-w-full py-0.5 px-1 -mx-1 rounded-[6px] text-[12px] hover:bg-[var(--bg-secondary)]/70 active:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer select-none text-left"
+        >
+          <span
+            className="truncate"
+            style={{ color: isFailed ? 'var(--error)' : 'var(--text-secondary)' }}
+          >
+            {compactText}
+          </span>
+          {isCommand && cmdFailure.failed && (
+            <span className="shrink-0 font-mono text-[11px]" style={{ color: 'var(--error)' }}>
+              · {cmdFailure.exitCode != null ? t('timeline.exited_with_code', cmdFailure.exitCode) : (cmdFailure.reason || t('tool.status.failed'))}
+            </span>
+          )}
+          {!isCommand && isFailed && (
+            <span className="shrink-0 text-[11px]" style={{ color: 'var(--error)' }}>
+              · {failureKey ? t(failureKey) : t('tool.status.failed')}
+            </span>
+          )}
+          {(diffAdded > 0 || diffRemoved > 0) && (
+            <span className="inline-flex items-center gap-1 font-mono text-[10px] shrink-0">
+              {diffAdded > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{diffAdded}</span>}
+              {diffRemoved > 0 && <span className="text-rose-600 dark:text-rose-400">−{diffRemoved}</span>}
+            </span>
+          )}
+          <ChevronRight size={12} className="shrink-0 opacity-60" style={{ color: 'var(--text-muted)' }} />
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div

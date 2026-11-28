@@ -5,9 +5,6 @@ import { cn } from '@/lib/utils'
 import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X, Maximize2 } from 'lucide-react'
 import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
-import ToolCallBlock from './ToolCallBlock'
-import AgentPlanTrace from './AgentPlanTrace'
-import TaskCard from './TaskCard'
 import ThinkingBlock from './ThinkingBlock'
 import AgentTimeline from './AgentTimeline'
 import FileSummaryDeck from './FileSummaryDeck'
@@ -135,8 +132,6 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const visibleMemoryHits = useMemo(() => memoryHits.filter((h: any) => !removedHitIds.has(h.id)), [memoryHits, removedHitIds])
 
   const isUser = message.role === 'user'
-  // An assistant turn with a live todo checklist renders as a task card.
-  const hasTask = !!todos && todos.length > 0
   const isError = message.status === 'error'
   const isFallback = message.status === 'fallback'
   const isAborted = message.status === 'aborted'
@@ -507,14 +502,20 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               isError ? 'p-3.5 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400' : ''
             }`}
           >
-            {(thinkingBlocks || (toolCalls && toolCalls.length > 0) || (planSteps && planSteps.length > 0)) && (
+            {(thinkingBlocks || (toolCalls && toolCalls.length > 0) || (planSteps && planSteps.length > 0) || (todos && todos.length > 0)) && (
               <AgentTimeline
+                messageId={message.id}
+                sessionId={message.session_id}
                 thinkingText={thinkingBlocks || undefined}
                 thinkingStreaming={isThinkingStreaming}
                 thinkingDuration={thinkingDuration}
                 thinkingStartedAt={thinkingStartedAt}
                 toolCalls={toolCalls && toolCalls.length > 0 ? toolCalls : undefined}
                 planSteps={planSteps || undefined}
+                todos={todos && todos.length > 0 ? todos : undefined}
+                statusLines={statusLines && statusLines.length > 0 ? statusLines : undefined}
+                latencyMs={message.latency_ms}
+                streaming={isStreaming}
               />
             )}
             {subagents && subagents.length > 0 && (

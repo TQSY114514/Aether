@@ -1521,5 +1521,12 @@
   "ref.type.tool": "Tool",
   "ref.type.command": "Command",
   "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-  "chat.split_run.label": "Split Run"
+  "chat.split_run.label": "Split Run",
+  "timeline.working": "Working",
+  "timeline.worked_for": "Worked for {0}",
+  "timeline.activity": "Activity",
+  "timeline.steps_progress": "{0}/{1} steps",
+  "timeline.exited_with_code": "Exited with code {0}",
+  "timeline.toggle_activity": "Toggle execution activity",
+  "timeline.toggle_steps": "Toggle steps checklist"
 }

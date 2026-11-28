@@ -9,9 +9,6 @@ import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAle
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import ArenaResultsDeck from '@/components/arena/ArenaResultsDeck'
-import ThinkingBlock from './ThinkingBlock'
-import ToolCallBlock from './ToolCallBlock'
-import TaskCard from './TaskCard'
 import AgentRunTimeline from './AgentRunTimeline'
 import AgentTimeline from './AgentTimeline'
 
@@ -39,15 +36,23 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const lastDurRef = useRef<number | null>(null)
   const lastStartRef = useRef<number | null>(null)
   const lastToolCallsRef = useRef<any[]>(EMPTY_ARRAY)
+  const lastTodosRef = useRef<any[]>(EMPTY_ARRAY)
+  const lastPlanStepsRef = useRef<any[]>(EMPTY_ARRAY)
+  const lastStatusLinesRef = useRef<string[]>(EMPTY_ARRAY)
   const lastThinkingTextRef = useRef<string>('')
   const lastThinkingStreamingRef = useRef<boolean>(false)
 
   // Live streaming states: React state so blocks re-render on each new chunk/step.
+  const [activeMid, setActiveMid] = useState<number | null>(null)
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(() => Date.now())
   const [thinkingText, setThinkingText] = useState('')
   const [thinkingStreaming, setThinkingStreaming] = useState(false)
   const [thinkingDuration, setThinkingDuration] = useState<number | null>(null)
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null)
   const [toolCalls, setToolCalls] = useState<any[]>(EMPTY_ARRAY)
+  const [todos, setTodos] = useState<any[]>(EMPTY_ARRAY)
+  const [planSteps, setPlanSteps] = useState<any[]>(EMPTY_ARRAY)
+  const [statusLines, setStatusLines] = useState<string[]>(EMPTY_ARRAY)
 
   const renderIncrementalContent = useCallback((rawContent: string) => {
     const committedEl = committedRef.current
@@ -82,12 +87,20 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     lastDurRef.current = null
     lastStartRef.current = null
     lastToolCallsRef.current = EMPTY_ARRAY
+    lastTodosRef.current = EMPTY_ARRAY
+    lastPlanStepsRef.current = EMPTY_ARRAY
+    lastStatusLinesRef.current = EMPTY_ARRAY
     committedCountRef.current = 0
+    setActiveMid(null)
+    setTurnStartedAt(Date.now())
     setThinkingText('')
     setThinkingStreaming(false)
     setThinkingDuration(null)
     setThinkingStartedAt(null)
     setToolCalls(EMPTY_ARRAY)
+    setTodos(EMPTY_ARRAY)
+    setPlanSteps(EMPTY_ARRAY)
+    setStatusLines(EMPTY_ARRAY)
     lastLenRef.current = 0
     lastMdRenderTimeRef.current = 0
     if (committedRef.current) committedRef.current.innerHTML = ''
@@ -128,6 +141,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       const initMid = initialBuf.messageId != null ? initialBuf.messageId : null
       if (initMid != null) {
         activeMidRef.current = initMid
+        setActiveMid(initMid)
         const t = initialState.thinkingBlocksByMessage[initMid]
         if (t !== undefined) {
           lastThinkingTextRef.current = t
@@ -142,6 +156,12 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         if (st !== lastStartRef.current) { lastStartRef.current = st; setThinkingStartedAt(st) }
         const tc = initialState.toolCallsByMessage[initMid] || EMPTY_ARRAY
         if (tc !== lastToolCallsRef.current) { lastToolCallsRef.current = tc; setToolCalls(tc) }
+        const td = initialState.todosByMessage[initMid] || EMPTY_ARRAY
+        if (td !== lastTodosRef.current) { lastTodosRef.current = td; setTodos(td) }
+        const ps = initialState.planStepsByMessage[initMid] || EMPTY_ARRAY
+        if (ps !== lastPlanStepsRef.current) { lastPlanStepsRef.current = ps; setPlanSteps(ps) }
+        const sl = initialState.statusLinesByMessage[initMid] || EMPTY_ARRAY
+        if (sl !== lastStatusLinesRef.current) { lastStatusLinesRef.current = sl; setStatusLines(sl) }
       }
       if (initialBuf.content) {
         lastLenRef.current = initialBuf.content.length
@@ -160,7 +180,10 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         resetLocalState()
       }
       if (mid != null) {
-        activeMidRef.current = mid
+        if (activeMidRef.current !== mid) {
+          activeMidRef.current = mid
+          setActiveMid(mid)
+        }
 
         // Thinking stream with RAF throttling + equality checks to prevent React churn
         const thinking = s.thinkingBlocksByMessage[mid]
@@ -201,6 +224,21 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         if (tc !== lastToolCallsRef.current) {
           lastToolCallsRef.current = tc
           setToolCalls(tc)
+        }
+        const td = s.todosByMessage[mid] || EMPTY_ARRAY
+        if (td !== lastTodosRef.current) {
+          lastTodosRef.current = td
+          setTodos(td)
+        }
+        const ps = s.planStepsByMessage[mid] || EMPTY_ARRAY
+        if (ps !== lastPlanStepsRef.current) {
+          lastPlanStepsRef.current = ps
+          setPlanSteps(ps)
+        }
+        const sl = s.statusLinesByMessage[mid] || EMPTY_ARRAY
+        if (sl !== lastStatusLinesRef.current) {
+          lastStatusLinesRef.current = sl
+          setStatusLines(sl)
         }
       }
 
@@ -243,11 +281,17 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         {/* Assistant Content Stream — Quiet Precision typography without clunky [AI] box */}
         <div className="w-full text-[13.5px] leading-[1.7] tracking-[-0.005em] break-words relative">
           <AgentTimeline
+            messageId={activeMid}
+            sessionId={sessionId}
             thinkingText={thinkingText || undefined}
             thinkingStreaming={thinkingStreaming}
             thinkingDuration={thinkingDuration}
             thinkingStartedAt={thinkingStartedAt}
             toolCalls={toolCalls.length > 0 ? toolCalls : undefined}
+            planSteps={planSteps.length > 0 ? planSteps : undefined}
+            todos={todos.length > 0 ? todos : undefined}
+            statusLines={statusLines.length > 0 ? statusLines : undefined}
+            turnStartedAt={turnStartedAt}
             streaming
           />
           <div ref={ref} className="mc">

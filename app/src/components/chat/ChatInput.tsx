@@ -3,7 +3,6 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import InputReference from '@/components/chat/InputReference'
 import { Send, Square, Paperclip, Zap, Leaf, MessageSquareDashed, ListPlus, Folder, FolderOpen, ExternalLink } from 'lucide-react'
-import AgentTaskDeck from './AgentTaskDeck'
 import QueueDock from './QueueDock'
 import QuestionDialog from './QuestionDialog'
 import { t } from '@/utils/i18n'
@@ -622,7 +621,6 @@ export default function ChatInput() {
           fileError={fileError}
         />
 
-        <AgentTaskDeck sessionId={currentSessionId} />
         <QuestionDialog />
 
         {/* Unified Floating Composer Card */}

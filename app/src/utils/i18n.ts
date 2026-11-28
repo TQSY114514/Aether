@@ -1614,7 +1614,14 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "Tool",
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "timeline.working": "Working",
+    "timeline.worked_for": "Worked for {0}",
+    "timeline.activity": "Activity",
+    "timeline.steps_progress": "{0}/{1} steps",
+    "timeline.exited_with_code": "Exited with code {0}",
+    "timeline.toggle_activity": "Toggle execution activity",
+    "timeline.toggle_steps": "Toggle steps checklist"
   },
   "zh-CN": {
     "common.browse": "浏览...",
@@ -3139,7 +3146,14 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "工具",
     "ref.type.command": "指令",
     "ref.hint": "↑↓ 切换 · Enter/Tab 补全",
-    "chat.split_run.label": "双模型对比 (Split Run)"
+    "chat.split_run.label": "双模型对比 (Split Run)",
+    "timeline.working": "处理中",
+    "timeline.worked_for": "已运行 {0}",
+    "timeline.activity": "执行过程",
+    "timeline.steps_progress": "{0}/{1} 步骤",
+    "timeline.exited_with_code": "退出码 {0}",
+    "timeline.toggle_activity": "展开/收起执行过程",
+    "timeline.toggle_steps": "展开/收起步骤清单"
   },
   "es": {
     "app.name": "Aether",
@@ -13303,7 +13317,14 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.tool": "工具",
     "ref.type.command": "指令",
     "ref.hint": "↑↓ 切換 · Enter/Tab 補全",
-    "chat.split_run.label": "Split Run"
+    "chat.split_run.label": "Split Run",
+    "timeline.working": "處理中",
+    "timeline.worked_for": "已運行 {0}",
+    "timeline.activity": "執行過程",
+    "timeline.steps_progress": "{0}/{1} 步驟",
+    "timeline.exited_with_code": "退出碼 {0}",
+    "timeline.toggle_activity": "展開/收起執行過程",
+    "timeline.toggle_steps": "展開/收起步驟清單"
   },
   "ar": {
     "app.name": "Aether",
