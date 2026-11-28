@@ -71,12 +71,23 @@ export default function PersonaSelector({
     return ids
   }, [workspaceSoul, personas])
 
+  const listboxRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!open) return
     const curVal = isSoulActive ? -1 : currentPersonaId && currentPersonaId > 0 ? currentPersonaId : 0
     const idx = optionIds.findIndex((o) => o.id === curVal)
     setActiveIndex(idx >= 0 ? idx : 0)
   }, [open, optionIds, isSoulActive, currentPersonaId])
+
+  useEffect(() => {
+    if (!open) return
+    const activeOpt = optionIds[activeIndex]
+    if (activeOpt?.domId) {
+      const el = document.getElementById(activeOpt.domId)
+      el?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [open, activeIndex, optionIds])
 
   const handleListKeyDown = (e: React.KeyboardEvent) => {
     if (optionIds.length === 0) return
@@ -93,6 +104,10 @@ export default function PersonaSelector({
       e.preventDefault()
       setActiveIndex(optionIds.length - 1)
     } else if (e.key === 'Enter' || e.key === ' ') {
+      const activeEl = document.activeElement as HTMLElement | null
+      if (activeEl && activeEl !== e.currentTarget && !activeEl.getAttribute('role')?.includes('option')) {
+        return
+      }
       const target = optionIds[activeIndex]
       if (target && !disabled) {
         e.preventDefault()
@@ -140,6 +155,7 @@ export default function PersonaSelector({
 
       {open && (
         <div
+          ref={listboxRef}
           role="listbox"
           tabIndex={-1}
           aria-label={t('sidebar.nav.personas')}

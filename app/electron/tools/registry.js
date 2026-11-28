@@ -1842,7 +1842,7 @@ TOOLS.push(
         try {
           ctx.db.setSessionConfig?.(sid, { ...(prevCfg || {}), workspace: canonical })
         } catch (err) {
-          try { if (typeof ctx.db.setSessionCwd === 'function') ctx.db.setSessionCwd(sid, prevCwd ?? null) } catch {}
+          try { if (typeof ctx.db.setSessionCwd === 'function' && prevCwd != null) ctx.db.setSessionCwd(sid, prevCwd) } catch {}
           return JSON.stringify({ ok: false, error: `Failed to persist session config: ${err?.message || String(err)}` })
         }
       }

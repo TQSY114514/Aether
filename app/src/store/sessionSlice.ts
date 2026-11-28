@@ -46,7 +46,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         cfg.modelId = defModel.id
       }
     }
-    if (s.defaultPersonaId !== null && s.defaultPersonaId !== undefined) {
+    if (s.defaultPersonaId !== null && s.defaultPersonaId !== undefined && s.defaultPersonaId > 0) {
       cfg.personaId = s.defaultPersonaId
     }
     if (!cfg.providerId && enabledProviders.length > 0) {

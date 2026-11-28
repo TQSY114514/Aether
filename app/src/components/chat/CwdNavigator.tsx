@@ -228,7 +228,7 @@ export default function CwdNavigator({
         <div
           role="dialog"
           aria-label={t('cwd.navigator_title')}
-          className="popover-scale-up absolute top-full left-0 mt-1.5 w-[390px] max-w-[calc(100vw-32px)] rounded-[10px] border shadow-xl z-50 p-3 flex flex-col gap-2.5"
+          className={`popover-scale-up absolute top-full ${alignRight ? 'right-0' : 'left-0'} mt-1.5 w-[390px] max-w-[calc(100vw-32px)] rounded-[10px] border shadow-xl z-50 p-3 flex flex-col gap-2.5`}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
         >
           {/* Header + quiet rules badge + quick actions */}
@@ -367,7 +367,7 @@ export default function CwdNavigator({
               <div className="flex flex-col gap-0.5 max-h-[156px] overflow-y-auto">
                 {recentCwds.slice(0, 6).map((dir) => {
                   const { name, parent } = splitNameAndParent(dir)
-                  const isCurrent = !!activeCwd && dir.toLowerCase() === activeCwd.toLowerCase()
+                  const isCurrent = !!activeCwd && samePath(dir, activeCwd)
                   return (
                     <button
                       key={dir}

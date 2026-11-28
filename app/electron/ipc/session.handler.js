@@ -83,7 +83,7 @@ function registerSessionHandlers(ipcMain, db) {
         db.updateSession(id, { cwd: canonical })
       }
     } catch (err) {
-      try { db.setSessionConfig(id, prevCfg ?? {}) } catch {}
+      try { if (prevCfg != null) db.setSessionConfig(id, prevCfg) } catch {}
       throw err
     }
 

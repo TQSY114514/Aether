@@ -450,7 +450,11 @@ export default function ChatInput() {
     if (!match) return
     const start = before.length - match[0].length
     const inserted = prefix + replacement
-    const next = input.slice(0, start) + inserted + input.slice(refCursor)
+    let remaining = input.slice(refCursor)
+    if (replacement.endsWith('"') && remaining.startsWith('"')) {
+      remaining = remaining.slice(1)
+    }
+    const next = input.slice(0, start) + inserted + remaining
     setInput(next)
     const pos = start + inserted.length
     setRefCursor(pos)

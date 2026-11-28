@@ -88,13 +88,17 @@ export default function PersonaSettings() {
       danger: true,
     })
     if (!ok) return
+    const wasDefault = defaultPersonaId === p.id
     try {
-      if (defaultPersonaId === p.id) {
+      if (wasDefault) {
         await setDefaultPersona(null)
       }
       await deletePersona(p.id)
       if (editingIdRef.current === p.id) cancelEdit()
     } catch (err: any) {
+      if (wasDefault) {
+        try { await setDefaultPersona(p.id) } catch {}
+      }
       toast(err?.message || t('persona.save_failed'), { type: 'error' })
     }
   }

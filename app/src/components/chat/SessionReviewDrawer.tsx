@@ -455,7 +455,7 @@ export default function SessionReviewDrawer({
                     type="button"
                     onClick={() => toggleFile(file.path)}
                     aria-expanded={expanded}
-                    className="flex-1 min-w-0 flex items-center gap-2 text-left rounded-[4px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+                    className="flex-1 min-w-0 flex items-center gap-2 text-left rounded-[4px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] hover:opacity-90 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     {expanded ? (
                       <ChevronDown size={13} className="shrink-0 text-[var(--text-muted)]" />
