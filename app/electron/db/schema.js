@@ -12,6 +12,9 @@ function createEmptyDatabase(dbPath) {
   if (dir) fs.mkdirSync(dir, { recursive: true });
   const target = new Database(dbPath);
   target.pragma("journal_mode = WAL");
+  target.pragma("synchronous = NORMAL");
+  target.pragma("temp_store = MEMORY");
+  target.pragma("cache_size = -16000");
   target.pragma("foreign_keys = OFF");
   target.pragma("busy_timeout = 5000");
 

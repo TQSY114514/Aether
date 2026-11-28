@@ -87,6 +87,65 @@ function normalizeLoadedMessages(messages: Message[]): Message[] {
   return messages
 }
 
+function sameMessageContent(a: Message, b: Message): boolean {
+  if (a === b) return true
+  if (
+    a.id !== b.id ||
+    a.session_id !== b.session_id ||
+    a.role !== b.role ||
+    a.content !== b.content ||
+    a.status !== b.status ||
+    a.error_message !== b.error_message ||
+    a.thinking_content !== b.thinking_content ||
+    a.thinking_duration_ms !== b.thinking_duration_ms ||
+    a.memory_hits !== b.memory_hits ||
+    a.file_summary !== b.file_summary ||
+    a.model_used !== b.model_used ||
+    a.latency_ms !== b.latency_ms ||
+    a.token_count !== b.token_count ||
+    a.arena_model !== b.arena_model
+  ) {
+    return false
+  }
+  const attA = (a as any).attachment
+  const attB = (b as any).attachment
+  if (attA === attB) return true
+  try {
+    return JSON.stringify(attA ?? null) === JSON.stringify(attB ?? null)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Reconcile incoming DB messages against current store messages, preserving
+ * exact object references for unchanged items so React.memo(MessageBubble)
+ * skips re-rendering historical bubbles on focus sync or stream completion.
+ */
+export function reconcileMessages(
+  prev: Message[],
+  incomingRaw: Message[]
+): { messages: Message[]; changed: boolean } {
+  const incoming = normalizeLoadedMessages(incomingRaw)
+  if (prev.length === 0 && incoming.length === 0) {
+    return { messages: prev, changed: false }
+  }
+  const prevById = new Map<number, Message>()
+  for (const m of prev) prevById.set(m.id, m)
+
+  let changed = prev.length !== incoming.length
+  const merged = incoming.map((m, i) => {
+    const existing = prevById.get(m.id)
+    if (existing && sameMessageContent(existing, m)) {
+      if (prev[i] !== existing) changed = true
+      return existing
+    }
+    changed = true
+    return m
+  })
+  return { messages: changed ? merged : prev, changed }
+}
+
 export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> = (set, get) => ({
   chatMode: "normal",
   sending: false,
@@ -242,7 +301,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       streamingBySession: { ...s.streamingBySession, [targetSessionId]: { content: "", messageId: null } },
       ...(s.currentSessionId === targetSessionId ? { messages: [...s.messages, tempUserMsg] } : {}),
     }))
-    get().loadSessions()
+    setTimeout(() => { get().loadSessions() }, 150)
 
     ensureAllChatListeners()
     get().resetTurnUsage(targetSessionId)
@@ -535,7 +594,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
   },
 
-  loadMessages: async (sessionId) => {
+  loadMessages: async (sessionId, opts) => {
     const _streamingBuf = get().streamingBySession[sessionId]
     const now = Date.now()
     const hasRecentOptimistic = get().messages.some(m =>
@@ -545,23 +604,36 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     if (hasRecentOptimistic) return
     try {
       const rawMessages = await window.electronAPI.message.list(sessionId)
-      const allMessages = normalizeLoadedMessages(rawMessages)
-      const nextSummaries = { ...get().fileSummariesByMessage }
-      for (const m of allMessages) {
+      const filteredRaw = get().chatMode === "arena"
+        ? rawMessages.filter(m => !m.arena_model || m.arena_model === "")
+        : rawMessages
+      const { messages: reconciled, changed } = reconcileMessages(get().messages, filteredRaw)
+      if (opts?.silentIfUnchanged && !changed && get().currentSessionId === sessionId) {
+        return
+      }
+      const prevSummaries = get().fileSummariesByMessage
+      let summariesChanged = false
+      const nextSummaries = { ...prevSummaries }
+      for (const m of reconciled) {
         if ((m as any).file_summary) {
           try {
-            nextSummaries[m.id] = typeof (m as any).file_summary === 'string'
+            const parsed = typeof (m as any).file_summary === 'string'
               ? JSON.parse((m as any).file_summary)
               : (m as any).file_summary
+            if (prevSummaries[m.id] !== parsed && JSON.stringify(prevSummaries[m.id] ?? null) !== JSON.stringify(parsed)) {
+              nextSummaries[m.id] = parsed
+              summariesChanged = true
+            }
           } catch {}
         }
       }
-      if (get().chatMode === "arena") {
-        const filtered = allMessages.filter(m => !m.arena_model || m.arena_model === "")
-        set({ messages: filtered, fileSummariesByMessage: nextSummaries })
-      } else {
-        set({ messages: allMessages, fileSummariesByMessage: nextSummaries })
+      if (!changed && !summariesChanged && get().currentSessionId === sessionId) {
+        return
       }
+      set({
+        ...(changed ? { messages: reconciled } : {}),
+        ...(summariesChanged ? { fileSummariesByMessage: nextSummaries } : {}),
+      })
     } catch (err) {
       log.error("[Aether] loadMessages error:", err)
     }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
+import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import {
   Shield,
@@ -9,13 +10,15 @@ import {
 
 export default function AgentSettings() {
   const { toast } = useUI()
+  const currentSessionId = useStore((s) => s.currentSessionId)
+  const setSessionCwd = useStore((s) => s.setSessionCwd)
   const [workspace, setWorkspace] = useState('')
   const [maxIter, setMaxIter] = useState(25)
   const [toolTimeoutSec, setToolTimeoutSec] = useState(60)
   const [projectInst, setProjectInst] = useState<{ has: boolean; fileName: string | null }>({ has: false, fileName: null })
 
   useEffect(() => {
-    try { window.electronAPI?.agent?.getWorkspace?.().then(setWorkspace).catch(() => {}) } catch {}
+    try { window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined).then(setWorkspace).catch(() => {}) } catch {}
     try {
       window.electronAPI?.settings?.get?.('agent_max_iterations').then((v) => {
         const n = Number(v)
@@ -28,8 +31,8 @@ export default function AgentSettings() {
         if (Number.isFinite(ms) && ms >= 5000) setToolTimeoutSec(Math.round(ms / 1000))
       }).catch(() => {})
     } catch {}
-    try { window.electronAPI?.agent?.hasProjectInstructions?.().then(setProjectInst).catch(() => {}) } catch {}
-  }, [])
+    try { window.electronAPI?.agent?.hasProjectInstructions?.(currentSessionId ?? undefined).then(setProjectInst).catch(() => {}) } catch {}
+  }, [currentSessionId])
 
   const saveMaxIter = async (v: number) => {
     const clamped = Math.max(1, Math.min(200, Math.floor(v)))
@@ -51,7 +54,7 @@ export default function AgentSettings() {
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.title')}</h2>
         </div>
         <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
-          Plan 模式仅允许只读探索；Act 模式在工作区内自动执行读写、编辑（写前自动快照并支持内联 Diff 回滚）及常规命令，仅越界路径、敏感凭证与破坏性 Shell 需弹窗确认。
+          {t('settings.agent.mode_summary')}
         </p>
 
         <div className="space-y-3">
@@ -73,18 +76,25 @@ export default function AgentSettings() {
                   try {
                     const picked = await window.electronAPI?.system?.pickDirectory?.()
                     if (picked) {
-                      setWorkspace(picked)
                       await window.electronAPI?.agent?.setWorkspace?.({ dir: picked })
-                      toast(t('settings.agent.workspace_saved', 'Workspace updated'), { type: 'success' })
+                      if (currentSessionId) {
+                        await setSessionCwd(picked)
+                      }
+                      setWorkspace(picked)
+                      try {
+                        const inst = await window.electronAPI?.agent?.hasProjectInstructions?.(currentSessionId ?? undefined)
+                        if (inst) setProjectInst(inst)
+                      } catch {}
+                      toast(t('settings.agent.workspace_saved'), { type: 'success' })
                     }
                   } catch (e) {
-                    toast(String(e), { type: 'error' })
+                    toast(e instanceof Error ? e.message : String(e), { type: 'error' })
                   }
                 }}
                 className="px-2.5 py-1 text-xs rounded-md border font-medium transition-colors hover:bg-[var(--border)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] shrink-0 cursor-pointer"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
-                {t('common.browse', '浏览...')}
+                {t('common.browse')}
               </button>
             </div>
             <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
@@ -113,7 +123,7 @@ export default function AgentSettings() {
           <div className="flex items-center gap-2">
             <Cpu size={15} style={{ color: 'var(--accent)' }} />
             <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-              执行循环与工具预算 (Execution Loop)
+              {t('settings.agent.loop_budget_title')}
             </h2>
           </div>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
@@ -129,10 +139,10 @@ export default function AgentSettings() {
             </label>
             <div className="flex items-center gap-1.5">
               {[
-                { label: '15 轻量', val: 15 },
-                { label: '25 标准', val: 25 },
-                { label: '50 深度', val: 50 },
-                { label: '100 自治', val: 100 },
+                { label: t('settings.agent.preset_light'), val: 15 },
+                { label: t('settings.agent.preset_standard'), val: 25 },
+                { label: t('settings.agent.preset_deep'), val: 50 },
+                { label: t('settings.agent.preset_auto'), val: 100 },
               ].map((p) => (
                 <button
                   key={p.val}
@@ -149,7 +159,7 @@ export default function AgentSettings() {
                 </button>
               ))}
               <span className="text-xs font-mono font-semibold ml-1" style={{ color: 'var(--accent)' }}>
-                {maxIter} 轮
+                {t('settings.agent.rounds_count', maxIter)}
               </span>
             </div>
           </div>
@@ -169,8 +179,8 @@ export default function AgentSettings() {
         {/* Per-tool execution timeout */}
         <div className="p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div>
-            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>单次工具执行超时 (Tool Timeout)</p>
-            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>防止长阻塞命令或外部进程挂死整个 Agent 循环</p>
+            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.tool_timeout_title')}</p>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.tool_timeout_desc')}</p>
           </div>
           <div className="flex gap-1.5 shrink-0">
             {[30, 60, 120, 300].map((sec) => (

@@ -188,9 +188,9 @@ interface Window {
       onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous'; reason?: string; impact?: { summary?: string; severity?: string; affectedFiles?: string[]; command?: string; riskTags?: string[]; rollback?: string; alternatives?: string } | null }) => void) => () => void
       onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean; remember?: boolean | string }) => Promise<boolean>
-      listPermissionRules: (sessionId?: number | string) => Promise<{ session: { key: string; decision: string }[]; persisted: { tool: string; ruleKey: string; decision: string; key: string }[] }>
-      savePermissionRule: (name: string, ruleKey: string, decision?: string) => Promise<{ ok: boolean }>
-      removePermissionRule: (name: string, ruleKey: string) => Promise<{ ok: boolean }>
+      listPermissionRules: (sessionId?: number | string) => Promise<{ session: { sessionId?: number | string; key: string; tool?: string; ruleKey?: string; decision: string }[]; persisted: { tool: string; ruleKey: string; decision: string; sessionIds?: number[] | null; key: string }[] }>
+      savePermissionRule: (name: string, ruleKey: string, decision?: string, sessionIds?: number[] | null) => Promise<{ ok: boolean; error?: string }>
+      removePermissionRule: (name: string, ruleKey: string, opts?: { sessionId?: number | string; scope?: 'session' | 'persisted'; key?: string }) => Promise<{ ok: boolean }>
       applyPermissionPreset: (preset: 'safe_git' | 'test_runners' | 'read_tools') => Promise<{ ok: boolean; added: number }>
       onToolStream: (callback: (payload: { messageId: number; sessionId: number; text: string; done: boolean }) => void) => () => void
       onHabitProposed: (callback: (payload: { key: string; imperative: string; reason: string }) => void) => () => void
@@ -246,7 +246,7 @@ interface Window {
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[]; cancelled?: boolean }>
-      vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
+      vote: (data: { prompt: string; winnerModelId: number | null; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
       metrics: () => Promise<ArenaModelMetrics[]>
       stop: (sessionId?: number) => Promise<void>

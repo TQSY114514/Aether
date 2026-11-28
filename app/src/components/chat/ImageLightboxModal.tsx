@@ -377,58 +377,61 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
       onMouseMove={handleStageMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* Top Header Bar: File Info + Natural Resolution + Current Scale */}
+      {/* Top HUD Bar: File Info + Actions (clears Electron WCO window controls when not OS fullscreen) */}
       <div
-        className={`absolute top-4 left-6 z-20 flex items-center gap-2 px-3 py-1.5 rounded-[6px] text-xs font-mono shadow-lg border border-white/10 backdrop-blur-md transition-opacity duration-300 ${
-          isHudIdle ? 'opacity-25 hover:opacity-100' : 'opacity-100'
-        }`}
-        style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)', color: '#d4d4d8' }}
-        onClick={(e) => e.stopPropagation()}
+        className={`pointer-events-none absolute top-0 inset-x-0 z-20 h-12 flex items-center justify-between gap-4 pl-5 transition-opacity duration-300 ${
+          isFullscreen ? 'pr-5' : 'pr-[152px]'
+        } ${isHudIdle ? 'opacity-25 hover:opacity-100' : 'opacity-100'}`}
       >
-        <span className="truncate max-w-sm font-medium">{currentImage.name || `image-${currentIndex + 1}`}</span>
-        {naturalSize && (
-          <span className="opacity-60 text-[11px] tabular-nums font-normal">
-            ({naturalSize.w} × {naturalSize.h} px)
-          </span>
-        )}
-        <div className="w-[1px] h-3 bg-white/15 mx-1" />
-        <span className="opacity-80 text-[11px] font-mono tabular-nums">
-          {isFit ? t('chat.lightbox.fit') : `${Math.round(scale * 100)}%`}
-        </span>
-        {rotation !== 0 && (
-          <span className="opacity-60 text-[11px] font-mono tabular-nums">
-            {rotation}°
-          </span>
-        )}
-      </div>
-
-      {/* Top Right Actions: Fullscreen + Close Button */}
-      <div
-        className={`absolute top-4 right-6 z-20 flex items-center gap-2 transition-opacity duration-300 ${
-          isHudIdle ? 'opacity-25 hover:opacity-100' : 'opacity-100'
-        }`}
-      >
-        {/* Fullscreen Toggle */}
-        <button
-          onClick={handleToggleFullscreen}
-          className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
-          style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
-          title={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
-          aria-label={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
+        <div
+          className="pointer-events-auto app-no-drag min-w-0 flex items-center gap-2 px-3 py-1.5 rounded-[6px] text-xs font-mono shadow-lg border border-white/10 backdrop-blur-md"
+          style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)', color: '#d4d4d8' }}
+          onClick={(e) => e.stopPropagation()}
         >
-          {isFullscreen ? <Shrink size={16} /> : <Expand size={16} />}
-        </button>
+          <span className="truncate max-w-sm font-medium">{currentImage.name || `image-${currentIndex + 1}`}</span>
+          {naturalSize && (
+            <span className="opacity-60 text-[11px] tabular-nums font-normal">
+              ({naturalSize.w} × {naturalSize.h} px)
+            </span>
+          )}
+          <div className="w-[1px] h-3 bg-white/15 mx-1" />
+          <span className="opacity-80 text-[11px] font-mono tabular-nums">
+            {isFit ? t('chat.lightbox.fit') : `${Math.round(scale * 100)}%`}
+          </span>
+          {rotation !== 0 && (
+            <span className="opacity-60 text-[11px] font-mono tabular-nums">
+              {rotation}°
+            </span>
+          )}
+        </div>
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
-          style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
-          title={t('chat.lightbox.close')}
-          aria-label={t('chat.lightbox.close')}
+        {/* Top Right Actions: Fullscreen + Close Button */}
+        <div
+          className="pointer-events-auto app-no-drag shrink-0 flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
         >
-          <X size={16} />
-        </button>
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={handleToggleFullscreen}
+            className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
+            style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
+            title={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
+            aria-label={isFullscreen ? t('chat.lightbox.exit_fullscreen') : t('chat.lightbox.fullscreen')}
+          >
+            {isFullscreen ? <Shrink size={16} /> : <Expand size={16} />}
+          </button>
+
+          {/* Close Button */}
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 icon-btn-silky transition-colors border border-white/10 shadow-lg backdrop-blur-md"
+            style={{ backgroundColor: 'rgba(24, 24, 27, 0.85)' }}
+            title={t('chat.lightbox.close')}
+            aria-label={t('chat.lightbox.close')}
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Gallery Left Arrow (Multi-image) */}

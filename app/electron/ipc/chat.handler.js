@@ -277,13 +277,18 @@ The user is asking a quick side question about the ongoing conversation.
   ipcMain.handle('chat:permissions:list', (_e, { sessionId } = {}) => {
     return allowRulesStore.listAll(sessionId)
   })
-  ipcMain.handle('chat:permissions:save', (_e, { name, ruleKey, decision }) => {
-    const ok = allowRulesStore.persist(db, name, ruleKey, decision || 'allow')
+  ipcMain.handle('chat:permissions:save', (_e, { name, ruleKey, decision, sessionIds } = {}) => {
+    if (!name || !ruleKey) return { ok: false, error: 'Missing rule name or key' }
+    const ok = allowRulesStore.persist(db, name, ruleKey, decision || 'allow', sessionIds ?? null)
     return ok ? { ok: true } : { ok: false, error: 'Failed to persist permission rule' }
   })
-  ipcMain.handle('chat:permissions:remove', (_e, { name, ruleKey }) => {
-    allowRulesStore.removePersisted(db, name, ruleKey)
-    return { ok: true }
+  ipcMain.handle('chat:permissions:remove', (_e, { name, ruleKey, sessionId, scope, key } = {}) => {
+    if (scope === 'session' && sessionId != null) {
+      const ok = allowRulesStore.removeSessionRule(sessionId, key ?? name, key ? undefined : ruleKey)
+      return { ok }
+    }
+    const ok = allowRulesStore.removePersisted(db, name, ruleKey)
+    return { ok }
   })
   ipcMain.handle('chat:permissions:applyPreset', (_e, { preset }) => {
     return allowRulesStore.applyPreset(db, preset)

@@ -25,9 +25,9 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
   const [expanded, setExpanded] = useState(false)
   const todosByMessage = useStore((s) => s.todosByMessage)
   const messages = useStore((s) => s.messages)
-  const streamingBySession = useStore((s) => s.streamingBySession)
+  const isStreaming = useStore((s) => Boolean(sessionId && s.streamingBySession[sessionId]))
+  const streamMessageId = useStore((s) => (sessionId ? (s.streamingBySession[sessionId]?.messageId ?? null) : null))
   const sendMessage = useStore((s) => s.sendMessage)
-  const isStreaming = !!(sessionId && streamingBySession[sessionId])
 
   // Find the target message ID holding the current todos
   const { targetMsgId, rawTodos } = useMemo(() => {
@@ -40,12 +40,11 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
         }
       }
     }
-    const streamMsgId = sessionId ? streamingBySession[sessionId]?.messageId : null
-    if (streamMsgId && todosByMessage[streamMsgId]?.length) {
-      return { targetMsgId: streamMsgId, rawTodos: todosByMessage[streamMsgId] }
+    if (streamMessageId && todosByMessage[streamMessageId]?.length) {
+      return { targetMsgId: streamMessageId, rawTodos: todosByMessage[streamMessageId] }
     }
     return { targetMsgId: null, rawTodos: [] }
-  }, [messages, todosByMessage, sessionId, streamingBySession])
+  }, [messages, todosByMessage, sessionId, streamMessageId])
 
   const latestTodos = rawTodos
 

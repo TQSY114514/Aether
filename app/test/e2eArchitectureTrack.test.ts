@@ -903,19 +903,23 @@ describe('Aether 3.0 Production Architecture E2E Test Suite', () => {
       })
     })
 
-    // Feature 4: ChatInput CWD Indicator Capsule
-    describe('F04: ChatInput CWD Indicator Capsule', () => {
-      it('T1-F04-01: ChatInput.tsx source contains CWD indicator capsule with FolderOpen icon', () => {
-        const chatInputPath = path.resolve(__dirname, '../src/components/chat/ChatInput.tsx')
-        const content = fs.readFileSync(chatInputPath, 'utf-8')
-        expect(content).toContain('FolderOpen')
-        expect(content).toContain('currentSession?.cwd')
-        expect(content).toContain('pickDirectory')
+    // Feature 4: Header CWD Navigator Capsule (relocated from ChatInput)
+    describe('F04: Header CWD Indicator Capsule', () => {
+      it('T1-F04-01: CwdNavigator.tsx and ChatPage.tsx contain CWD indicator capsule with FolderOpen icon', () => {
+        const cwdNavPath = path.resolve(__dirname, '../src/components/chat/CwdNavigator.tsx')
+        const chatPagePath = path.resolve(__dirname, '../src/pages/ChatPage.tsx')
+        const navContent = fs.readFileSync(cwdNavPath, 'utf-8')
+        const pageContent = fs.readFileSync(chatPagePath, 'utf-8')
+        expect(navContent).toContain('FolderOpen')
+        expect(navContent).toContain('activeCwd')
+        expect(navContent).toContain('pickDirectory')
+        expect(pageContent).toContain('CwdNavigator')
+        expect(pageContent).toContain('currentSession?.cwd')
       })
 
-      it('T1-F04-02: ChatInput invokes window.electronAPI.system.pickDirectory on capsule click', () => {
-        const chatInputPath = path.resolve(__dirname, '../src/components/chat/ChatInput.tsx')
-        const content = fs.readFileSync(chatInputPath, 'utf-8')
+      it('T1-F04-02: CwdNavigator invokes window.electronAPI.system.pickDirectory on browse click', () => {
+        const cwdNavPath = path.resolve(__dirname, '../src/components/chat/CwdNavigator.tsx')
+        const content = fs.readFileSync(cwdNavPath, 'utf-8')
         expect(content).toMatch(/window\.electronAPI\??\.system\??\.pickDirectory/)
       })
 
@@ -933,11 +937,12 @@ describe('Aether 3.0 Production Architecture E2E Test Suite', () => {
         expect(content).toContain('pickDirectory')
       })
 
-      it('T1-F04-05: ChatInput displays formatted path basename and title tooltip', () => {
-        const chatInputPath = path.resolve(__dirname, '../src/components/chat/ChatInput.tsx')
-        const content = fs.readFileSync(chatInputPath, 'utf-8')
+      it('T1-F04-05: CwdNavigator displays formatted path basename and full path tooltip', () => {
+        const cwdNavPath = path.resolve(__dirname, '../src/components/chat/CwdNavigator.tsx')
+        const content = fs.readFileSync(cwdNavPath, 'utf-8')
+        expect(content).toContain('displayFolder')
         expect(content).toContain('activeCwd')
-        expect(content).toContain('title={activeCwd')
+        expect(content).toContain('text={`${activeCwd')
       })
     })
 

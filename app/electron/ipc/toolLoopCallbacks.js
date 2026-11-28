@@ -16,6 +16,55 @@
 const RULE_DECISIONS = ['allow', 'deny', 'ask']
 const SETTINGS_PREFIX = 'permission_rule.'
 
+function normalizeSessionIds(sessionIds) {
+  if (!Array.isArray(sessionIds) || sessionIds.length === 0) return null
+  const out = []
+  const seen = new Set()
+  for (const raw of sessionIds) {
+    const num = Number(raw)
+    if (Number.isFinite(num) && num > 0) {
+      if (!seen.has(num)) {
+        seen.add(num)
+        out.push(num)
+      }
+    } else if (typeof raw === 'string' && raw.trim()) {
+      const s = raw.trim()
+      if (!seen.has(s)) {
+        seen.add(s)
+        out.push(s)
+      }
+    }
+  }
+  return out.length > 0 ? out : null
+}
+
+function parsePersistedValue(rawValue) {
+  if (RULE_DECISIONS.includes(rawValue)) {
+    return { decision: rawValue, sessionIds: null }
+  }
+  if (typeof rawValue === 'string' && rawValue.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(rawValue)
+      if (parsed && RULE_DECISIONS.includes(parsed.decision)) {
+        return {
+          decision: parsed.decision,
+          sessionIds: normalizeSessionIds(parsed.sessionIds),
+        }
+      }
+    } catch {}
+  }
+  return null
+}
+
+function serializePersistedValue(dec, sessionIds) {
+  const cleanDec = RULE_DECISIONS.includes(dec) ? dec : 'allow'
+  const cleanIds = normalizeSessionIds(sessionIds)
+  if (cleanIds && cleanIds.length > 0) {
+    return JSON.stringify({ decision: cleanDec, sessionIds: cleanIds })
+  }
+  return cleanDec
+}
+
 function loadPersistedRules(db) {
   const out = new Map()
   if (!db || typeof db.prepare !== 'function') return out
@@ -27,17 +76,32 @@ function loadPersistedRules(db) {
       if (idx <= 0) continue
       const tool = rest.slice(0, idx)
       const rKey = rest.slice(idx + 1)
-      if (rKey && RULE_DECISIONS.includes(r.value)) {
-        out.set(`${tool}:${rKey}`, r.value)
+      const parsed = parsePersistedValue(r.value)
+      if (rKey && parsed) {
+        out.set(`${tool}:${rKey}`, parsed)
       }
     }
   } catch {}
   return out
 }
 
+function entryAppliesToSession(entry, sessionId) {
+  if (!entry) return false
+  if (typeof entry === 'string') return true
+  if (!Array.isArray(entry.sessionIds) || entry.sessionIds.length === 0) return true
+  if (sessionId == null) return false
+  const targetNum = Number(sessionId)
+  return entry.sessionIds.some((id) => id === sessionId || (Number.isFinite(targetNum) && Number(id) === targetNum))
+}
+
+function readEntryDecision(entry, sessionId) {
+  if (!entryAppliesToSession(entry, sessionId)) return null
+  return typeof entry === 'string' ? entry : entry.decision
+}
+
 /**
  * Create a session-scoped & persisted allow-rules store.
- * Multi-layer lookup: Session rules (in-memory) > Persisted rules (settings table).
+ * Multi-layer lookup: Session rules (in-memory) > Persisted rules (settings table, global or session-scoped).
  * Granularity:
  *   run_command  → multi-token subcommand prefix (e.g. 'git status', 'npm test')
  *                  or first binary token, or wildcard '*'
@@ -47,7 +111,7 @@ function loadPersistedRules(db) {
 function createAllowRulesStore(initialDb = null) {
   let dbRef = initialDb
   const sessionRules = new Map()   // sessionId -> Map<string, string>
-  const persistedRules = new Map() // `${tool}:${ruleKey}` -> decision
+  const persistedRules = new Map() // `${tool}:${ruleKey}` -> { decision, sessionIds: number[] | null }
   if (dbRef) {
     for (const [k, d] of loadPersistedRules(dbRef)) persistedRules.set(k, d)
   }
@@ -88,7 +152,7 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
     return '*'
   }
 
-  function checkDecision(layer, name, args) {
+  function checkDecision(layer, name, args, sessionId) {
     if (!layer || layer.size === 0) return null
 
     let cmd = ''
@@ -105,7 +169,7 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
         if (subcmds.length === 0) return null
         let allAllowed = true
         for (const sub of subcmds) {
-          const subDec = checkDecision(layer, name, { command: sub })
+          const subDec = checkDecision(layer, name, { command: sub }, sessionId)
           if (subDec === 'deny') return 'deny'
           if (subDec !== 'allow') {
             allAllowed = false
@@ -119,15 +183,20 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
 
     const rk = ruleKey(name, args)
     const exactKey = `${name}:${rk}`
-    if (layer.has(exactKey)) return layer.get(exactKey)
+    const exactDec = readEntryDecision(layer.get(exactKey), sessionId)
+    if (exactDec != null) return exactDec
 
     if (name === 'run_command') {
       const firstTok = cmd.split(/\s+/)[0] || cmd
-      if (layer.has(`${name}:${firstTok}`)) return layer.get(`${name}:${firstTok}`)
-      if (layer.has(`${name}:${firstTok}:*`)) return layer.get(`${name}:${firstTok}:*`)
+      const firstTokDec = readEntryDecision(layer.get(`${name}:${firstTok}`), sessionId)
+      if (firstTokDec != null) return firstTokDec
+      const firstWildDec = readEntryDecision(layer.get(`${name}:${firstTok}:*`), sessionId)
+      if (firstWildDec != null) return firstWildDec
 
-      for (const [storedKey, dec] of layer.entries()) {
+      for (const [storedKey, entry] of layer.entries()) {
         if (!storedKey.startsWith(`${name}:`)) continue
+        const dec = readEntryDecision(entry, sessionId)
+        if (dec == null) continue
         const pattern = storedKey.slice(name.length + 1)
         if (pattern === '*') return dec
         if (pattern.endsWith(':*')) {
@@ -147,18 +216,20 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
       }
     }
 
-    if (layer.has(`${name}:*`)) return layer.get(`${name}:*`)
-    if (layer.has(`${name}:`)) return layer.get(`${name}:`)
+    const starDec = readEntryDecision(layer.get(`${name}:*`), sessionId)
+    if (starDec != null) return starDec
+    const emptyDec = readEntryDecision(layer.get(`${name}:`), sessionId)
+    if (emptyDec != null) return emptyDec
 
     return null
   }
 
   function decision(sessionId, name, args) {
     const sLayer = sessionRules.get(sessionId)
-    const sDec = checkDecision(sLayer, name, args)
+    const sDec = checkDecision(sLayer, name, args, sessionId)
     if (sDec != null) return sDec
 
-    const pDec = checkDecision(persistedRules, name, args)
+    const pDec = checkDecision(persistedRules, name, args, sessionId)
     if (pDec != null) return pDec
 
     return null
@@ -175,24 +246,34 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
       if (!sessionRules.has(sessionId)) sessionRules.set(sessionId, new Map())
       sessionRules.get(sessionId).set(`${name}:${ruleKey(name, args)}`, dec)
     },
+    removeSessionRule(sessionId, nameOrKey, rKey) {
+      const sMap = sessionRules.get(sessionId)
+      if (!sMap) return false
+      const fullKey = rKey != null ? `${nameOrKey}:${rKey}` : String(nameOrKey)
+      const deleted = sMap.delete(fullKey)
+      if (sMap.size === 0) sessionRules.delete(sessionId)
+      return deleted
+    },
     clear(sessionId) {
       sessionRules.delete(sessionId)
     },
-    persist(db, name, rKey, dec = 'allow') {
+    persist(db, name, rKey, dec = 'allow', sessionIds = null) {
       const targetDb = db || dbRef
       if (!targetDb || typeof targetDb.prepare !== 'function') {
         console.error('[allowRules] Cannot persist rule: no valid db instance available')
         return false
       }
       if (!RULE_DECISIONS.includes(dec)) dec = 'allow'
+      const cleanIds = normalizeSessionIds(sessionIds)
+      const serialized = serializePersistedValue(dec, cleanIds)
       try {
         targetDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
-          .run(`${SETTINGS_PREFIX}${name}.${rKey}`, dec)
+          .run(`${SETTINGS_PREFIX}${name}.${rKey}`, serialized)
       } catch (e) {
         console.error('[allowRules] failed to persist rule:', e)
         return false
       }
-      persistedRules.set(`${name}:${rKey}`, dec)
+      persistedRules.set(`${name}:${rKey}`, { decision: dec, sessionIds: cleanIds })
       return true
     },
     removePersisted(db, name, rKey) {
@@ -212,16 +293,34 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
     },
     listAll(sessionId) {
       const session = []
-      const sMap = sessionRules.get(sessionId)
-      if (sMap) {
-        for (const [k, d] of sMap.entries()) session.push({ key: k, decision: d })
-      }
-      const persisted = []
-      for (const [k, d] of persistedRules.entries()) {
+      const formatSessionEntry = (sid, k, d) => {
         const idx = k.indexOf(':')
         const tool = idx > -1 ? k.slice(0, idx) : k
         const rk = idx > -1 ? k.slice(idx + 1) : '*'
-        persisted.push({ tool, ruleKey: rk, decision: d, key: k })
+        return { sessionId: sid, key: k, tool, ruleKey: rk, decision: d }
+      }
+      if (sessionId != null) {
+        const sMap = sessionRules.get(sessionId) || sessionRules.get(Number(sessionId))
+        if (sMap) {
+          for (const [k, d] of sMap.entries()) session.push(formatSessionEntry(sessionId, k, d))
+        }
+      } else {
+        for (const [sid, sMap] of sessionRules.entries()) {
+          for (const [k, d] of sMap.entries()) session.push(formatSessionEntry(sid, k, d))
+        }
+      }
+      const persisted = []
+      for (const [k, entry] of persistedRules.entries()) {
+        const idx = k.indexOf(':')
+        const tool = idx > -1 ? k.slice(0, idx) : k
+        const rk = idx > -1 ? k.slice(idx + 1) : '*'
+        persisted.push({
+          tool,
+          ruleKey: rk,
+          decision: entry.decision,
+          sessionIds: entry.sessionIds || null,
+          key: k,
+        })
       }
       return { session, persisted }
     },
@@ -284,6 +383,35 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
  * @param {object}       [opts.model]          resolved model (for price columns)
  * @returns {object} callbacks bag — spread directly into runToolLoop options
  */
+function createLeadingBatcher(flushFn, delayMs = 16) {
+  let pending = ''
+  let timer = null
+  const flush = () => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    if (!pending) return
+    const chunk = pending
+    pending = ''
+    flushFn(chunk)
+  }
+  const push = (delta) => {
+    if (!delta) return
+    if (!timer) {
+      flushFn(delta)
+      timer = setTimeout(() => {
+        timer = null
+        if (pending) flush()
+      }, delayMs)
+      if (typeof timer.unref === 'function') timer.unref()
+    } else {
+      pending += delta
+    }
+  }
+  return { push, flush }
+}
+
 function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller, source, allowRules, model }) {
   // Wrap every outgoing send in try/catch so a dead renderer never throws.
   const safeSend = (c, p) => { try { send(c, p) } catch {} }
@@ -293,25 +421,44 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   let thinkingStartedAt = null
   let accumulatedThinking = ''
   let thinkingDurationMs = 0
+
+  const thinkingBatcher = createLeadingBatcher((delta) => {
+    safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta, done: false })
+  })
+  const streamBatcher = createLeadingBatcher((delta) => {
+    safeSend('chat:stream-chunk', { messageId: msgId, sessionId, delta, done: false })
+  })
+
+  callbacks.flushStreams = () => {
+    thinkingBatcher.flush()
+    streamBatcher.flush()
+  }
+  if (controller?.signal) {
+    controller.signal.addEventListener('abort', () => callbacks.flushStreams(), { once: true })
+  }
+
   // Always hook up thinking start/end/delta for all models so any model with reasoning or <think> tags streams live
   callbacks.onThinkingStart = () => {
     thinkingStartedAt = Date.now()
     safeSend('chat:thinking-start', { messageId: msgId, sessionId, startedAt: thinkingStartedAt })
   }
   callbacks.onThinkingEnd   = () => {
+    thinkingBatcher.flush()
     const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0; thinkingDurationMs += durationMs
     thinkingStartedAt = null
     safeSend('chat:thinking-end',   { messageId: msgId, sessionId, durationMs })
   }
-  callbacks.onThinkingDelta = (text) => { if (text) accumulatedThinking += text; safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text, done: false }) }
+  callbacks.onThinkingDelta = (text) => { if (text) accumulatedThinking += text; thinkingBatcher.push(text) }
   callbacks.getThinkingData = () => ({
     content: accumulatedThinking,
     durationMs: thinkingDurationMs + (thinkingStartedAt ? Date.now() - thinkingStartedAt : 0),
   })
-  callbacks.onStreamDelta = (delta) => safeSend('chat:stream-chunk', { messageId: msgId, sessionId, delta, done: false })
+  callbacks.onStreamDelta = (delta) => streamBatcher.push(delta)
 
-  callbacks.onToolCall = (entry) =>
+  callbacks.onToolCall = (entry) => {
+    callbacks.flushStreams()
     safeSend('chat:tool-call', { messageId: msgId, sessionId, tool: entry })
+  }
 
   callbacks.onPlanStep = (step) =>
     safeSend('chat:plan-step', { messageId: msgId, sessionId, step })
@@ -422,8 +569,14 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   // whether this is a 'chat' turn or a 'task' background run. `reason` (when
   // present) carries the policy attribution, e.g. capability axis ask.
   callbacks.requestPermission = ({ name, args, risk, reason, diff, isTainted, taintReason }) => {
-    // If not tainted, check allow-rules. If tainted by external untrusted input, require explicit confirmation!
-    if (!isTainted && allowRules.match(sessionId, name, args)) return Promise.resolve(true)
+    const ruleDec = allowRules
+      ? (typeof allowRules.decision === 'function'
+          ? allowRules.decision(sessionId, name, args)
+          : (allowRules.match(sessionId, name, args) ? 'allow' : null))
+      : null
+    if (ruleDec === 'deny') return Promise.resolve(false)
+    // If not tainted, respect persisted/session allow-rules. If tainted by external untrusted input, require explicit confirmation!
+    if (!isTainted && ruleDec === 'allow') return Promise.resolve(true)
     let impactPreview = null
     try { impactPreview = require('../tools/toolImpact').toolImpact(name, args) } catch {}
     let diffPreview = diff || null
@@ -445,15 +598,18 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       const onReply = (_e, r) => {
         if (!r || r.reqId !== reqId) return
         if (r.allowed && r.remember && !isTainted) {
-          allowRules.add(sessionId, name, args)
           const isPermanent = r.remember === 'remember' || r.remember === 'permanent' || r.remember === true
           const rKey = allowRules.ruleKey(name, args)
+          let persisted = false
           if (isPermanent && typeof allowRules.persist === 'function') {
             try {
-              allowRules.persist(db, name, rKey, 'allow')
+              persisted = !!allowRules.persist(db, name, rKey, 'allow')
             } catch (e) {
               console.error('[permission-reply] failed to persist rule:', e)
             }
+          }
+          if (!isPermanent || !persisted) {
+            allowRules.add(sessionId, name, args)
           }
         }
         finish(!!r.allowed)
@@ -485,4 +641,4 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   return callbacks
 }
 
-module.exports = { createAllowRulesStore, buildToolLoopCallbacks }
+module.exports = { createAllowRulesStore, buildToolLoopCallbacks, createLeadingBatcher }

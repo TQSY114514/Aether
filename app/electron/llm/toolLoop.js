@@ -351,26 +351,65 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const baseSystemPrompt = extendedToolIndexLine
     ? `${AGENT_SYSTEM_PROMPT}\n\n${extendedToolIndexLine}`
     : AGENT_SYSTEM_PROMPT
-  if (!convo.some(m => m.role === 'system')) {
-    convo.unshift({ role: 'system', content: baseSystemPrompt })
-  } else if (extendedToolIndexLine) {
-    const firstSysIdx = convo.findIndex(m => m.role === 'system')
-    if (firstSysIdx >= 0 && typeof convo[firstSysIdx].content === 'string') {
+
+  // Ensure AGENT_SYSTEM_PROMPT is always injected on the desktop tool-loop path
+  // even when chat-send.handler already prepended auxiliary/dynamic system
+  // messages (such as current time, skills index, or memory hits). Skip only
+  // when a real agent/sub-agent system prompt is already present.
+  const hasCoreAgentPrompt = convo.some(
+    (m) =>
+      m.role === 'system' &&
+      typeof m.content === 'string' &&
+      (m.content.includes('You are an autonomous coding agent') ||
+        m.content.includes('You are a sub-agent spawned by the parent agent'))
+  )
+
+  // Helper: locate the end of the leading contiguous system-message block so
+  // dynamic per-turn context sits AFTER static prefix messages (prompt cache!).
+  const getLeadingSystemEnd = () => {
+    let idx = 0
+    while (idx < convo.length && convo[idx]?.role === 'system') idx++
+    return idx
+  }
+
+  let staticInsertIdx = 0
+  if (hasCoreAgentPrompt) {
+    const firstSysIdx = convo.findIndex((m) => m.role === 'system')
+    if (extendedToolIndexLine && firstSysIdx >= 0 && typeof convo[firstSysIdx].content === 'string') {
       convo[firstSysIdx] = {
         ...convo[firstSysIdx],
         content: `${convo[firstSysIdx].content}\n\n${extendedToolIndexLine}`,
       }
     }
+    staticInsertIdx = firstSysIdx >= 0 ? firstSysIdx + 1 : 0
+  } else {
+    const firstSysIdx = convo.findIndex((m) => m.role === 'system')
+    const firstContent = firstSysIdx >= 0 ? String(convo[firstSysIdx].content || '') : ''
+    const firstIsAuxiliary =
+      firstSysIdx === -1 ||
+      /^(?:当前时间：|<available_skills|<available_providers_and_models|Relevant memories|## Relevant|\[Memory)/i.test(
+        firstContent.trim()
+      )
+    if (firstIsAuxiliary) {
+      // No leading Persona/User prefix: put AGENT_SYSTEM_PROMPT at index 0
+      convo.unshift({ role: 'system', content: baseSystemPrompt })
+      staticInsertIdx = 1
+    } else {
+      // Preserve leading Persona / <user_system_prefix> at index 0, place core right after it
+      convo.splice(firstSysIdx + 1, 0, { role: 'system', content: baseSystemPrompt })
+      staticInsertIdx = firstSysIdx + 2
+    }
   }
 
-  // Inject project instructions (CLAUDE.md / .aetherai.md) as an early system
-  // message so the agent knows project conventions from the first turn.
-  const projectCtx = buildProjectContextMessage(sessionId)
-  if (projectCtx) {
-    // Insert after the main system prompt if present, otherwise at the top.
-    const sysIdx = convo.findIndex(m => m.role === 'system')
-    convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, projectCtx)
+  const pushStaticSystem = (msg) => {
+    if (!msg) return
+    convo.splice(staticInsertIdx, 0, msg)
+    staticInsertIdx++
   }
+
+  // Inject static project & protocol instructions right after the core system
+  // prompt so the immutable prefix maximizes provider KV/Prompt Cache hits.
+  pushStaticSystem(buildProjectContextMessage(sessionId))
 
   // P1-10: 注入仓库级配置规则 (.aether/config.json / .aether.json)
   try {
@@ -378,8 +417,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     const ws = getWorkspaceRoot(sessionId)
     const rules = getProjectRules(ws)
     if (rules && rules.length > 0) {
-      const sysIdx = convo.findIndex(m => m.role === 'system')
-      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, {
+      pushStaticSystem({
         role: 'system',
         content: `## Project Configuration Rules (.aether/config.json)\n\n${rules.join('\n\n')}`,
       })
@@ -391,18 +429,20 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     const { getAdaptiveEditPrompt } = require('./adaptivePatch')
     const editProtocol = getAdaptiveEditPrompt(model)
     if (editProtocol) {
-      const sysIdx = convo.findIndex(m => m.role === 'system')
-      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, {
-        role: 'system',
-        content: editProtocol,
-      })
+      pushStaticSystem({ role: 'system', content: editProtocol })
     }
   } catch {}
 
-  // Inject the repo map (project structure + top-level symbols) so the agent
-  // has a project-level understanding of the codebase from the first turn.
-  // Generated on first use and cached; incremental updates re-parse only
-  // changed files. Best-effort — never blocks the loop on failure.
+  // Inject the bounded strategy library produced by the single learning curator.
+  try {
+    const snap = require('../evolution/strategyStore').freeze()
+    if (snap) {
+      pushStaticSystem({ role: 'system', content: snap })
+    }
+  } catch {}
+
+  // Dynamic per-turn context (repoMap + experience replay) goes at the END of
+  // the leading system block so it never invalidates the static prefix cache.
   try {
     const lastUserRaw = [...convo].reverse().find(m => m.role === 'user')?.content || ''
     const lastUserMsg = Array.isArray(lastUserRaw)
@@ -413,30 +453,16 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       maxTokens: isPoorMode ? 512 : 1024,
     })
     if (repoMapMsg) {
-      const sysIdx = convo.findIndex(m => m.role === 'system')
-      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, repoMapMsg)
+      convo.splice(getLeadingSystemEnd(), 0, repoMapMsg)
     }
   } catch {}
 
-  // Inject the bounded strategy library produced by the single learning
-  // curator. Legacy GEP guidance is intentionally no longer injected.
-  try {
-    const snap = require('../evolution/strategyStore').freeze()
-    if (snap) {
-      const sysIdx = convo.findIndex(m => m.role === 'system')
-      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, { role: 'system', content: snap })
-    }
-  } catch {}
-
-  // Experience replay: 若启用,把与当前请求相似的"成功轨迹"注入 system 上下文,
-  // 让 agent 复用过去奏效的工具序列。Best-effort —— 永不阻塞循环。
   try {
     if (db && userText) {
       const replay = require('./replay')
       const replayCtx = replay.buildReplayContext(db, userText)
       if (replayCtx) {
-        const sysIdx = convo.findIndex(m => m.role === 'system')
-        convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, { role: 'system', content: replayCtx })
+        convo.splice(getLeadingSystemEnd(), 0, { role: 'system', content: replayCtx })
       }
     }
   } catch {}

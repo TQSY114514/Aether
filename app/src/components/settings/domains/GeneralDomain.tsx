@@ -28,17 +28,17 @@ export function UpdateCard() {
   useEffect(() => {
     const off1 = window.electronAPI?.updater?.onUpdateAvailable?.(({ version }) => {
       setNewVersion(version)
-      setStatus(`v${version} 可用`)
+      setStatus(t('settings.update.available', version))
     })
     const off2 = window.electronAPI?.updater?.onUpdateDownloaded?.(({ version }) => {
       setDownloaded(true)
       setPercent(null)
-      setStatus(`v${version} 已下载，重启以安装`)
+      setStatus(t('settings.update.downloaded', version))
     })
     const off3 = window.electronAPI?.updater?.onProgress?.(({ percent }) => setPercent(Math.round(percent)))
-    const off4 = window.electronAPI?.updater?.onUpToDate?.(() => setStatus('已是最新版本'))
+    const off4 = window.electronAPI?.updater?.onUpToDate?.(() => setStatus(t('settings.update.up_to_date')))
     const off5 = window.electronAPI?.updater?.onError?.(({ message }) => {
-      setStatus('检查失败')
+      setStatus(t('settings.update.failed'))
       setBusy(false)
       toast(message, { type: 'error' })
     })
@@ -53,23 +53,23 @@ export function UpdateCard() {
 
   const check = async () => {
     setBusy(true)
-    setStatus('检查中…')
+    setStatus(t('settings.update.checking'))
     try {
       const r = await window.electronAPI?.updater?.check?.()
       if (r?.error) {
-        setStatus('检查失败')
+        setStatus(t('settings.update.failed'))
         toast(r.error, { type: 'error' })
       } else if (r?.updateInfo?.version) {
         setNewVersion(r.updateInfo.version)
-        setStatus(`v${r.updateInfo.version} 可用`)
+        setStatus(t('settings.update.available', r.updateInfo.version))
       } else if (r?.downloaded) {
         setDownloaded(true)
-        setStatus('已下载，重启以安装')
+        setStatus(t('settings.update.downloaded_ready'))
       } else {
-        setStatus('已是最新版本')
+        setStatus(t('settings.update.up_to_date'))
       }
     } catch (e: any) {
-      setStatus('检查失败')
+      setStatus(t('settings.update.failed'))
       toast(e?.message || String(e), { type: 'error' })
     } finally {
       setBusy(false)
@@ -78,7 +78,7 @@ export function UpdateCard() {
 
   const install = async () => {
     const ok = await window.electronAPI?.updater?.install?.()
-    if (!ok) toast('更新尚未下载完成', { type: 'info' })
+    if (!ok) toast(t('settings.update.not_ready'), { type: 'info' })
   }
 
   return (
@@ -164,7 +164,7 @@ export default function GeneralDomain() {
               <button
                 key={l.code}
                 onClick={() => setLanguage(l.code as any)}
-                className={`px-3 py-2 text-xs rounded-md border text-center transition-all active:scale-[0.98] ${
+                className={`px-3 py-2 text-xs rounded-md border text-center transition-colors transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer ${
                   language === l.code
                     ? 'border-[var(--accent)] bg-[var(--accent)] text-white font-medium shadow-xs'
                     : 'hover:bg-[var(--bg-secondary)]'
@@ -194,7 +194,7 @@ export default function GeneralDomain() {
                 <button
                   key={l.code}
                   onClick={() => setLanguage(l.code as any)}
-                  className={`px-2 py-1.5 text-xs rounded-md border text-center transition-all ${
+                  className={`px-2 py-1.5 text-xs rounded-md border text-center transition-colors cursor-pointer ${
                     language === l.code
                       ? 'border-[var(--accent)] bg-[var(--accent)] text-white font-medium shadow-xs'
                       : 'hover:bg-[var(--bg-secondary)]'
@@ -218,13 +218,13 @@ export default function GeneralDomain() {
         <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.theme_desc')}</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {([
-            { id: 'light', label: t('theme.light' as any, '浅色 (Light)'), desc: '纯净高对比白昼' },
-            { id: 'dark', label: t('theme.dark' as any, '深色 (Dark)'), desc: '深邃暗夜工作台' },
-            { id: 'system', label: t('theme.system' as any, '跟随系统 (Auto)'), desc: '自动同步系统昼夜' },
-            { id: 'retro', label: t('theme.retro' as any, '古典米金 (Retro)'), desc: '暖调羊皮纸护眼' },
-            { id: 'metalheart', label: t('theme.metalheart' as any, '工业银蓝 (Metal)'), desc: '冷峻金属精密感' },
-            { id: 'postdigital', label: t('theme.postdigital' as any, '后数字 (PostDigital)'), desc: '硬朗线框高饱和' },
-            { id: 'blue', label: t('theme.blue' as any, '冷灰蓝 (Slate)'), desc: '清爽极简工程蓝' },
+            { id: 'light', label: t('theme.light'), desc: t('theme.light.desc') },
+            { id: 'dark', label: t('theme.dark'), desc: t('theme.dark.desc') },
+            { id: 'system', label: t('theme.system'), desc: t('theme.system.desc') },
+            { id: 'retro', label: t('theme.retro'), desc: t('theme.retro.desc') },
+            { id: 'metalheart', label: t('theme.metalheart'), desc: t('theme.metalheart.desc') },
+            { id: 'postdigital', label: t('theme.postdigital'), desc: t('theme.postdigital.desc') },
+            { id: 'blue', label: t('theme.blue'), desc: t('theme.blue.desc') },
           ] as const).map((item) => {
             const active = theme === item.id || (item.id === 'system' && theme === 'auto')
             return (
@@ -232,7 +232,7 @@ export default function GeneralDomain() {
                 key={item.id}
                 type="button"
                 onClick={() => setTheme(item.id)}
-                className={`text-left px-3 py-2 text-xs rounded-md border transition-all active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer ${
+                className={`text-left px-3 py-2 text-xs rounded-md border transition-colors transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer ${
                   active
                     ? 'border-[var(--accent)] bg-[var(--bg-secondary)] font-semibold shadow-2xs'
                     : 'hover:bg-[var(--bg-secondary)]'
@@ -256,13 +256,13 @@ export default function GeneralDomain() {
       <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
         <div className="flex items-center gap-1.5 mb-1">
           <Sparkles size={15} style={{ color: 'var(--accent)' }} />
-          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.typography', '排版与间距')}</h2>
+          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.typography')}</h2>
         </div>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>调整正文字号与对话气泡宽度</p>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.typography_desc')}</p>
         <div className="space-y-4">
           <div>
             <div className="flex items-center justify-between text-xs mb-1">
-              <span style={{ color: 'var(--text-primary)' }}>{t('settings.font_scale', '正文字号缩放')}</span>
+              <span style={{ color: 'var(--text-primary)' }}>{t('settings.font_scale')}</span>
               <span className="tabular-nums font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{fontScale}x</span>
             </div>
             <input
@@ -277,7 +277,7 @@ export default function GeneralDomain() {
           </div>
           <div>
             <div className="flex items-center justify-between text-xs mb-1">
-              <span style={{ color: 'var(--text-primary)' }}>{t('settings.bubble_width', '消息气泡最大宽度')}</span>
+              <span style={{ color: 'var(--text-primary)' }}>{t('settings.bubble_width')}</span>
               <span className="tabular-nums font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{bubbleWidth}%</span>
             </div>
             <input
@@ -321,7 +321,7 @@ export default function GeneralDomain() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span style={{ color: 'var(--text-primary)' }}>背景不透明度</span>
+                <span style={{ color: 'var(--text-primary)' }}>{t('settings.bg_opacity')}</span>
                 <span className="tabular-nums font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{backgroundOpacity}%</span>
               </div>
               <input
@@ -336,7 +336,7 @@ export default function GeneralDomain() {
             </div>
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span style={{ color: 'var(--text-primary)' }}>背景模糊度</span>
+                <span style={{ color: 'var(--text-primary)' }}>{t('settings.bg_blur')}</span>
                 <span className="tabular-nums font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{backgroundBlur}px</span>
               </div>
               <input

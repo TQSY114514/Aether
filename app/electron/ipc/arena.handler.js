@@ -136,8 +136,16 @@ function runVerifyCommand(verifyCommand, taskCwd, signal, expectedExitCode = 0) 
 function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, personaId, temperatures }) => {
     const allModels = db.getAllModels()
-    const selected = allModels.filter(m => modelIds.includes(m.id))
+    const byId = new Map(allModels.map(m => [m.id, m]))
+    const selected = (Array.isArray(modelIds) ? modelIds : [])
+      .map(id => byId.get(id))
+      .filter(Boolean)
     if (!selected.length) return { results: [] }
+
+    // Standalone Arena workbench passes sessionId <= 0 (e.g. negative runId or 0)
+    // and must not pollute message / session rows with orphan session_id = 0.
+    const numericSessionId = Number(sessionId)
+    const persistSession = Number.isFinite(numericSessionId) && numericSessionId > 0
 
     // Arena 2.0 (review P0-3): same-model multi-temperature comparison.
     // temperatures = [0.2, 0.8] → each selected model runs once per temperature,
@@ -148,28 +156,30 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     const runs = []
     for (const m of selected) {
       if (temps) {
-        for (const t of temps) runs.push({ m, temperature: t, variant: `temp ${t}` })
+        for (const t of temps) runs.push({ m, temperature: t, variant: `temp ${t}`, slotIndex: runs.length })
       } else {
-        runs.push({ m, temperature: null, variant: null })
+        runs.push({ m, temperature: null, variant: null, slotIndex: runs.length })
       }
     }
 
-    // Persist the user's arena prompt as a message so it survives a reload
-    db.addMessage({ session_id: sessionId, role: 'user', content })
+    if (persistSession) {
+      // Persist the user's arena prompt as a message so it survives a reload
+      db.addMessage({ session_id: numericSessionId, role: 'user', content })
 
-    // Auto-title: an arena round is a real conversation too. When the session is
-    // still placeholder-titled and this is its first message, fall back to the
-    // same quick title the chat path uses (chat-send.handler), so arena sessions
-    // don't sit at "新会话" forever. AI-summary upgrade happens on the chat side
-    // if the user continues the conversation there.
-    try {
-      const s0 = db.getSession(sessionId)
-      const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
-      if (s0 && shouldWriteQuickTitle({ autoTitleOn, sessionTitle: s0.title, msgsLen: db.getMessages(sessionId).length })) {
-        const quick = quickTitleOf(content)
-        if (quick) db.renameSession(sessionId, quick)
-      }
-    } catch (e) { log.warn('arena quick title failed:', e.message) }
+      // Auto-title: an arena round is a real conversation too. When the session is
+      // still placeholder-titled and this is its first message, fall back to the
+      // same quick title the chat path uses (chat-send.handler), so arena sessions
+      // don't sit at "新会话" forever. AI-summary upgrade happens on the chat side
+      // if the user continues the conversation there.
+      try {
+        const s0 = db.getSession(numericSessionId)
+        const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
+        if (s0 && shouldWriteQuickTitle({ autoTitleOn, sessionTitle: s0.title, msgsLen: db.getMessages(numericSessionId).length })) {
+          const quick = quickTitleOf(content)
+          if (quick) db.renameSession(numericSessionId, quick)
+        }
+      } catch (e) { log.warn('arena quick title failed:', e.message) }
+    }
 
     // Run all model×temperature variants CONCURRENTLY (Promise.all) so a slow
     // model doesn't block the others — each gets its own 60s timeout + abort.
@@ -177,7 +187,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     abortControllers.set(sessionId, controller)
     const wc = getWebContents()
 
-    const runOne = async ({ m, temperature, variant }) => {
+    const runOne = async ({ m, temperature, variant, slotIndex }) => {
       const start = Date.now()
       const perModel = new AbortController()
       const timeout = setTimeout(() => perModel.abort(), 60000)
@@ -192,17 +202,20 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
         } else {
           messages.unshift({ role: 'system', content: patchGuideline })
         }
-        const { content: answer, usage } = await completeChatMessage({
-          provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
+        const { content: answer, reasoning, usage } = await completeChatMessage({
+          provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: m.api_format || 'openai' },
           model: m,
           messages,
           signal: perModel.signal,
           options: temperature != null ? { temperature } : {},
         })
+        const finalAnswer = (answer && String(answer).trim().length > 0)
+          ? answer
+          : (reasoning && String(reasoning).trim().length > 0 ? String(reasoning) : '')
         const u = normalizeUsage(usage)
         const cost = u ? computeCost(m, u) : 0
         if (u) db.logUsage({
-          session_id: sessionId, provider_id: m.provider_id, provider_name: m.provider_name,
+          session_id: persistSession ? numericSessionId : null, provider_id: m.provider_id, provider_name: m.provider_name,
           model_name: m.model_name, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens,
           total_tokens: u.total_tokens, cache_read_tokens: u.cache_read_tokens,
           cache_creation_tokens: u.cache_creation_tokens,
@@ -210,20 +223,22 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
         })
         const result = {
           model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
-          variant, temperature,
-          content: answer, latency_ms: Date.now() - start,
+          variant, temperature, slot_index: slotIndex,
+          content: finalAnswer, latency_ms: Date.now() - start,
           usage: u ? { prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens, total_tokens: u.total_tokens, cost } : undefined,
         }
         try { wc?.send('arena:model-done', { sessionId, result }) } catch {}
         return result
       } catch (err) {
         const status = err.status || 0
-        db.logUsage({ session_id: sessionId, provider_id: m.provider_id, provider_name: m.provider_name,
+        db.logUsage({ session_id: persistSession ? numericSessionId : null, provider_id: m.provider_id, provider_name: m.provider_name,
           model_name: m.model_name, latency_ms: Date.now() - start, status, source: 'arena' })
+        const errorMsg = err.name === 'AbortError' ? 'aborted/timeout' : (err.message || 'Unknown error')
         const result = {
           model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
-          variant, temperature,
-          content: `[Error: ${err.name === 'AbortError' ? 'aborted/timeout' : err.message}]`, latency_ms: Date.now() - start,
+          variant, temperature, slot_index: slotIndex,
+          error: errorMsg,
+          content: `[Error: ${errorMsg}]`, latency_ms: Date.now() - start,
         }
         try { wc?.send('arena:model-done', { sessionId, result }) } catch {}
         return result
@@ -235,15 +250,17 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
 
     const results = await Promise.all(runs.map(runOne))
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
-    for (const r of results) {
-      db.addMessage({
-        session_id: sessionId, role: 'assistant', content: r.content || '',
-        model_used: r.model_name, provider_used: null, token_count: r.usage?.total_tokens || null,
-        latency_ms: r.latency_ms || null, status: 'success',
-        arena_model: r.model_name,
-      })
+    if (persistSession) {
+      for (const r of results) {
+        db.addMessage({
+          session_id: numericSessionId, role: 'assistant', content: r.content || '',
+          model_used: r.model_name, provider_used: null, token_count: r.usage?.total_tokens || null,
+          latency_ms: r.latency_ms || null, status: r.error ? 'error' : 'success',
+          arena_model: r.model_name,
+        })
+      }
+      db.touchSession(numericSessionId)
     }
-    db.touchSession(sessionId)
     return { results }
   })
 
@@ -360,7 +377,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
           controller.signal.addEventListener('abort', onOuterAbort, { once: true })
           try {
             const { content: answer, usage } = await completeChatMessage({
-              provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
+              provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: m.api_format || 'openai' },
               model: m,
               messages: [{ role: 'user', content }],
               signal: perModel.signal,

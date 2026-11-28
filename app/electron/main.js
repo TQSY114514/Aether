@@ -422,41 +422,7 @@ app.whenReady().then(async () => {
   initAppReady()
   await db.initDatabase()
   try { db.migrateLegacyPlaintextKeys() } catch (e) { log.warn('migrateLegacyPlaintextKeys failed:', e.message) }
-  // Independent init steps run in parallel after DB is ready.
-  await Promise.all([
-    (async () => { try { await db.pruneEmptySessions() } catch (e) { log.warn('pruneEmptySessions failed:', e.message) } })(),
-    (async () => { try { require('./llm/credentialPool').init(db) } catch (e) { log.warn('credentialPool init failed:', e.message) } })(),
-    (async () => {
-      try { const { scanSkills } = require('./llm/skills'); scanSkills() }
-      catch (e) { log.warn('skill scan failed:', e.message) }
-    })(),
-    // Skill curator: run automatic state transitions on startup (idle trigger).
-    (async () => {
-      try { require('./llm/curator').maybeRunCurator(db) }
-      catch (e) { log.warn('curator init failed:', e.message) }
-    })(),
-    // Background review queue: flush any pending agent_task review rows at
-    // startup (fire-and-forget — never blocks window creation). Gated by the
-    // agent.backgroundReview feature flag inside enqueueReview/runPendingReviews.
-    (async () => {
-      try {
-        const br = require('./llm/backgroundReview')
-        if (br.isReviewEnabled(db)) {
-          const model = db.getPrimaryModel()
-          const provider = model ? db.getProvider(model.provider_id) : null
-          if (provider && model && typeof br.runPendingReviews === 'function') {
-            br.runPendingReviews(db, { provider, model })
-              .then(() => {})
-              .catch((e) => log.warn('backgroundReview flush failed:', e && e.message))
-          }
-        }
-      } catch (e) { log.warn('backgroundReview init failed:', e && e.message) }
-    })(),
-    (async () => {
-      try { require('./llm/hooks').scanHooks() }
-      catch (e) { log.warn('hooks scan failed:', e.message) }
-    })(),
-  ])
+  try { require('./llm/credentialPool').init(db) } catch (e) { log.warn('credentialPool init failed:', e.message) }
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {
     const distDir = path.join(__dirname, '..', 'dist')
     await startStaticServer(distDir)
@@ -466,6 +432,27 @@ app.whenReady().then(async () => {
   createTray()
   setupGlobalShortcut()
   setupIpcHandlers()
+
+  // Defer non-critical housekeeping until after the window & IPC are ready
+  // so cold startup opens the UI immediately without blocking on filesystem scans.
+  setImmediate(() => {
+    try { Promise.resolve(db.pruneEmptySessions()).catch((e) => log.warn('pruneEmptySessions failed:', e.message)) } catch (e) { log.warn('pruneEmptySessions failed:', e.message) }
+    try { const { scanSkills } = require('./llm/skills'); scanSkills() } catch (e) { log.warn('skill scan failed:', e.message) }
+    try { require('./llm/curator').maybeRunCurator(db) } catch (e) { log.warn('curator init failed:', e.message) }
+    try { require('./llm/hooks').scanHooks() } catch (e) { log.warn('hooks scan failed:', e.message) }
+    try {
+      const br = require('./llm/backgroundReview')
+      if (br.isReviewEnabled(db)) {
+        const model = db.getPrimaryModel()
+        const provider = model ? db.getProvider(model.provider_id) : null
+        if (provider && model && typeof br.runPendingReviews === 'function') {
+          br.runPendingReviews(db, { provider, model })
+            .then(() => {})
+            .catch((e) => log.warn('backgroundReview flush failed:', e && e.message))
+        }
+      }
+    } catch (e) { log.warn('backgroundReview init failed:', e && e.message) }
+  })
   // Local gateway: expose the API to the VS Code extension / browser / scripts.
   // Defaults to enabled so external tools work out of the box; bound to 127.0.0.1
   // and requires a token. Disable via the "Local Gateway" toggle in Settings.

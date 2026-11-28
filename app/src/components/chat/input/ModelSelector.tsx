@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
-import { Trophy, ChevronDown, Check, Search, X, Sparkles } from 'lucide-react'
+import { ChevronDown, Check, Search, X, Sparkles } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 export function formatSuggestionReason(modelSuggestion: ModelSuggestion | null): string {
@@ -159,7 +159,7 @@ export default function ModelSelector({
       <button
         type="button"
         onClick={() => setOpen(prev => !prev)}
-        title={reasonTitle}
+        title={arenaElo != null ? `${reasonTitle}${reasonTitle ? '\n' : ''}Arena ELO ${arenaElo}` : reasonTitle}
         aria-haspopup="listbox"
         aria-expanded={open}
         className="h-6.5 flex items-center gap-1.5 text-[11px] font-medium rounded-[6px] border border-transparent hover:border-[var(--border)] px-2 outline-none max-w-[160px] sm:max-w-[215px] bg-transparent hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
@@ -176,20 +176,6 @@ export default function ModelSelector({
           style={{ color: 'var(--text-muted)' }}
         />
       </button>
-
-      {arenaElo != null && (
-        <span
-          className="hidden md:inline-flex items-center gap-1 h-5.5 px-1.5 rounded-[4px] text-[10px] shrink-0 select-none font-mono tabular-nums"
-          style={{
-            backgroundColor: 'var(--bg-secondary)',
-            color: 'var(--text-muted)',
-          }}
-          title={reasonTitle || `Arena ELO ${arenaElo}`}
-        >
-          <Trophy size={9.5} className="shrink-0" style={{ color: 'var(--warning)' }} />
-          <span>{arenaElo}</span>
-        </span>
-      )}
 
       {open && (
         <div

@@ -1,5 +1,7 @@
+import { useState, useMemo } from 'react'
 import { X, FileText, ShieldAlert, AlertTriangle } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import ImageLightboxModal from '../ImageLightboxModal'
 
 export type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 export type Snippet = { id: number; content: string; preview: string }
@@ -25,7 +27,20 @@ export default function AttachmentBar({
   onRemoveSnippet,
   fileError,
 }: AttachmentBarProps) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const hasSensitive = pending.some(a => SENSITIVE_FILE_PATTERN.test(a.name))
+
+  const { imageItems, imageIndexByPendingIdx } = useMemo(() => {
+    const items: { name: string; preview: string }[] = []
+    const idxMap = new Map<number, number>()
+    pending.forEach((a, idx) => {
+      if (a.kind === 'image' && a.dataUrl) {
+        idxMap.set(idx, items.length)
+        items.push({ name: a.name, preview: a.dataUrl })
+      }
+    })
+    return { imageItems: items, imageIndexByPendingIdx: idxMap }
+  }, [pending])
 
   return (
     <>
@@ -50,24 +65,49 @@ export default function AttachmentBar({
 
       {pending.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {pending.map((a, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border"
-              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
-            >
-              {a.kind === 'image' && a.dataUrl ? (
-                <img src={a.dataUrl} alt="" className="w-6 h-6 rounded object-cover border" style={{ borderColor: 'var(--border)' }} />
-              ) : (
-                <FileText size={12} className="text-gray-400 shrink-0" />
-              )}
-              <span className="truncate max-w-[160px]">{a.name}</span>
-              <button onClick={() => onRemovePending(i)} className="hover:bg-[var(--border)] rounded p-0.5">
-                <X size={10} />
-              </button>
-            </span>
-          ))}
+          {pending.map((a, i) => {
+            const imgIdx = imageIndexByPendingIdx.get(i)
+            const isImage = imgIdx !== undefined
+            return (
+              <span
+                key={i}
+                onDoubleClick={isImage ? () => setLightboxIndex(imgIdx) : undefined}
+                title={isImage ? t('chat.attachment.double_click_zoom') : undefined}
+                className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border ${isImage ? 'cursor-zoom-in select-none' : ''}`}
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+              >
+                {isImage ? (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxIndex(imgIdx)}
+                    onDoubleClick={(e) => { e.stopPropagation(); setLightboxIndex(imgIdx) }}
+                    aria-label={`${a.name} - ${t('chat.attachment.double_click_zoom')}`}
+                    className="p-0 border-0 bg-transparent rounded shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                  >
+                    <img src={a.dataUrl} alt={a.name} className="w-7 h-7 rounded object-cover border" style={{ borderColor: 'var(--border)' }} />
+                  </button>
+                ) : (
+                  <FileText size={12} className="text-gray-400 shrink-0" />
+                )}
+                <span className="truncate max-w-[160px]">{a.name}</span>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onRemovePending(i) }}
+                  className="hover:bg-[var(--border)] rounded p-0.5 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            )
+          })}
         </div>
+      )}
+      {lightboxIndex !== null && imageItems.length > 0 && (
+        <ImageLightboxModal
+          images={imageItems}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
 
       {fileError && (

@@ -6,6 +6,12 @@ All notable changes to AetherAI are documented here.
 
 ### Added
 
+- **Super-Harness Upgrades: LSP Semantic Radar, Fast Syntax Guard, Process Tap & Shadow Rollback (#134):**
+  - **LSP 语义雷达激活与降级**：默认开启 `lsp.full`，修复 `find_symbol` 调用不存在方法的问题（改用 `lsp.searchWorkspace` 并支持 Rust/Go/Python/JS 语言推断），重构 `lsp_definition` / `lsp_references` / `lsp_diagnostics` / `lsp_code_actions` / `lsp_rename` 入参 Schema 与正则/语法检查优雅降级，并修复 `grepWithRipgrep` 漏传 `pattern` 及相对路径基准错乱问题。
+  - **毫秒级内存语法看门狗 (`fastSyntaxCheck`)**：基于 Node 内置 `JSON.parse`（含 `tsconfig*.json`/`jsconfig*.json` 注释与尾逗号 JSONC 剥离）、`vm.Script`（含 `#!` shebang 与 BOM 剥离）及 `module.stripTypeScriptTypes`（豁免合法 `enum`/`namespace`）提供零外部依赖写后语法校验。
+  - **结构化进程崩溃提取器 (`processTap.js`)**：自动解析 TypeScript、Vitest/Jest、Node 运行时、Rust 与 Python 错误定位与根因摘要，接入 `run_command`（含跨平台 shell 修复与 Docker 失败路径）和 `localBackend.js`。
+  - **Shadow Git 熔断自动回滚**：加固 `shadowGit.commitCheckpoint` 对未跟踪缺失路径与已跟踪删除的区分处理；在 `toolLoop.js` 中按路径记录首改前基线并在连续修复失败后执行带符号链接防穿越校验的原子回滚。
+
 - **Native Multimodal Image Persistence & In-Bubble Previews (多模态图片原生持久化与富媒体气泡渲染):**
   - 支持直接在输入框粘贴、拖拽或选择单张/多张图片，发送后即时在用户消息气泡中以自适应紧凑网格展示缩略图预览（多于 4 张自动采用 `+N` 截断折叠，杜绝大图铺满屏幕）。
   - 全新上线全功能 Lightbox 画廊式模态查看器（`ImageLightboxModal`）：支持非被动滚轮无级缩放（彻底解决缩放时背景跟随滚动的串扰）、双击 200% 切换、放大拖拽平移、键盘 `←`/`→` 快速切图与一键图片下载保存。

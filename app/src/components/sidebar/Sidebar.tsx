@@ -6,7 +6,6 @@ import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import { stripChannelMarkers } from '@/utils/markdown'
 import HoverMarquee from '@/components/ui/HoverMarquee'
-import QuickControlDeck from './QuickControlDeck'
 
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
@@ -456,16 +455,16 @@ export default function Sidebar() {
             onClick={(e) => e.stopPropagation()}>
             <button onClick={() => { setCtxMenu(null); handleDoubleClick(ctxMenu.session) }}
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-              Rename
+              {t('sidebar.rename')}
             </button>
             <button onClick={() => { setCtxMenu(null); window.electronAPI?.session?.pin?.(ctxMenu.session.id, ctxMenu.session.pinned ? 0 : 1); loadSessions() }}
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-              <Pin size={11} /> {ctxMenu.session.pinned ? 'Unpin' : 'Pin'}
+              <Pin size={11} /> {ctxMenu.session.pinned ? t('sidebar.unpin') : t('sidebar.pin')}
             </button>
             <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
             <button onClick={() => { setCtxMenu(null); exportSession(ctxMenu.session) }}
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-              <Download size={11} /> Export conversation
+              <Download size={11} /> {t('sidebar.export_conversation')}
             </button>
             <button onClick={async () => {
               setCtxMenu(null)
@@ -489,7 +488,6 @@ export default function Sidebar() {
           </div>
         )}
       </div>
-      <QuickControlDeck />
       <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
         <NavItem icon={MessageSquare} label={t('sidebar.nav.workspace', '工作区')} active={currentView === 'chat' || currentView === 'workspace'} onClick={() => setCurrentView('chat')} />
         <NavItem icon={FlaskConical} label={t('sidebar.nav.arena', '竞技场')} active={currentView === 'arena'} onClick={() => setCurrentView('arena')} />

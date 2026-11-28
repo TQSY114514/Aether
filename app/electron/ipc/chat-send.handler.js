@@ -22,7 +22,7 @@ const { computeCost } = require('../utils/cost')
 const modelAdvisor = require('../llm/modelAdvisor')
 const log = require('../logger')
 const providerHealth = require('../llm/providerHealth')
-const { buildToolLoopCallbacks } = require('./toolLoopCallbacks')
+const { buildToolLoopCallbacks, createLeadingBatcher } = require('./toolLoopCallbacks')
 const codeUnderstanding = require('../context/codeUnderstanding')
 const { orchestrate } = require('../llm/orchestrator')
 const { isComplexRequest } = require('../llm/planning')
@@ -434,16 +434,36 @@ ipcMain.handle('chat:complete', handleChatComplete)
       }
     }
 
+    // Prompt-cache-safe system message placement:
+    //   1. Existing leading Persona / SOUL.md stays at index 0.
+    //   2. Static post-compaction system blocks (DeepHermes mode, user systemPrefix,
+    //      skills index, provider topology) go immediately after leading Persona.
+    //   3. Dynamic per-turn blocks (recalled memories, current timestamp) go at
+    //      the END of the leading system block (before the first user/assistant turn)
+    //      so minute-by-minute clock ticks never bust provider KV/Prompt Cache.
+    const insertSystemMessages = (msgs, staticBlocks = [], dynamicBlocks = []) => {
+      let leadEnd = 0
+      while (leadEnd < msgs.length && msgs[leadEnd]?.role === 'system') leadEnd++
+      const toInsert = [...staticBlocks, ...dynamicBlocks].filter(Boolean)
+      if (toInsert.length > 0) {
+        msgs.splice(leadEnd, 0, ...toInsert)
+      }
+      return msgs
+    }
+
+    const postStaticSystemMsgs = []
+    const postDynamicSystemMsgs = []
+
     // DeepHermes prompt injection for dual-mode thinking models
     if (modelFam === 'hermes' && /deephermes/i.test(model?.model_name || '')) {
       const hasThinkPrompt = compacted.some(m => m.role === 'system' && (m.content.includes('<think>') || m.content.includes('deep thinking')))
       if (thinkingEnabled && !hasThinkPrompt) {
-        compacted.unshift({
+        postStaticSystemMsgs.push({
           role: 'system',
           content: 'You are a deep thinking AI, you may use extremely long chains of thought to deeply reason about problems. Enclose your chain of thought inside <think> and </think> tags.',
         })
       } else if (!thinkingEnabled && !hasThinkPrompt) {
-        compacted.unshift({
+        postStaticSystemMsgs.push({
           role: 'system',
           content: 'Respond directly and concisely. Do not use <think> tags or chain-of-thought.',
         })
@@ -453,7 +473,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // Prepend a custom system prefix if set (advanced users). Done after compaction
     // so the prefix is never summarized away.
     if (systemPrefix && systemPrefix.trim()) {
-      compacted.unshift({ role: 'system', content: '<user_system_prefix>\n' + systemPrefix.trim() + '\n</user_system_prefix>' })
+      postStaticSystemMsgs.push({ role: 'system', content: '<user_system_prefix>\n' + systemPrefix.trim() + '\n</user_system_prefix>' })
     }
     // Auto-memory prefetch (Hermes-style): inject relevant past memories as a
     // system message so the model can recall context from earlier sessions.
@@ -493,12 +513,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
         memBlock = (await autoMemory.recall({ db, provider, model, userMessage: content, signal: controller?.signal, workspace: recallWs })) || ''
       } catch {}
     }
-    if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
+    if (memBlock) postDynamicSystemMsgs.push({ role: 'system', content: memBlock })
 
-    // Inject current date/time so the model knows "today". LLMs have a training
-    // cutoff and without this cannot answer "what's the date" or reason about
-    // relative time. Injected for ALL paths (tool + streaming) after compaction
-    // so it's never summarized away.
+    // Inject current date/time so the model knows "today". Kept at the tail of
+    // the leading system block (after static prompts) so KV cache stays warm.
     try {
       const _now = new Date()
       const _pad = (n) => String(n).padStart(2, '0')
@@ -506,8 +524,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
       const _tzOff = -_now.getTimezoneOffset() / 60
       const _tzStr = `UTC${_tzOff >= 0 ? '+' : ''}${_tzOff}`
       const _weekday = ['日','一','二','三','四','五','六'][_now.getDay()]
-      compacted.unshift({ role: 'system', content: `当前时间：${_dateStr} (${_tzStr}, 星期${_weekday})` })
+      postDynamicSystemMsgs.push({ role: 'system', content: `当前时间：${_dateStr} (${_tzStr}, 星期${_weekday})` })
     } catch {}
+
+    insertSystemMessages(compacted, postStaticSystemMsgs, postDynamicSystemMsgs)
 
     // Proactive habit suggestions (Hermes-style): fire-and-forget match.
     if (autoMemoryOn) {
@@ -542,12 +562,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
           if (!codeWsRoot) {
             try { codeWsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
           }
-          if (codeWsRoot) setImmediate(() => { try { codeUnderstanding.indexWorkspace(db, codeWsRoot, { maxFiles: 2000 }) } catch {} })
+          if (codeWsRoot) setImmediate(() => { codeUnderstanding.indexWorkspaceAsync(db, codeWsRoot, { maxFiles: 500 }).catch(() => {}) })
         }
       } catch {}
-      // Inject the available-skills list and provider topology snapshot as system
-      // messages so the desktop main agent can call use_skill and dispatch
-      // topology-aware subagents. Done after compaction so they are never summarized away.
+      // Inject the available-skills list and provider topology snapshot BEFORE
+      // dynamic per-turn memory/time blocks so the static prefix stays cacheable.
       const skillsBlock = skills.formatSkillsForPrompt()
       let topoXml = ''
       try {
@@ -557,7 +576,16 @@ ipcMain.handle('chat:complete', handleChatComplete)
       const extraSystemMsgs = []
       if (skillsBlock) extraSystemMsgs.push({ role: 'system', content: skillsBlock })
       if (topoXml) extraSystemMsgs.push({ role: 'system', content: topoXml })
-      let toolMessages = extraSystemMsgs.length > 0 ? [...extraSystemMsgs, ...compacted] : compacted
+      let toolMessages = compacted.slice()
+      if (extraSystemMsgs.length > 0) {
+        let dynStart = 0
+        while (dynStart < toolMessages.length && toolMessages[dynStart]?.role === 'system') {
+          const c = String(toolMessages[dynStart].content || '')
+          if (c.startsWith('当前时间：') || c.includes('Relevant memories') || c.startsWith('[Memory')) break
+          dynStart++
+        }
+        toolMessages.splice(dynStart, 0, ...extraSystemMsgs)
+      }
       const asstMsg = db.addMessage({
         session_id: sessionId,
         role: 'assistant',
@@ -737,6 +765,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
                 : (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim()))
                   ? finalContent.trim()
                   : null
+        try { cb?.flushStreams?.() } catch {}
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
         const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)
@@ -847,6 +876,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         return { messageId: msgId, modelSuggestion }
       } catch (err) {
+        try { cb?.flushStreams?.() } catch {}
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         abortControllers.delete(msgId)
         const isAbort = err.name === 'AbortError' || controller.signal.aborted
@@ -909,8 +939,16 @@ ipcMain.handle('chat:complete', handleChatComplete)
       let thinkingStartedAt = null
       let streamThinkingContent = ''
       let streamThinkingDurationMs = 0
+      let directThinkingBatcher = null
+      let directStreamBatcher = null
       try {
         const wc = getWebContents()
+        directThinkingBatcher = createLeadingBatcher((chunk) => {
+          try { wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta: chunk, done: false }) } catch {}
+        })
+        directStreamBatcher = createLeadingBatcher((chunk) => {
+          try { wc?.send('chat:stream-chunk', { messageId: msgId, delta: chunk, done: false, sessionId }) } catch {}
+        })
         const stream = streamChat({
           provider: p,
           model: m,
@@ -926,7 +964,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
                   thinkingStartedAt = Date.now()
                   try { wc?.send('chat:thinking-start', { messageId: msgId, sessionId, startedAt: thinkingStartedAt }) } catch {}
                 }
-                try { wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta, done: false }) } catch {}
+                directThinkingBatcher.push(delta)
               }
             },
           },
@@ -938,12 +976,15 @@ ipcMain.handle('chat:complete', handleChatComplete)
             // Signal thinking is complete as soon as main content tokens start flowing
             if (hasThinking && !thinkingEnded) {
               thinkingEnded = true
+              directThinkingBatcher.flush()
               const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0; streamThinkingDurationMs += durationMs
               try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
             }
-            try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
+            directStreamBatcher.push(delta)
           }
         }
+        directThinkingBatcher.flush()
+        directStreamBatcher.flush()
         if (hasThinking && !thinkingEnded) {
           thinkingEnded = true
           const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0; streamThinkingDurationMs += durationMs
@@ -1032,6 +1073,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
 
       } catch (err) {
+        try { directThinkingBatcher?.flush(); directStreamBatcher?.flush() } catch {}
         clearTimeout(timeout)
         abortControllers.delete(msgId)
         providerHealth.recordResult(p.id, false)
