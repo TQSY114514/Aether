@@ -463,9 +463,12 @@ describe('Tier 1: Feature Coverage (Features 1 through 13)', () => {
     })
 
     it('T1-F05-02: modern components serve chat and status flows', () => {
-      expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/AgentPlanTrace.tsx'))).toBe(true)
+      expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/AgentTimeline.tsx'))).toBe(true)
+      expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/InlineStepsCard.tsx'))).toBe(true)
       expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/ThinkingBlock.tsx'))).toBe(true)
-      expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/AgentTaskDeck.tsx'))).toBe(true)
+      expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/AgentPlanTrace.tsx'))).toBe(false)
+      expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/TaskCard.tsx'))).toBe(false)
+      expect(fs.existsSync(path.join(REPO_ROOT, 'src/components/chat/AgentTaskDeck.tsx'))).toBe(false)
     })
 
     it('T1-F05-03: ChatWindow.tsx does not depend on dead AgentStatusBar', () => {

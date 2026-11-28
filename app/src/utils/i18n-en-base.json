@@ -1522,5 +1522,12 @@
   "ref.type.command": "Command",
   "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
   "chat.split_run.label": "Split Run",
-  "arena.no_result_error": "No response returned from model (check model and provider configuration)"
+  "arena.no_result_error": "No response returned from model (check model and provider configuration)",
+  "timeline.working": "Working",
+  "timeline.worked_for": "Worked for {0}",
+  "timeline.activity": "Activity",
+  "timeline.steps_progress": "{0}/{1} steps",
+  "timeline.exited_with_code": "Exited with code {0}",
+  "timeline.toggle_activity": "Toggle execution activity",
+  "timeline.toggle_steps": "Toggle steps checklist"
 }
