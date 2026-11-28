@@ -6,6 +6,8 @@
 // IPC — the renderer already has the data.
 // ───────────────────────────────────────────────────────────────────────────
 
+import { t } from './i18n'
+
 export type ArenaScoreRow = {
   id: number
   model_id: number
@@ -127,3 +129,91 @@ export function downloadText(filename: string, content: string, mime = 'text/pla
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
+
+export interface ArenaSlotState {
+  content: string
+  error?: string
+  latency_ms?: number
+  tokens?: number
+  cost?: number
+  done: boolean
+}
+
+export interface RawArenaResultLike {
+  model_id?: number
+  slot_index?: number
+  content?: string
+  error?: string
+  latency_ms?: number
+  usage?: { total_tokens?: number; cost?: number }
+}
+
+export function extractArenaResultsArray(res: unknown): RawArenaResultLike[] {
+  if (Array.isArray(res)) return res as RawArenaResultLike[]
+  if (res && typeof res === 'object' && Array.isArray((res as { results?: unknown }).results)) {
+    return (res as { results: RawArenaResultLike[] }).results
+  }
+  return []
+}
+
+export function toArenaSlotState(r: RawArenaResultLike | undefined, fallbackLatencyMs?: number): ArenaSlotState {
+  if (!r) {
+    return {
+      content: '',
+      error: t('arena.no_result_error', '模型未返回结果（请检查模型与服务商配置）'),
+      latency_ms: fallbackLatencyMs,
+      done: true,
+    }
+  }
+  const rawContent = typeof r.content === 'string' ? r.content : ''
+  const errText = r.error
+    ? String(r.error)
+    : (/^\[Error:\s*(.+)\]$/.exec(rawContent.trim())?.[1] ?? undefined)
+  return {
+    content: errText && !r.error ? rawContent : rawContent,
+    error: errText,
+    latency_ms: r.latency_ms ?? fallbackLatencyMs,
+    tokens: r.usage?.total_tokens,
+    cost: r.usage?.cost,
+    done: true,
+  }
+}
+
+export function normalizeArenaCompareResponse(
+  res: unknown,
+  modelAId: number,
+  modelBId: number,
+  fallbackStartA: number,
+  fallbackStartB: number,
+  now = Date.now()
+): { a: ArenaSlotState; b: ArenaSlotState } {
+  const list = extractArenaResultsArray(res)
+  const used = new Set<number>()
+
+  const pickForSlot = (slotIdx: number, targetModelId: number): RawArenaResultLike | undefined => {
+    const bySlot = list.findIndex((r, idx) => !used.has(idx) && r.slot_index === slotIdx)
+    if (bySlot >= 0) {
+      used.add(bySlot)
+      return list[bySlot]
+    }
+    const byModel = list.findIndex((r, idx) => !used.has(idx) && r.model_id === targetModelId)
+    if (byModel >= 0) {
+      used.add(byModel)
+      return list[byModel]
+    }
+    const byOrder = list.findIndex((_, idx) => !used.has(idx))
+    if (byOrder >= 0) {
+      used.add(byOrder)
+      return list[byOrder]
+    }
+    return undefined
+  }
+
+  const rA = pickForSlot(0, modelAId)
+  const rB = pickForSlot(1, modelBId)
+  return {
+    a: toArenaSlotState(rA, Math.max(0, now - fallbackStartA)),
+    b: toArenaSlotState(rB, Math.max(0, now - fallbackStartB)),
+  }
+}
+

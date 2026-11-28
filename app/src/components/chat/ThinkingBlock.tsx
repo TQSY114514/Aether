@@ -24,6 +24,23 @@ function separateGluedReasoningBlocks(raw: string): string {
   return raw.replace(GLUED_HEADING_RUN, '**\n\n**').replace(GLUED_AFTER_PROSE, '\n\n$1')
 }
 
+function extractPreviewLines(text: string, maxLines = 3): { preview: string; hasMore: boolean } {
+  let pos = -1
+  for (let i = 0; i < maxLines; i++) {
+    pos = text.indexOf('\n', pos + 1)
+    if (pos === -1) return { preview: text, hasMore: false }
+  }
+  return { preview: text.slice(0, pos) + '\n…', hasMore: true }
+}
+
+function countLines(text: string): number {
+  if (!text) return 0
+  let count = 1
+  let pos = -1
+  while ((pos = text.indexOf('\n', pos + 1)) !== -1) count++
+  return count
+}
+
 /**
  * Collapsible extended-thinking / reasoning block (Hermes & Claude Code style).
  * Supports real-time elapsed timer, non-intrusive auto-following scroll,
@@ -95,7 +112,11 @@ export default function ThinkingBlock({
     followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 36
   }, [])
 
-  const cleanText = useMemo(() => separateGluedReasoningBlocks(text), [text])
+  const needsFormattedBody = open || preview
+  const cleanText = useMemo(
+    () => (needsFormattedBody ? separateGluedReasoningBlocks(text) : text),
+    [text, needsFormattedBody]
+  )
 
   // Auto-scroll to bottom only if user hasn't scrolled up to read earlier thoughts
   useEffect(() => {
@@ -119,9 +140,13 @@ export default function ThinkingBlock({
     statusLabel = open ? t('thinking.full', '思考过程') : t('thinking.collapsed', '思考过程')
   }
 
-  const lines = cleanText.split('\n')
-  const previewText = preview && !open ? lines.slice(0, 3).join('\n') + (lines.length > 3 ? '\n…' : '') : cleanText
-  const showPreview = preview && !open && lines.length > 3
+  let previewText = cleanText
+  let showPreview = false
+  if (preview && !open) {
+    const res = extractPreviewLines(cleanText, 3)
+    previewText = res.preview
+    showPreview = res.hasMore
+  }
 
   return (
     <div
@@ -189,7 +214,7 @@ export default function ThinkingBlock({
               className="text-[10px] font-mono pb-1 hover:opacity-75 transition-opacity"
               style={{ color: 'var(--accent)' }}
             >
-              {t('thinking.expand', '展开完整思考过程')} ({lines.length} {t('thinking.lines', '行')})
+              {t('thinking.expand', '展开完整思考过程')} ({countLines(cleanText)} {t('thinking.lines', '行')})
             </button>
           )}
         </div>

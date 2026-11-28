@@ -181,17 +181,21 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
 
   return (
     <div ref={containerRef} className="relative flex items-center gap-0.5 shrink-0 select-none">
-      {/* Context % Ring Pill */}
+      {/* Context % Ring Icon Trigger (clean icon when normal; compact % badge only at >=75% warning) */}
       <button
         type="button"
         onClick={() => setPopoverOpen((v) => !v)}
         aria-expanded={popoverOpen}
         aria-label={tooltipText}
         title={tooltipText}
-        className="h-6.5 px-1.5 rounded-[6px] text-[11px] font-mono flex items-center gap-1.5 hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+        className={
+          pct >= 75
+            ? 'h-6.5 px-1.5 rounded-[6px] text-[10.5px] font-mono flex items-center gap-1 hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer'
+            : 'h-6.5 w-6.5 rounded-[6px] flex items-center justify-center hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer'
+        }
         style={{ color: labelColor }}
       >
-        <svg width="13" height="13" viewBox="0 0 16 16" className="shrink-0 -rotate-90" aria-hidden="true">
+        <svg width="13.5" height="13.5" viewBox="0 0 16 16" className="shrink-0 -rotate-90" aria-hidden="true">
           <circle
             cx="8"
             cy="8"
@@ -213,7 +217,7 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
             className="transition-[stroke-dashoffset] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
           />
         </svg>
-        <span className="tabular-nums font-medium">{pct}%</span>
+        {pct >= 75 && <span className="tabular-nums font-medium">{pct}%</span>}
       </button>
 
       {/* Popover: Token details + One-Click Compact + Outputs Drawer */}
@@ -272,17 +276,17 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
         </div>
       )}
 
-      {/* Snapshot Rollback Trigger (only highlighted when checkpoints exist) */}
+      {/* Snapshot Rollback Trigger (compact icon button when checkpoints exist) */}
       {hasCheckpoints && (
         <button
           type="button"
           onClick={handleQuickRollback}
           disabled={rollingBack}
-          className="h-6.5 px-1.5 rounded-[6px] text-[10.5px] font-mono flex items-center gap-1 hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+          className="h-6.5 w-6.5 rounded-[6px] flex items-center justify-center hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
           title={t('hud.rollback_tooltip')}
+          aria-label={t('hud.rollback_btn')}
         >
-          <RotateCcw size={10.5} className={`shrink-0 ${rollingBack ? 'animate-spin' : ''}`} />
-          <span className="hidden md:inline">{rollingBack ? t('hud.rolling_back') : t('hud.rollback_btn')}</span>
+          <RotateCcw size={12.5} className={`shrink-0 ${rollingBack ? 'animate-spin' : ''}`} />
         </button>
       )}
     </div>

@@ -597,9 +597,9 @@ describe('Tier 1: Feature Coverage (Features 1 through 13)', () => {
     })
 
     it('T1-F11-02: interactive buttons include focus-visible focus ring states', () => {
-      const quickDeck = fs.readFileSync(path.join(REPO_ROOT, 'src/components/sidebar/QuickControlDeck.tsx'), 'utf8')
-      expect(quickDeck).toContain('focus-visible:ring-1')
-      expect(quickDeck).toContain('active:scale-')
+      const sidebar = fs.readFileSync(path.join(REPO_ROOT, 'src/components/sidebar/Sidebar.tsx'), 'utf8')
+      expect(sidebar).toContain('focus-visible:ring-1')
+      expect(sidebar).toContain('active:scale-')
     })
   })
 

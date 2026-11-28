@@ -200,7 +200,7 @@ export function applyTheme(theme: string, hasBackground = false, setCleanup?: (f
 
   // Sync native Window Controls Overlay buttons color with theme
   if (typeof window !== 'undefined' && window.electronAPI?.system?.setTitleBarOverlay) {
-    const isDark = resolved === 'dark' || resolved === 'cyberpunk' || resolved === 'retro'
+    const isDark = resolved === 'dark'
     window.electronAPI.system.setTitleBarOverlay({
       color: '#00000000',
       symbolColor: isDark ? '#E8E8F0' : '#374151',

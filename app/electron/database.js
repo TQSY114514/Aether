@@ -110,10 +110,17 @@ function migrateLegacyPlaintextKeys() {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
+const _tableColumnsCache = new Map();
+
 function getTableColumns(table) {
+  if (_tableColumnsCache.has(table)) {
+    return _tableColumnsCache.get(table);
+  }
   try {
     const rows = db.prepare(`PRAGMA table_info(${table})`).all();
-    return rows.map((row) => row.name);
+    const names = rows.map((row) => row.name);
+    _tableColumnsCache.set(table, names);
+    return names;
   } catch {
     return [];
   }
@@ -146,6 +153,7 @@ const { createEmptyDatabase } = require('./db/schema');
 
 
 function initDatabase() {
+  _tableColumnsCache.clear();
   dbPath = path.join(app.getPath("userData"), "aetherai.db");
   db = createEmptyDatabase(dbPath);
 
@@ -525,6 +533,7 @@ function initDatabase() {
       "INSERT INTO settings (key, value) VALUES ('test_command', '')",
     ).run();
 
+  _tableColumnsCache.clear();
   return db;
 }
 

@@ -274,26 +274,28 @@ export default function App() {
         )}
         <Sidebar />
         <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
-          {currentView !== 'chat' && (
-            <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentView('chat')}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors app-no-drag cursor-pointer"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-                  title={t('chat.mode.normal')}
-                >
-                  <ChevronLeft size={14} />
-                  <span>{t('chat.mode.normal')}</span>
-                </button>
-                <span className="text-sm font-semibold tracking-tight ml-1" style={{ color: 'var(--text-primary)' }}>
-                  {VIEW_TITLES[currentView] ? t(VIEW_TITLES[currentView]) : currentView}
-                </span>
-              </div>
-            </div>
-          )}
           <div key={currentView} className="flex-1 flex flex-col min-h-0 page-fade-in">
-            {renderPage()}
+            {currentView !== 'chat' && (
+              <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentView('chat')}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors app-no-drag cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                    title={t('chat.mode.normal')}
+                  >
+                    <ChevronLeft size={14} />
+                    <span>{t('chat.mode.normal')}</span>
+                  </button>
+                  <span className="text-sm font-semibold tracking-tight ml-1" style={{ color: 'var(--text-primary)' }}>
+                    {VIEW_TITLES[currentView] ? t(VIEW_TITLES[currentView]) : currentView}
+                  </span>
+                </div>
+              </div>
+            )}
+            <div className="flex-1 flex flex-col min-h-0">
+              {renderPage()}
+            </div>
           </div>
         </main>
         <CheckpointTimelineDrawer />

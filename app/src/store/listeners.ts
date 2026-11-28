@@ -2,6 +2,7 @@ import type { StoreApi } from "zustand"
 import type { AppState } from "./types"
 import type { TaskInfo } from "./types"
 import { taskProgressText, taskApi } from "./types"
+import { reconcileMessages } from "./chatSlice"
 import { t } from "../utils/i18n"
 
 // Lazy store reference - set by initStoreListeners() after store creation.
@@ -149,17 +150,14 @@ export function ensureChunkListener() {
         if (st.currentSessionId === sid && !isStopping) {
           window.electronAPI.message.list(sid).then(msgs => {
             if (getStore().getState().currentSessionId === sid) {
-              for (const m of msgs) {
-                if ((m as any).attachment && typeof (m as any).attachment === 'string') {
-                  try {
-                    m.attachment = JSON.parse((m as any).attachment)
-                  } catch {}
-                }
-              }
               getStore().setState((s) => {
                 const next = { ...s.streamingBySession }
                 delete next[sid]
-                return { messages: msgs, streamingBySession: next, sending: Object.keys(next).length > 0 }
+                const filtered = s.chatMode === "arena"
+                  ? msgs.filter((m) => !m.arena_model || m.arena_model === "")
+                  : msgs
+                const { messages: reconciled } = reconcileMessages(s.messages, filtered)
+                return { messages: reconciled, streamingBySession: next, sending: Object.keys(next).length > 0 }
               })
             } else {
               getStore().setState((s) => {

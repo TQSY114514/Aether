@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { Clock, Save, Check } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import AgentSettings from '@/components/settings/AgentSettings'
+import PermissionRulesSettings from '@/components/settings/PermissionRulesSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 
 export default function AgentRuntimeDomain() {
@@ -41,6 +42,9 @@ export default function AgentRuntimeDomain() {
     <div className="space-y-4">
       {/* Core Agent Execution & Workspace Settings */}
       <AgentSettings />
+
+      {/* High-Risk Action & Tool Permission Rules (Global or Session-Scoped) */}
+      <PermissionRulesSettings />
 
       {/* Timeouts & Session Budget Limits */}
       <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>

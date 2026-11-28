@@ -168,11 +168,11 @@ select option {
   50% { opacity: 0.85; }
 }
 @keyframes pageSpringEnter {
-  from { opacity: 0; transform: translateY(8px) scale(0.995); }
+  from { opacity: 0; transform: translateY(12px) scale(0.992); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes tabSlideIn {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes placeholderSlide {
@@ -180,8 +180,8 @@ select option {
   to   { opacity: 0.75; transform: translateY(0); }
 }
 
-.page-fade-in { animation: pageSpringEnter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.tab-fade-in  { animation: tabSlideIn 0.20s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.page-fade-in { animation: pageSpringEnter 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.tab-fade-in  { animation: tabSlideIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-placeholder-slide { animation: placeholderSlide 0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-scale-pop { animation: scalePop 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
@@ -308,14 +308,10 @@ textarea, input {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Hover lift effect for clickable cards */
-.hover-lift { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-.hover-lift:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
-
 /* Context bar */
 .ctx-safe { background: linear-gradient(90deg, var(--accent), var(--accent-hover)); }
-.ctx-warn { background: linear-gradient(90deg, var(--warning), #F97316); }
-.ctx-danger { background: linear-gradient(90deg, var(--error), #DC2626); }
+.ctx-warn { background: linear-gradient(90deg, var(--warning), color-mix(in srgb, var(--warning) 80%, var(--error))); }
+.ctx-danger { background: linear-gradient(90deg, var(--error), color-mix(in srgb, var(--error) 85%, #000)); }
 
 /* Input */
 .input-ring:focus-within {
@@ -331,7 +327,7 @@ textarea, input {
   border-radius: 9999px;
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  transition: all 150ms;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, transform 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms ease;
   cursor: pointer;
 }
 .qaction:hover {
@@ -736,6 +732,14 @@ div[style*="borderLeft: 2px solid"] {
 .popover-scale-up {
   transform-origin: bottom right;
   animation: popoverScaleUp 0.15s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.popover-origin-tl {
+  transform-origin: top left;
+}
+
+.popover-origin-tr {
+  transform-origin: top right;
 }
 
 @keyframes inlineCardEnter {

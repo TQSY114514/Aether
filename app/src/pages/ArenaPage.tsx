@@ -6,23 +6,21 @@
 // High-contrast industrial monochrome style, zero marketing fluff.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useStore } from '@/store'
 import { renderMarkdown } from '@/utils/markdown'
+import { normalizeArenaCompareResponse, toArenaSlotState, type ArenaSlotState } from '@/utils/arenaExport'
 import { t } from '@/utils/i18n'
 import {
   FlaskConical,
   Trophy,
   Play,
-  RotateCcw,
   Check,
   Copy,
   Clock,
-  Coins,
-  Zap,
   ArrowRight,
   Square,
-  Sparkles,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface ModelScoreItem {
@@ -45,9 +43,7 @@ interface BenchmarkTemplate {
 export default function ArenaPage() {
   const [activeTab, setActiveTab] = useState<'compare' | 'benchmark'>('compare')
   const allModels = useStore((s) => s.allModels)
-  const providers = useStore((s) => s.providers)
   const loadAllModels = useStore((s) => s.loadAllModels)
-  const loadProviders = useStore((s) => s.loadProviders)
   const loadScores = useStore((s) => s.loadScores)
   const scores = useStore((s) => s.scores)
 
@@ -57,11 +53,12 @@ export default function ArenaPage() {
   const [prompt, setPrompt] = useState('')
   const [running, setRunning] = useState(false)
   const [results, setResults] = useState<{
-    a: { content: string; latency_ms?: number; tokens?: number; cost?: number; done: boolean }
-    b: { content: string; latency_ms?: number; tokens?: number; cost?: number; done: boolean }
+    a: ArenaSlotState
+    b: ArenaSlotState
   } | null>(null)
   const [votedWinner, setVotedWinner] = useState<'a' | 'b' | 'tie' | 'bad' | null>(null)
   const [copiedSlot, setCopiedSlot] = useState<'a' | 'b' | null>(null)
+  const activeRunIdRef = useRef<number | null>(null)
 
   // Benchmarks list
   const [templates, setTemplates] = useState<BenchmarkTemplate[]>([])
@@ -69,17 +66,23 @@ export default function ArenaPage() {
 
   useEffect(() => {
     loadAllModels()
-    loadProviders()
     loadScores()
-  }, [loadAllModels, loadProviders, loadScores])
+    return () => {
+      if (activeRunIdRef.current != null) {
+        window.electronAPI.arena.stop(activeRunIdRef.current).catch(() => {})
+        activeRunIdRef.current = null
+      }
+    }
+  }, [loadAllModels, loadScores])
 
   // Default models selection
   useEffect(() => {
     if (allModels.length >= 2 && !modelAId && !modelBId) {
       setModelAId(allModels[0].id)
       setModelBId(allModels[1].id)
-    } else if (allModels.length === 1 && !modelAId) {
+    } else if (allModels.length === 1 && !modelAId && !modelBId) {
       setModelAId(allModels[0].id)
+      setModelBId(allModels[0].id)
     }
   }, [allModels, modelAId, modelBId])
 
@@ -99,8 +102,18 @@ export default function ArenaPage() {
   const modelA = useMemo(() => allModels.find((m) => m.id === modelAId) || null, [allModels, modelAId])
   const modelB = useMemo(() => allModels.find((m) => m.id === modelBId) || null, [allModels, modelBId])
 
+  const handleStopCompare = useCallback(async () => {
+    const runId = activeRunIdRef.current
+    if (runId == null) return
+    try {
+      await window.electronAPI.arena.stop(runId)
+    } catch {}
+  }, [])
+
   const handleRunCompare = useCallback(async () => {
     if (!prompt.trim() || !modelAId || !modelBId || running) return
+    const runId = -Date.now()
+    activeRunIdRef.current = runId
     setRunning(true)
     setVotedWinner(null)
     setResults({
@@ -110,90 +123,62 @@ export default function ArenaPage() {
 
     const startA = Date.now()
     const startB = Date.now()
+    const unsubModelDone = window.electronAPI.arena.onModelDone?.((payload) => {
+      if (payload?.sessionId !== runId || activeRunIdRef.current !== runId) return
+      const r = payload.result
+      if (!r) return
+      setResults((prev) => {
+        if (!prev) return prev
+        const nextSlot = toArenaSlotState(r)
+        if (r.slot_index === 0) return { ...prev, a: nextSlot }
+        if (r.slot_index === 1) return { ...prev, b: nextSlot }
+        if (!prev.a.done && r.model_id === modelAId) return { ...prev, a: nextSlot }
+        if (!prev.b.done && r.model_id === modelBId) return { ...prev, b: nextSlot }
+        return prev
+      })
+    })
 
-    // Run parallel stream requests
-    const runSlot = async (
-      model: typeof modelA,
-      slotKey: 'a' | 'b',
-      startTime: number
-    ) => {
-      if (!model) return
-      try {
-        const provider = providers.find((p) => p.id === model.provider_id)
-        if (!provider) throw new Error('Provider not found')
-
-        let accumulated = ''
-        const res = await window.electronAPI.chat.test?.({
-          cwd: undefined,
-          sessionId: undefined,
-          args: undefined,
-        })
-        // Fallback to simple completion via direct completion if stream channel is busy
-        // or invoke arena:send
-      } catch (err: any) {
-        setResults((prev) =>
-          prev
-            ? {
-                ...prev,
-                [slotKey]: {
-                  content: `Error: ${err.message || 'Generation failed'}`,
-                  latency_ms: Date.now() - startTime,
-                  done: true,
-                },
-              }
-            : null
-        )
-      }
-    }
-
-    // Call arena:send for true unified dual-model run
     try {
       const arenaRes = await window.electronAPI.arena.send({
-        sessionId: 0,
+        sessionId: runId,
         content: prompt.trim(),
         modelIds: [modelAId, modelBId],
       })
-      if (Array.isArray(arenaRes)) {
-        const rA = arenaRes.find((r: any) => r.model_id === modelAId) || arenaRes[0]
-        const rB = arenaRes.find((r: any) => r.model_id === modelBId) || arenaRes[1]
-        setResults({
-          a: {
-            content: rA?.content || '',
-            latency_ms: rA?.latency_ms || Date.now() - startA,
-            tokens: rA?.usage?.total_tokens,
-            cost: rA?.usage?.cost,
-            done: true,
-          },
-          b: {
-            content: rB?.content || '',
-            latency_ms: rB?.latency_ms || Date.now() - startB,
-            tokens: rB?.usage?.total_tokens,
-            cost: rB?.usage?.cost,
-            done: true,
-          },
-        })
-      }
+      if (activeRunIdRef.current !== runId) return
+      setResults(normalizeArenaCompareResponse(arenaRes, modelAId, modelBId, startA, startB))
     } catch (err: any) {
-      useStore.getState().triggerToast(`Arena 执行失败: ${err.message}`, 'warning')
+      const msg = err?.message || 'Unknown error'
+      setResults({
+        a: { content: `[Error: ${msg}]`, error: msg, latency_ms: Date.now() - startA, done: true },
+        b: { content: `[Error: ${msg}]`, error: msg, latency_ms: Date.now() - startB, done: true },
+      })
+      useStore.getState().triggerToast(t('arena.exec_failed', msg), 'warning')
     } finally {
+      unsubModelDone?.()
+      if (activeRunIdRef.current === runId) activeRunIdRef.current = null
       setRunning(false)
     }
-  }, [prompt, modelAId, modelBId, running, modelA, modelB, providers])
+  }, [prompt, modelAId, modelBId, running])
 
   const handleVote = useCallback(
     async (verdict: 'a' | 'b' | 'tie' | 'bad') => {
       if (!modelA || !modelB || votedWinner) return
       setVotedWinner(verdict)
       try {
-        let winnerModelId = modelA.id
-        let winnerModelName = modelA.model_name
-        let loserModelIds = [modelB.id]
-        let loserModelNames = [modelB.model_name]
-        if (verdict === 'b') {
+        let winnerModelId: number | null = null
+        let winnerModelName = verdict === 'tie' ? 'TIE' : 'BOTH_BAD'
+        let loserModelIds: number[] = []
+        let loserModelNames: string[] = []
+        if (verdict === 'a') {
+          winnerModelId = modelA.id
+          winnerModelName = modelA.model_name
+          loserModelIds = modelB.id !== modelA.id ? [modelB.id] : []
+          loserModelNames = modelB.id !== modelA.id ? [modelB.model_name] : []
+        } else if (verdict === 'b') {
           winnerModelId = modelB.id
           winnerModelName = modelB.model_name
-          loserModelIds = [modelA.id]
-          loserModelNames = [modelA.model_name]
+          loserModelIds = modelA.id !== modelB.id ? [modelA.id] : []
+          loserModelNames = modelA.id !== modelB.id ? [modelA.model_name] : []
         }
         await window.electronAPI.arena.vote({
           prompt: prompt.trim() || 'Arena Battle',
@@ -203,18 +188,22 @@ export default function ArenaPage() {
           loserModelNames,
         })
         loadScores()
-        useStore.getState().triggerToast('投票成功，已更新 ELO 基准排行', 'success')
+        useStore.getState().triggerToast(
+          verdict === 'a' || verdict === 'b' ? t('arena.vote_success') : t('arena.vote_recorded'),
+          'success'
+        )
       } catch (err: any) {
-        useStore.getState().triggerToast(`投票失败: ${err.message}`, 'warning')
+        setVotedWinner(null)
+        useStore.getState().triggerToast(t('arena.vote_failed', err.message), 'warning')
       }
     },
-    [modelA, modelB, votedWinner, loadScores]
+    [modelA, modelB, votedWinner, loadScores, prompt]
   )
 
   const handleReplayTemplate = (tpl: BenchmarkTemplate) => {
     setPrompt(tpl.prompt)
     setActiveTab('compare')
-    useStore.getState().triggerToast(`已载入基准用例: ${tpl.name}`, 'info')
+    useStore.getState().triggerToast(t('arena.template_loaded', tpl.name), 'info')
   }
 
   const handleCopySlot = (slot: 'a' | 'b', text: string) => {
@@ -244,10 +233,10 @@ export default function ArenaPage() {
           </div>
           <div>
             <h1 className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-              Arena / 竞技场
+              {t('arena.page.title')}
             </h1>
             <p className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
-              同屏双模型客观对比 · 个人基准 ELO 胜率排定
+              {t('arena.page.subtitle')}
             </p>
           </div>
         </div>
@@ -265,7 +254,7 @@ export default function ArenaPage() {
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            Multi-Model Compare
+            {t('arena.tab.compare')}
           </button>
           <button
             onClick={() => setActiveTab('benchmark')}
@@ -275,13 +264,13 @@ export default function ArenaPage() {
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            Benchmark & ELO ({leaderboard.length})
+            {t('arena.tab.benchmark')} ({leaderboard.length})
           </button>
         </div>
       </div>
 
       {activeTab === 'compare' ? (
-        <div className="p-6 max-w-6xl mx-auto w-full space-y-4">
+        <div key="compare" className="p-6 max-w-6xl mx-auto w-full space-y-4 tab-fade-in">
           {/* Controls Bar: Model Selectors & Run */}
           <div
             className="p-3 rounded-lg border grid grid-cols-1 md:grid-cols-12 gap-3 items-center"
@@ -297,10 +286,10 @@ export default function ArenaPage() {
                 className="flex-1 h-7.5 text-xs font-mono px-2.5 rounded-md border outline-none bg-[var(--bg-secondary)] hover:bg-[var(--content-bg)] transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
-                <option value="" disabled>选择 Model A</option>
+                <option value="" disabled>{t('arena.select_model_a')}</option>
                 {allModels.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.display_name || m.model_name}
+                    {m.display_name || m.model_name}{m.provider_name ? ` (${m.provider_name})` : ''}
                   </option>
                 ))}
               </select>
@@ -320,10 +309,10 @@ export default function ArenaPage() {
                 className="flex-1 h-7.5 text-xs font-mono px-2.5 rounded-md border outline-none bg-[var(--bg-secondary)] hover:bg-[var(--content-bg)] transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
-                <option value="" disabled>选择 Model B</option>
+                <option value="" disabled>{t('arena.select_model_b')}</option>
                 {allModels.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.display_name || m.model_name}
+                    {m.display_name || m.model_name}{m.provider_name ? ` (${m.provider_name})` : ''}
                   </option>
                 ))}
               </select>
@@ -338,100 +327,91 @@ export default function ArenaPage() {
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="输入测试提示词（例如：编写一段 TypeScript 并发限制器，或解释两阶段提交协议）…"
+              placeholder={t('arena.prompt_placeholder')}
               rows={3}
               className="w-full text-xs font-mono leading-relaxed bg-transparent outline-none resize-y placeholder:text-[var(--text-muted)]"
               style={{ color: 'var(--text-primary)' }}
             />
             <div className="flex items-center justify-between pt-1 border-t border-[var(--border)]">
               <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                {prompt.length} 字符 · 支持 Markdown 与多行代码
+                {t('arena.prompt_meta', prompt.length)}
               </span>
               <button
-                onClick={handleRunCompare}
-                disabled={!prompt.trim() || !modelAId || !modelBId || running}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium font-mono bg-[var(--text-primary)] text-[var(--bg-primary)] hover:opacity-90 transition-opacity disabled:opacity-30 cursor-pointer"
+                onClick={running ? handleStopCompare : handleRunCompare}
+                disabled={!running && (!prompt.trim() || !modelAId || !modelBId)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium font-mono bg-[var(--text-primary)] text-[var(--bg-primary)] hover:opacity-90 active:opacity-80 focus-visible:outline-2 focus-visible:outline-[var(--accent)] transition-opacity disabled:opacity-30 cursor-pointer"
               >
                 {running ? <Square size={12} className="fill-current" /> : <Play size={12} className="fill-current" />}
-                <span>{running ? '生成对比中...' : '开始对比 (Run Battle)'}</span>
+                <span>{running ? t('arena.stop_battle') : t('arena.start_battle')}</span>
               </button>
             </div>
           </div>
 
           {/* Side-by-Side Results Display */}
           {results && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Slot A */}
-              <div
-                className="rounded-lg border flex flex-col min-h-[300px]"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
-              >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 inline-card-enter">
+              {([
+                { key: 'a' as const, label: modelA?.display_name || modelA?.model_name || 'Model A', slot: results.a },
+                { key: 'b' as const, label: modelB?.display_name || modelB?.model_name || 'Model B', slot: results.b },
+              ]).map(({ key, label, slot }) => (
                 <div
-                  className="px-3.5 py-2 border-b flex items-center justify-between shrink-0"
-                  style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
+                  key={key}
+                  className="rounded-lg border flex flex-col min-h-[300px]"
+                  style={{ borderColor: slot.error ? 'var(--error)' : 'var(--border)', backgroundColor: 'var(--content-bg)' }}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold font-mono" style={{ color: 'var(--text-primary)' }}>
-                      {modelA?.model_name || 'Model A'}
-                    </span>
-                    {results.a.latency_ms && (
-                      <span className="text-[10px] font-mono text-[var(--text-muted)] flex items-center gap-1">
-                        <Clock size={10} /> {results.a.latency_ms}ms
+                  <div
+                    className="px-3.5 py-2 border-b flex items-center justify-between shrink-0"
+                    style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-semibold font-mono truncate" style={{ color: 'var(--text-primary)' }}>
+                        {label}
                       </span>
+                      {slot.latency_ms != null && slot.done && (
+                        <span className="text-[10px] font-mono text-[var(--text-muted)] flex items-center gap-1 shrink-0">
+                          <Clock size={10} /> {slot.latency_ms}ms
+                        </span>
+                      )}
+                      {slot.tokens != null && slot.tokens > 0 && (
+                        <span className="text-[10px] font-mono text-[var(--text-muted)] shrink-0">
+                          {slot.tokens} tok
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleCopySlot(key, slot.content)}
+                      disabled={!slot.content}
+                      className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+                      title={t('arena.copy_reply')}
+                      aria-label={t('arena.copy_reply')}
+                    >
+                      {copiedSlot === key ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
+                    </button>
+                  </div>
+                  <div className="p-4 flex-1 text-xs leading-relaxed overflow-y-auto max-h-[500px] break-words prose-container">
+                    {slot.error ? (
+                      <div className="flex items-start gap-2 text-xs font-mono p-2.5 rounded border" style={{ color: 'var(--error)', borderColor: 'var(--error)', backgroundColor: 'var(--bg-secondary)' }}>
+                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                        <span className="break-all">{slot.error}</span>
+                      </div>
+                    ) : !slot.done && !slot.content ? (
+                      <div className="text-xs font-mono text-[var(--text-muted)] animate-pulse">
+                        {t('arena.generating')}
+                      </div>
+                    ) : slot.content ? (
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: renderMarkdown(slot.content),
+                        }}
+                      />
+                    ) : (
+                      <div className="text-xs font-mono text-[var(--text-muted)]">
+                        {t('arena.empty_response')}
+                      </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleCopySlot('a', results.a.content)}
-                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                    title="复制回复"
-                  >
-                    {copiedSlot === 'a' ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                  </button>
                 </div>
-                <div className="p-4 flex-1 text-xs leading-relaxed overflow-y-auto max-h-[500px] break-words prose-container">
-                  <div
-                    dangerouslySetInnerHTML={{
-                      __html: renderMarkdown(results.a.content || (running ? '生成中...' : '无内容')),
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Slot B */}
-              <div
-                className="rounded-lg border flex flex-col min-h-[300px]"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
-              >
-                <div
-                  className="px-3.5 py-2 border-b flex items-center justify-between shrink-0"
-                  style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold font-mono" style={{ color: 'var(--text-primary)' }}>
-                      {modelB?.model_name || 'Model B'}
-                    </span>
-                    {results.b.latency_ms && (
-                      <span className="text-[10px] font-mono text-[var(--text-muted)] flex items-center gap-1">
-                        <Clock size={10} /> {results.b.latency_ms}ms
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleCopySlot('b', results.b.content)}
-                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                    title="复制回复"
-                  >
-                    {copiedSlot === 'b' ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                  </button>
-                </div>
-                <div className="p-4 flex-1 text-xs leading-relaxed overflow-y-auto max-h-[500px] break-words prose-container">
-                  <div
-                    dangerouslySetInnerHTML={{
-                      __html: renderMarkdown(results.b.content || (running ? '生成中...' : '无内容')),
-                    }}
-                  />
-                </div>
-              </div>
+              ))}
             </div>
           )}
 
@@ -442,12 +422,12 @@ export default function ArenaPage() {
               style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
             >
               <div className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
-                {votedWinner ? '已完成本轮裁决 · ELO 积分已同步写入' : '裁决本次对比表现：'}
+                {votedWinner ? t('arena.vote_done') : t('arena.vote_prompt')}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleVote('a')}
-                  disabled={!!votedWinner}
+                  disabled={!!votedWinner || running}
                   className={`px-3 py-1 rounded text-xs font-mono border transition-colors cursor-pointer ${
                     votedWinner === 'a'
                       ? 'bg-[var(--text-primary)] text-[var(--bg-primary)] font-semibold'
@@ -455,11 +435,11 @@ export default function ArenaPage() {
                   }`}
                   style={{ borderColor: 'var(--border)' }}
                 >
-                  Model A 胜出
+                  {t('arena.vote_a_wins')}
                 </button>
                 <button
                   onClick={() => handleVote('b')}
-                  disabled={!!votedWinner}
+                  disabled={!!votedWinner || running}
                   className={`px-3 py-1 rounded text-xs font-mono border transition-colors cursor-pointer ${
                     votedWinner === 'b'
                       ? 'bg-[var(--text-primary)] text-[var(--bg-primary)] font-semibold'
@@ -467,11 +447,11 @@ export default function ArenaPage() {
                   }`}
                   style={{ borderColor: 'var(--border)' }}
                 >
-                  Model B 胜出
+                  {t('arena.vote_b_wins')}
                 </button>
                 <button
                   onClick={() => handleVote('tie')}
-                  disabled={!!votedWinner}
+                  disabled={!!votedWinner || running}
                   className={`px-3 py-1 rounded text-xs font-mono border transition-colors cursor-pointer ${
                     votedWinner === 'tie'
                       ? 'bg-[var(--text-primary)] text-[var(--bg-primary)] font-semibold'
@@ -479,11 +459,11 @@ export default function ArenaPage() {
                   }`}
                   style={{ borderColor: 'var(--border)' }}
                 >
-                  势均力敌 (Tie)
+                  {t('arena.vote_tie')}
                 </button>
                 <button
                   onClick={() => handleVote('bad')}
-                  disabled={!!votedWinner}
+                  disabled={!!votedWinner || running}
                   className={`px-3 py-1 rounded text-xs font-mono border transition-colors cursor-pointer ${
                     votedWinner === 'bad'
                       ? 'bg-[var(--text-primary)] text-[var(--bg-primary)] font-semibold'
@@ -491,7 +471,7 @@ export default function ArenaPage() {
                   }`}
                   style={{ borderColor: 'var(--border)' }}
                 >
-                  均不理想
+                  {t('arena.vote_both_bad')}
                 </button>
               </div>
             </div>
@@ -499,7 +479,7 @@ export default function ArenaPage() {
         </div>
       ) : (
         /* Benchmark & ELO Leaderboard Tab */
-        <div className="p-6 max-w-6xl mx-auto w-full space-y-6">
+        <div key="benchmark" className="p-6 max-w-6xl mx-auto w-full space-y-6 tab-fade-in">
           {/* ELO Leaderboard */}
           <div
             className="rounded-lg border overflow-hidden"
@@ -512,33 +492,33 @@ export default function ArenaPage() {
               <div className="flex items-center gap-2">
                 <Trophy size={14} className="text-[var(--accent)]" />
                 <h2 className="text-xs font-semibold font-mono" style={{ color: 'var(--text-primary)' }}>
-                  Personal Model ELO Leaderboard (个人模型天梯)
+                  {t('arena.elo.title')}
                 </h2>
               </div>
               <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                基准分 1500 · 依据个人盲测对比实时收敛
+                {t('arena.elo.subtitle')}
               </span>
             </div>
 
             <table className="w-full text-left text-xs font-mono">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-                  <th className="py-2.5 px-4 font-medium w-16">Rank</th>
-                  <th className="py-2.5 px-4 font-medium">Model</th>
-                  <th className="py-2.5 px-4 font-medium">ELO Rating</th>
-                  <th className="py-2.5 px-4 font-medium">Win Ratio</th>
+                  <th className="py-2.5 px-4 font-medium w-16">{t('arena.elo.col_rank')}</th>
+                  <th className="py-2.5 px-4 font-medium">{t('arena.elo.col_model')}</th>
+                  <th className="py-2.5 px-4 font-medium">{t('arena.elo.col_rating')}</th>
+                  <th className="py-2.5 px-4 font-medium">{t('arena.elo.col_win_ratio')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
                 {leaderboard.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-6 text-center text-xs text-[var(--text-muted)]">
-                      暂无对比积分数据，进行第一轮对决后将自动记录
+                      {t('arena.elo.empty')}
                     </td>
                   </tr>
                 ) : (
                   leaderboard.map((item, idx) => (
-                    <tr key={item.model_id} className="hover:bg-[var(--bg-secondary)]/50 transition-colors">
+                    <tr key={`${item.model_id}-${(item as { intent?: string }).intent || idx}`} className="hover:bg-[var(--bg-secondary)]/50 transition-colors">
                       <td className="py-2.5 px-4 font-semibold text-[var(--text-muted)]">
                         #{idx + 1}
                       </td>
@@ -568,17 +548,17 @@ export default function ArenaPage() {
               style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
             >
               <span className="text-xs font-semibold font-mono" style={{ color: 'var(--text-primary)' }}>
-                Preset Engineering Benchmark Tasks (预设工程基准题库)
+                {t('arena.bench.title')}
               </span>
               <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                一键载入对比
+                {t('arena.bench.hint')}
               </span>
             </div>
 
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
               {templates.length === 0 ? (
                 <div className="col-span-2 py-4 text-center text-xs text-[var(--text-muted)] font-mono">
-                  {loadingTemplates ? '载入基准题库中...' : '标准工程题库已内置于 prompt 中，可直接在对决栏键入测试'}
+                  {loadingTemplates ? t('arena.bench.loading') : t('arena.bench.empty')}
                 </div>
               ) : (
                 templates.map((tpl) => (
@@ -600,7 +580,7 @@ export default function ArenaPage() {
                       onClick={() => handleReplayTemplate(tpl)}
                       className="flex items-center gap-1 text-[11px] font-mono text-[var(--accent)] hover:underline pt-1 cursor-pointer"
                     >
-                      <span>载入对比</span>
+                      <span>{t('arena.bench.load')}</span>
                       <ArrowRight size={11} />
                     </button>
                   </div>

@@ -37,7 +37,12 @@ if not exist "node_modules" (
     )
 )
 
-:: Build frontend if not already built
+:: Build frontend only if missing or --build is requested
+if "%~1"=="--build" goto do_build
+if not exist "dist\index.html" goto do_build
+goto after_build
+
+:do_build
 echo.
 echo [2/2] Building frontend...
 call npx vite build --logLevel error
@@ -45,6 +50,8 @@ if %ERRORLEVEL% neq 0 (
   echo [!] Build failed
   pause & exit /b 1
 )
+
+:after_build
 
 :: Ensure Windows icons and AppUserModelID shortcut exist
 if not exist "resources\icon.ico" (

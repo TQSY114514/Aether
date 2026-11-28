@@ -210,26 +210,33 @@ function writeCodeUnderstanding(db, graph) {
   const edges = (graph && graph.edges) || []
   let nodeCount = 0
   let edgeCount = 0
+  const hasPrepare = typeof db.prepare === 'function'
+  const selectNodeStmt = hasPrepare ? db.prepare('SELECT id FROM kg_nodes WHERE entity = ? LIMIT 1') : null
+  const updateNodeStmt = hasPrepare ? db.prepare('UPDATE kg_nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?') : null
+  const insertNodeStmt = hasPrepare ? db.prepare('INSERT INTO kg_nodes (entity, type) VALUES (?, ?)') : null
+  const insertEdgeStmt = hasPrepare ? db.prepare('INSERT OR REPLACE INTO kg_edges ("from", "to", relation, confidence) VALUES (?, ?, ?, ?)') : null
+
   const nodeByEntity = (entity) => {
+    if (selectNodeStmt) return selectNodeStmt.get(entity) || null
     if (db.allRows) {
       const rows = db.allRows('SELECT id FROM kg_nodes WHERE entity = ? LIMIT 1', [entity])
       return rows && rows[0] ? rows[0] : null
     }
-    const row = db.prepare('SELECT id FROM kg_nodes WHERE entity = ? LIMIT 1').get(entity)
-    return row || null
+    return null
   }
-  try {
+
+  const runWrites = () => {
     for (const node of nodes) {
       const entity = String(node.entity || '').trim().toLowerCase()
       if (!entity) continue
       const type = String(node.type || 'entity')
       const existing = nodeByEntity(entity)
       if (existing) {
-        if (db.run) db.run('UPDATE kg_nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [type, existing.id])
-        else db.prepare('UPDATE kg_nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(type, existing.id)
+        if (updateNodeStmt) updateNodeStmt.run(type, existing.id)
+        else if (db.run) db.run('UPDATE kg_nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [type, existing.id])
       } else {
-        if (db.run) db.run('INSERT INTO kg_nodes (entity, type) VALUES (?, ?)', [entity, type])
-        else db.prepare('INSERT INTO kg_nodes (entity, type) VALUES (?, ?)').run(entity, type)
+        if (insertNodeStmt) insertNodeStmt.run(entity, type)
+        else if (db.run) db.run('INSERT INTO kg_nodes (entity, type) VALUES (?, ?)', [entity, type])
       }
       nodeCount++
     }
@@ -239,13 +246,19 @@ function writeCodeUnderstanding(db, graph) {
       const relation = String(edge.relation || 'related')
       if (!from || !to) continue
       const confidence = Math.max(0, Math.min(1, Number(edge.confidence) || 0.8))
-      if (db.run) {
+      if (insertEdgeStmt) {
+        insertEdgeStmt.run(from, to, relation, confidence)
+      } else if (db.run) {
         db.run('INSERT OR REPLACE INTO kg_edges ("from", "to", relation, confidence) VALUES (?, ?, ?, ?)', [from, to, relation, confidence])
-      } else {
-        db.prepare('INSERT OR REPLACE INTO kg_edges ("from", "to", relation, confidence) VALUES (?, ?, ?, ?)').run(from, to, relation, confidence)
       }
       edgeCount++
     }
+  }
+
+  try {
+    const tx = typeof db.transaction === 'function' ? db.transaction(runWrites) : null
+    if (tx) tx()
+    else runWrites()
   } catch (e) {
     log.warn('codeUnderstanding: write failed:', e && e.message)
   }
@@ -271,6 +284,84 @@ function indexWorkspace(db, rootDir, options = {}) {
   }
 }
 
+/**
+ * Non-blocking chunked variant of indexWorkspace for hot chat-send paths.
+ * Yields to the Electron main event loop between file reads so UI IPC and
+ * streaming never stall ("Not Responding") on medium/large repositories.
+ */
+async function indexWorkspaceAsync(db, rootDir, options = {}) {
+  if (!db || !rootDir) return { nodes: 0, edges: 0, skipped: true }
+  const key = path.resolve(rootDir).toLowerCase()
+  const ttl = options.ttl != null ? options.ttl : 5 * 60 * 1000
+  const last = _indexed.get(key)
+  if (last && (Date.now() - last) < ttl) return { nodes: 0, edges: 0, skipped: true }
+  _indexed.set(key, Date.now())
+
+  const yieldLoop = () => new Promise((r) => setImmediate(r))
+  try {
+    await yieldLoop()
+    const files = listSourceFiles(rootDir, options)
+    const relFiles = files.map((f) => path.relative(rootDir, f).replace(/\\/g, '/'))
+    const nodeSet = new Map()
+    const edgeSet = new Set()
+    const nodes = []
+    const edges = []
+
+    const addNode = (entity, type) => {
+      entity = String(entity || '').trim().toLowerCase()
+      if (!entity) return
+      if (!nodeSet.has(entity)) {
+        nodeSet.set(entity, { entity, type })
+        nodes.push({ entity, type })
+      }
+    }
+    const addEdge = (from, to, relation, confidence = 0.8) => {
+      from = String(from || '').toLowerCase()
+      to = String(to || '').toLowerCase()
+      if (!from || !to || from === to) return
+      const edgeKey = `${from}|${to}|${relation}`
+      if (edgeSet.has(edgeKey)) return
+      edgeSet.add(edgeKey)
+      edges.push({ from, to, relation, confidence })
+    }
+
+    const maxFiles = options.maxFiles || 500
+    const chunkSize = options.chunkSize || 15
+    let scanned = 0
+    for (const file of files) {
+      if (scanned >= maxFiles) break
+      scanned++
+      const rel = path.relative(rootDir, file).replace(/\\/g, '/')
+      const ext = path.extname(file).toLowerCase()
+      if (!ext) continue
+      addNode(rel, 'file')
+
+      let content
+      try {
+        content = (await fs.promises.readFile(file, 'utf8')).slice(0, 200000)
+      } catch {
+        continue
+      }
+      const relDir = path.posix.dirname(rel)
+      for (const spec of moduleImports(content, ext)) {
+        const target = resolveImportTarget(relFiles, relDir, spec)
+        if (target) addEdge(rel, target, 'imports', 0.9)
+      }
+      for (const sym of extractSymbols(content)) {
+        addNode(sym, 'symbol')
+        addEdge(rel, sym, 'references', 0.6)
+      }
+      if (scanned % chunkSize === 0) await yieldLoop()
+    }
+
+    await yieldLoop()
+    return { ...writeCodeUnderstanding(db, { nodes, edges, fileCount: relFiles.length }), skipped: false }
+  } catch (e) {
+    log.warn('codeUnderstanding: async index failed:', e && e.message)
+    return { nodes: 0, edges: 0, skipped: false }
+  }
+}
+
 module.exports = {
   DEFAULT_IGNORE_DIRS,
   DEFAULT_EXTENSIONS,
@@ -284,4 +375,5 @@ module.exports = {
   buildCodeUnderstanding: buildGraphUnderstanding,
   writeCodeUnderstanding,
   indexWorkspace,
+  indexWorkspaceAsync,
 }

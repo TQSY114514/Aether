@@ -1,6 +1,5 @@
-// Lazy-load highlight.js: deferred until a code block is first encountered.
-// Import from `lib/core` + selective languages so Rollup can tree-shake the
-// 360 unused languages out of the bundle.
+// Lazy-load highlight.js: keep top 5 common languages eager for instant sync
+// rendering, and dynamically import the remaining 18 languages on first encounter.
 
 import hljsCore from 'highlight.js/lib/core'
 import createDOMPurify from 'dompurify'
@@ -9,49 +8,59 @@ import ts from 'highlight.js/lib/languages/typescript'
 import py from 'highlight.js/lib/languages/python'
 import bash from 'highlight.js/lib/languages/bash'
 import json from 'highlight.js/lib/languages/json'
-import yaml from 'highlight.js/lib/languages/yaml'
-import xml from 'highlight.js/lib/languages/xml'
-import css from 'highlight.js/lib/languages/css'
-import md from 'highlight.js/lib/languages/markdown'
-import sql from 'highlight.js/lib/languages/sql'
-import rust from 'highlight.js/lib/languages/rust'
-import go from 'highlight.js/lib/languages/go'
-import java from 'highlight.js/lib/languages/java'
-import cpp from 'highlight.js/lib/languages/cpp'
-import csharp from 'highlight.js/lib/languages/csharp'
-import php from 'highlight.js/lib/languages/php'
-import dockerfile from 'highlight.js/lib/languages/dockerfile'
-import diff from 'highlight.js/lib/languages/diff'
-import graphql from 'highlight.js/lib/languages/graphql'
-import ini from 'highlight.js/lib/languages/ini'
-import proto from 'highlight.js/lib/languages/protobuf'
-import lua from 'highlight.js/lib/languages/lua'
-import ruby from 'highlight.js/lib/languages/ruby'
 
-// Register ~25 languages so Rollup includes only those + core.
+// Register top-5 core languages eagerly so common blocks render immediately.
 hljsCore.registerLanguage('javascript', js)
 hljsCore.registerLanguage('typescript', ts)
 hljsCore.registerLanguage('python', py)
 hljsCore.registerLanguage('bash', bash)
 hljsCore.registerLanguage('json', json)
-hljsCore.registerLanguage('yaml', yaml)
-hljsCore.registerLanguage('xml', xml)
-hljsCore.registerLanguage('css', css)
-hljsCore.registerLanguage('markdown', md)
-hljsCore.registerLanguage('sql', sql)
-hljsCore.registerLanguage('rust', rust)
-hljsCore.registerLanguage('go', go)
-hljsCore.registerLanguage('java', java)
-hljsCore.registerLanguage('cpp', cpp)
-hljsCore.registerLanguage('csharp', csharp)
-hljsCore.registerLanguage('ruby', ruby)
-hljsCore.registerLanguage('php', php)
-hljsCore.registerLanguage('dockerfile', dockerfile)
-hljsCore.registerLanguage('diff', diff)
-hljsCore.registerLanguage('graphql', graphql)
-hljsCore.registerLanguage('ini', ini)
-hljsCore.registerLanguage('protobuf', proto)
-hljsCore.registerLanguage('lua', lua)
+
+const LANG_LOADERS: Record<string, () => Promise<{ default: any }>> = {
+  yaml: () => import('highlight.js/lib/languages/yaml'),
+  xml: () => import('highlight.js/lib/languages/xml'),
+  css: () => import('highlight.js/lib/languages/css'),
+  markdown: () => import('highlight.js/lib/languages/markdown'),
+  sql: () => import('highlight.js/lib/languages/sql'),
+  rust: () => import('highlight.js/lib/languages/rust'),
+  go: () => import('highlight.js/lib/languages/go'),
+  java: () => import('highlight.js/lib/languages/java'),
+  cpp: () => import('highlight.js/lib/languages/cpp'),
+  csharp: () => import('highlight.js/lib/languages/csharp'),
+  php: () => import('highlight.js/lib/languages/php'),
+  dockerfile: () => import('highlight.js/lib/languages/dockerfile'),
+  diff: () => import('highlight.js/lib/languages/diff'),
+  graphql: () => import('highlight.js/lib/languages/graphql'),
+  ini: () => import('highlight.js/lib/languages/ini'),
+  protobuf: () => import('highlight.js/lib/languages/protobuf'),
+  lua: () => import('highlight.js/lib/languages/lua'),
+  ruby: () => import('highlight.js/lib/languages/ruby'),
+}
+const _loadingLangs = new Map<string, Promise<void>>()
+
+function ensureHljsLanguage(langId: string): boolean {
+  if (!langId) return false
+  if (hljsCore.getLanguage(langId)) return true
+  const loader = LANG_LOADERS[langId]
+  if (!loader) return false
+  if (!_loadingLangs.has(langId)) {
+    _loadingLangs.set(
+      langId,
+      loader()
+        .then((mod) => {
+          if (mod?.default && !hljsCore.getLanguage(langId)) {
+            hljsCore.registerLanguage(langId, mod.default)
+            _highlightVersion++
+            notifyHighlightListeners()
+          }
+        })
+        .catch(() => {
+          _loadingLangs.delete(langId)
+        })
+    )
+  }
+  return false
+}
 
 // Some providers stream reasoning through native channel markers instead of the
 // <think> family seen below in the adapter: `<|channel>thought ... <channel|>`.
@@ -71,6 +80,18 @@ let _hljs: typeof hljsCore | null = null
 let _hljsLoading: Promise<void> | null = null
 let _highlightVersion = 0
 let _hljsCssLoaded = false
+const _highlightListeners = new Set<() => void>()
+
+function notifyHighlightListeners() {
+  for (const cb of _highlightListeners) {
+    try { cb() } catch {}
+  }
+}
+
+export function subscribeHighlightReady(cb: () => void): () => void {
+  _highlightListeners.add(cb)
+  return () => { _highlightListeners.delete(cb) }
+}
 
 async function loadHljsCss() {
   if (_hljsCssLoaded) return
@@ -94,7 +115,87 @@ function loadHljs() {
 // remembered the last input, so alternating between two messages re-parsed
 // both on every render. LRU keeps hot messages cached.
 const _mdCache = new Map<string, { html: string; version: number }>()
-const MD_CACHE_SIZE = 16
+const MD_CACHE_SIZE = 128
+
+export function getHighlightVersion(): number {
+  return _highlightVersion
+}
+
+/**
+ * Split streaming markdown into immutable finalized top-level blocks and the active
+ * trailing block so only the active tail is re-parsed on incoming tokens.
+ * Respects fenced code blocks (``` / ~~~) and block math ($$).
+ */
+export function splitMarkdownBlocks(rawText: string): { committed: string[]; tail: string } {
+  const text = stripChannelMarkers(rawText || '')
+  if (!text) return { committed: [], tail: '' }
+
+  const lines = text.split('\n')
+  const blocks: string[] = []
+  let buf: string[] = []
+  let fenceChar: string | null = null
+  let fenceLen = 0
+  let inMath = false
+  let pendingBreak = false
+
+  const flushBlock = () => {
+    const joined = buf.join('\n').trim()
+    if (joined) blocks.push(joined)
+    buf = []
+    pendingBreak = false
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (!fenceChar && !inMath) {
+      const fenceMatch = /^\s*(`{3,}|~{3,})/.exec(line)
+      if (fenceMatch) {
+        if (pendingBreak && buf.length > 0) flushBlock()
+        pendingBreak = false
+        fenceChar = fenceMatch[1][0]
+        fenceLen = fenceMatch[1].length
+        buf.push(line)
+        continue
+      }
+      if (trimmed === '$$') {
+        if (pendingBreak && buf.length > 0) flushBlock()
+        pendingBreak = false
+        inMath = true
+        buf.push(line)
+        continue
+      }
+      if (trimmed === '') {
+        if (buf.length > 0) pendingBreak = true
+        continue
+      }
+      if (pendingBreak) {
+        flushBlock()
+      }
+      buf.push(line)
+    } else if (fenceChar) {
+      buf.push(line)
+      const closeRe = new RegExp(`^\\s*${fenceChar}{${fenceLen},}\\s*$`)
+      if (closeRe.test(line)) {
+        fenceChar = null
+        fenceLen = 0
+      }
+    } else {
+      // Inside block math $$ ... $$
+      buf.push(line)
+      if (trimmed === '$$') {
+        inMath = false
+      }
+    }
+  }
+
+  const tailRaw = buf.join('\n')
+  if (blocks.length === 0) {
+    return { committed: [], tail: tailRaw }
+  }
+  return { committed: blocks, tail: tailRaw }
+}
 
 export function renderMarkdown(text: string): string {
   if (!text) return ''
@@ -103,13 +204,25 @@ export function renderMarkdown(text: string): string {
   const cached = _mdCache.get(text)
   if (cached && cached.version === _highlightVersion) return cached.html
   const html = _hljs
-    ? renderInner(text, _hljs)
-    : (() => { const t = renderInner(text, null); loadHljs(); return t })()
+    ? renderInner(text, _hljs, false)
+    : (() => { const t = renderInner(text, null, false); loadHljs(); return t })()
   if (_mdCache.size >= MD_CACHE_SIZE) {
     _mdCache.delete(_mdCache.keys().next().value!)
   }
   _mdCache.set(text, { html, version: _highlightVersion })
   return html
+}
+
+/**
+ * Lightweight renderer for the active streaming tail: skips hljs.highlightAuto
+ * and does not pollute the persistent LRU message cache with transient deltas.
+ */
+export function renderMarkdownTail(text: string): string {
+  if (!text) return ''
+  const cleaned = stripChannelMarkers(text)
+  if (!cleaned) return ''
+  if (!_hljs) loadHljs()
+  return renderInner(cleaned, _hljs, true)
 }
 
 // Map common shorthand language names to hljs language IDs.
@@ -176,7 +289,7 @@ const RE_BLOCK = /<(table|pre|blockquote|hr|h[2-5]|ul|ol)[^>]*>[\s\S]*?<\/(table
 const RE_P_DOUBLE = /\n\n/g
 const RE_P_SINGLE = /\n/g
 
-function renderInner(raw: string, hljs: typeof hljsCore | null): string {
+function renderInner(raw: string, hljs: typeof hljsCore | null, skipAutoHighlight = false): string {
   let t = raw
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -198,10 +311,21 @@ function renderInner(raw: string, hljs: typeof hljsCore | null): string {
     let highlighted = trimmed
     if (hljs) {
       const hlLang = HL_LANGS[lang.toLowerCase()] || lang
-      try {
-        const result = hljs.highlight(trimmed, { language: hlLang, ignoreIllegals: true })
-        highlighted = result.value
-      } catch {
+      if (hlLang) {
+        const ready = hljs.getLanguage(hlLang) ? true : ensureHljsLanguage(hlLang)
+        if (ready) {
+          try {
+            const result = hljs.highlight(trimmed, { language: hlLang, ignoreIllegals: true })
+            highlighted = result.value
+          } catch {
+            if (!skipAutoHighlight) {
+              try { highlighted = hljs.highlightAuto(trimmed).value } catch { /* plain */ }
+            }
+          }
+        } else if (!LANG_LOADERS[hlLang] && !skipAutoHighlight) {
+          try { highlighted = hljs.highlightAuto(trimmed).value } catch { /* plain */ }
+        }
+      } else if (!skipAutoHighlight) {
         try { highlighted = hljs.highlightAuto(trimmed).value } catch { /* plain */ }
       }
     }

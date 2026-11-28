@@ -2,7 +2,7 @@ import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
 import { useStore } from '@/store'
 import MessageBubble from './MessageBubble'
 import EmptyState from './EmptyState'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown, renderMarkdownTail, splitMarkdownBlocks, getHighlightVersion } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert, Star, Check, Sparkles } from 'lucide-react'
@@ -19,17 +19,28 @@ const EMPTY_ARRAY: any[] = []
 
 // Lightweight streaming bubble: rendered inside the message flow, updated via
 // direct DOM writes to avoid re-rendering ChatWindow on every streaming token.
-// Also renders live thinking/reasoning blocks above the main content so the
-// user can watch the model reason in real time (before the main reply arrives).
+// Splits markdown into immutable finalized blocks (appended once) + an active
+// trailing block so long responses render in O(1) per update without O(N^2) churn.
 function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBottom: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const bubbleRef = useRef<HTMLDivElement>(null)
+  const committedRef = useRef<HTMLDivElement>(null)
+  const tailRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLElement | null>(null)
   const rafRef = useRef<number>(0)
   const thinkingRafRef = useRef<number>(0)
-  const mdRafRef = useRef<number>(0)
+  const mdTimerRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
   const lastMdRenderTimeRef = useRef<number>(0)
   const activeMidRef = useRef<number | null>(null)
+  const committedCountRef = useRef<number>(0)
+  const committedHlVerRef = useRef<number>(getHighlightVersion())
+
+  // Dedupe refs to avoid scheduling React re-renders when auxiliary metadata hasn't changed
+  const lastDurRef = useRef<number | null>(null)
+  const lastStartRef = useRef<number | null>(null)
+  const lastToolCallsRef = useRef<any[]>(EMPTY_ARRAY)
+  const lastThinkingTextRef = useRef<string>('')
+  const lastThinkingStreamingRef = useRef<boolean>(false)
 
   // Live streaming states: React state so blocks re-render on each new chunk/step.
   const [thinkingText, setThinkingText] = useState('')
@@ -38,7 +49,40 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null)
   const [toolCalls, setToolCalls] = useState<any[]>(EMPTY_ARRAY)
 
+  const renderIncrementalContent = useCallback((rawContent: string) => {
+    const committedEl = committedRef.current
+    const tailEl = tailRef.current
+    if (!committedEl || !tailEl) return
+
+    const { committed, tail } = splitMarkdownBlocks(rawContent)
+    const hlVer = getHighlightVersion()
+    if (hlVer !== committedHlVerRef.current || committed.length < committedCountRef.current) {
+      committedEl.innerHTML = ''
+      committedCountRef.current = 0
+      committedHlVerRef.current = hlVer
+    }
+
+    if (committed.length > committedCountRef.current) {
+      const frag = document.createDocumentFragment()
+      const scratch = document.createElement('div')
+      for (let i = committedCountRef.current; i < committed.length; i++) {
+        scratch.innerHTML = renderMarkdown(committed[i])
+        while (scratch.firstChild) frag.appendChild(scratch.firstChild)
+      }
+      committedEl.appendChild(frag)
+      committedCountRef.current = committed.length
+    }
+
+    tailEl.innerHTML = renderMarkdownTail(tail)
+  }, [])
+
   const resetLocalState = useCallback(() => {
+    lastThinkingTextRef.current = ''
+    lastThinkingStreamingRef.current = false
+    lastDurRef.current = null
+    lastStartRef.current = null
+    lastToolCallsRef.current = EMPTY_ARRAY
+    committedCountRef.current = 0
     setThinkingText('')
     setThinkingStreaming(false)
     setThinkingDuration(null)
@@ -46,15 +90,66 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     setToolCalls(EMPTY_ARRAY)
     lastLenRef.current = 0
     lastMdRenderTimeRef.current = 0
-    if (ref.current) ref.current.innerHTML = ''
+    if (committedRef.current) committedRef.current.innerHTML = ''
+    if (tailRef.current) tailRef.current.innerHTML = ''
   }, [])
 
   useEffect(() => {
     resetLocalState()
     activeMidRef.current = null
+    scrollerRef.current = null
   }, [sessionId, resetLocalState])
 
   useEffect(() => {
+    const scrollToBottomSoon = () => {
+      if (!isAtBottom) return
+      if (rafRef.current) return
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0
+        if (!scrollerRef.current || !scrollerRef.current.isConnected) {
+          scrollerRef.current = ref.current?.closest('.overflow-y-auto') as HTMLElement | null
+        }
+        const scroller = scrollerRef.current
+        if (scroller) scroller.scrollTop = scroller.scrollHeight
+      })
+    }
+
+    const flushMarkdown = (mid: number | null) => {
+      const latestBuf = useStore.getState().streamingBySession[sessionId]
+      if (!latestBuf || (mid != null && latestBuf.messageId !== mid) || activeMidRef.current !== mid) return
+      lastMdRenderTimeRef.current = performance.now()
+      renderIncrementalContent(latestBuf.content)
+      scrollToBottomSoon()
+    }
+
+    const initialState = useStore.getState()
+    const initialBuf = initialState.streamingBySession[sessionId]
+    if (initialBuf) {
+      const initMid = initialBuf.messageId != null ? initialBuf.messageId : null
+      if (initMid != null) {
+        activeMidRef.current = initMid
+        const t = initialState.thinkingBlocksByMessage[initMid]
+        if (t !== undefined) {
+          lastThinkingTextRef.current = t
+          setThinkingText(t)
+          const sf = !initialBuf.content
+          lastThinkingStreamingRef.current = sf
+          setThinkingStreaming(sf)
+        }
+        const d = initialState.thinkingDurationsByMessage[initMid] ?? null
+        if (d !== lastDurRef.current) { lastDurRef.current = d; setThinkingDuration(d) }
+        const st = initialState.thinkingStartsByMessage[initMid] ?? null
+        if (st !== lastStartRef.current) { lastStartRef.current = st; setThinkingStartedAt(st) }
+        const tc = initialState.toolCallsByMessage[initMid] || EMPTY_ARRAY
+        if (tc !== lastToolCallsRef.current) { lastToolCallsRef.current = tc; setToolCalls(tc) }
+      }
+      if (initialBuf.content) {
+        lastLenRef.current = initialBuf.content.length
+        lastMdRenderTimeRef.current = performance.now()
+        renderIncrementalContent(initialBuf.content)
+      }
+    }
+
     const unsub = useStore.subscribe((s) => {
       const buf = s.streamingBySession[sessionId]
       if (!buf) return
@@ -67,83 +162,86 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       if (mid != null) {
         activeMidRef.current = mid
 
-        // Thinking stream with RAF throttling to prevent UI thrashing
+        // Thinking stream with RAF throttling + equality checks to prevent React churn
         const thinking = s.thinkingBlocksByMessage[mid]
-        if (thinking !== undefined) {
-          cancelAnimationFrame(thinkingRafRef.current)
-          thinkingRafRef.current = requestAnimationFrame(() => {
-            thinkingRafRef.current = 0
-            const latestBuf = useStore.getState().streamingBySession[sessionId]
-            if (!latestBuf || latestBuf.messageId !== mid || activeMidRef.current !== mid) return
-            const latestThinking = useStore.getState().thinkingBlocksByMessage[mid] ?? thinking
-            setThinkingText(latestThinking)
-            setThinkingStreaming(!latestBuf.content)
-          })
+        const nextThinkingStreaming = !buf.content
+        if (thinking !== undefined && (thinking !== lastThinkingTextRef.current || nextThinkingStreaming !== lastThinkingStreamingRef.current)) {
+          if (!thinkingRafRef.current) {
+            thinkingRafRef.current = requestAnimationFrame(() => {
+              thinkingRafRef.current = 0
+              const st = useStore.getState()
+              const latestBuf = st.streamingBySession[sessionId]
+              if (!latestBuf || latestBuf.messageId !== mid || activeMidRef.current !== mid) return
+              const latestThinking = st.thinkingBlocksByMessage[mid] ?? ''
+              const latestStreamFlag = !latestBuf.content
+              if (latestThinking !== lastThinkingTextRef.current) {
+                lastThinkingTextRef.current = latestThinking
+                setThinkingText(latestThinking)
+              }
+              if (latestStreamFlag !== lastThinkingStreamingRef.current) {
+                lastThinkingStreamingRef.current = latestStreamFlag
+                setThinkingStreaming(latestStreamFlag)
+              }
+            })
+          }
         }
 
         const dur = s.thinkingDurationsByMessage[mid] ?? null
+        if (dur !== lastDurRef.current) {
+          lastDurRef.current = dur
+          setThinkingDuration(dur)
+        }
         const start = s.thinkingStartsByMessage[mid] ?? null
-        setThinkingDuration(dur)
-        setThinkingStartedAt(start)
+        if (start !== lastStartRef.current) {
+          lastStartRef.current = start
+          setThinkingStartedAt(start)
+        }
 
-        // Tool calls in progress or completed
         const tc = s.toolCallsByMessage[mid] || EMPTY_ARRAY
-        setToolCalls(tc)
+        if (tc !== lastToolCallsRef.current) {
+          lastToolCallsRef.current = tc
+          setToolCalls(tc)
+        }
       }
 
-      // -- Main content: Throttled RAF real-time Markdown rendering --
-      // High token rates (>40 tok/s) can trigger 60+ DOMPurify + regex re-parses/sec.
-      // Coalescing to a 50ms window eliminates frame drops while keeping typing fluid.
-      if (!ref.current) return
+      // -- Main content: Incremental block DOM render + adaptive throttling --
+      if (!committedRef.current || !tailRef.current) return
       const newLen = buf.content.length
       if (newLen === lastLenRef.current) return
       lastLenRef.current = newLen
 
+      const approxTailLen = Math.max(0, newLen - committedCountRef.current * 120)
+      const minInterval = approxTailLen > 4000 ? 140 : approxTailLen > 1500 ? 95 : 65
       const now = performance.now()
-      if (now - lastMdRenderTimeRef.current >= 50) {
+      const elapsed = now - lastMdRenderTimeRef.current
+      if (elapsed >= minInterval) {
+        if (mdTimerRef.current) {
+          window.clearTimeout(mdTimerRef.current)
+          mdTimerRef.current = 0
+        }
         lastMdRenderTimeRef.current = now
-        cancelAnimationFrame(mdRafRef.current)
-        mdRafRef.current = 0
-        ref.current.innerHTML = renderMarkdown(buf.content)
-      } else if (!mdRafRef.current) {
-        mdRafRef.current = requestAnimationFrame(() => {
-          mdRafRef.current = 0
-          if (!ref.current) return
-          const latestBuf = useStore.getState().streamingBySession[sessionId]
-          if (!latestBuf || latestBuf.messageId !== mid || activeMidRef.current !== mid) return
-          lastMdRenderTimeRef.current = performance.now()
-          ref.current.innerHTML = renderMarkdown(latestBuf.content)
-        })
-      }
-
-      if (bubbleRef.current) {
-        bubbleRef.current.style.minHeight = ''
-        bubbleRef.current.style.minHeight = bubbleRef.current.scrollHeight + 'px'
-      }
-      if (isAtBottom) {
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = 0
-          const scroller = ref.current?.closest('.overflow-y-auto') as HTMLElement | null
-          if (scroller) {
-            scroller.scrollTop = scroller.scrollHeight
-          }
-        })
+        renderIncrementalContent(buf.content)
+        scrollToBottomSoon()
+      } else if (!mdTimerRef.current) {
+        mdTimerRef.current = window.setTimeout(() => {
+          mdTimerRef.current = 0
+          flushMarkdown(mid)
+        }, Math.max(16, minInterval - elapsed))
       }
     })
     return () => {
       unsub()
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current)
-      if (mdRafRef.current) cancelAnimationFrame(mdRafRef.current)
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0 }
+      if (thinkingRafRef.current) { cancelAnimationFrame(thinkingRafRef.current); thinkingRafRef.current = 0 }
+      if (mdTimerRef.current) { window.clearTimeout(mdTimerRef.current); mdTimerRef.current = 0 }
     }
-  }, [sessionId, isAtBottom, resetLocalState])
+  }, [sessionId, isAtBottom, resetLocalState, renderIncrementalContent])
 
   return (
     <div id={`msg-streaming-${sessionId}`} className="w-full flex flex-col message-enter py-3">
       <div className="w-full">
         {/* Assistant Content Stream — Quiet Precision typography without clunky [AI] box */}
-        <div ref={bubbleRef} className="w-full text-[13.5px] leading-[1.7] tracking-[-0.005em] break-words relative">
+        <div className="w-full text-[13.5px] leading-[1.7] tracking-[-0.005em] break-words relative">
           <AgentTimeline
             thinkingText={thinkingText || undefined}
             thinkingStreaming={thinkingStreaming}
@@ -152,7 +250,10 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
             toolCalls={toolCalls.length > 0 ? toolCalls : undefined}
             streaming
           />
-          <div ref={ref} className="mc typing-cursor" />
+          <div ref={ref} className="mc">
+            <div ref={committedRef} />
+            <div ref={tailRef} className="typing-cursor" />
+          </div>
         </div>
       </div>
     </div>
@@ -273,7 +374,7 @@ export default function ChatWindow() {
     const onFocus = () => {
       const st = useStore.getState()
       if (currentSessionId && !st.streamingBySession[currentSessionId]) {
-        loadMessages(currentSessionId)
+        loadMessages(currentSessionId, { silentIfUnchanged: true })
       }
     }
     window.addEventListener('focus', onFocus)
@@ -567,7 +668,7 @@ export default function ChatWindow() {
             >
               <div className="flex items-center gap-2 min-w-0">
                 <Sparkles size={13} className="shrink-0 text-[var(--accent)]" />
-                <span className="truncate">检测到可复用工作流: {distillProposal.topic}</span>
+                <span className="truncate">{t('chat.distill.detected', distillProposal.topic)}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
@@ -579,30 +680,30 @@ export default function ChatWindow() {
                         clusterIds: distillProposal.clusterIds,
                       })
                       if (res.success) {
-                        useStore.getState().triggerToast(`已生成技能草稿: ${res.draft?.name || 'SKILL.md'}`, 'success')
+                        useStore.getState().triggerToast(t('chat.distill.draft_created', res.draft?.name || 'SKILL.md'), 'success')
                         useStore.getState().dismissDistillProposal(currentSessionId!)
                       } else {
-                        useStore.getState().triggerToast(res.error || '生成失败', 'warning')
+                        useStore.getState().triggerToast(res.error || t('chat.distill.failed'), 'warning')
                       }
                     } catch (err: any) {
-                      useStore.getState().triggerToast(err.message || '生成失败', 'warning')
+                      useStore.getState().triggerToast(err.message || t('chat.distill.failed'), 'warning')
                     } finally {
                       setIsDistilling(false)
                     }
                   }}
                   disabled={isDistilling}
-                  className="px-2.5 py-1 rounded-[5px] border text-[11px] font-medium bg-[var(--content-bg)] hover:bg-[var(--border)]/40 transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-2.5 py-1 rounded-[5px] border text-[11px] font-medium bg-[var(--content-bg)] hover:bg-[var(--border)]/40 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                 >
-                  {isDistilling ? '生成中...' : '生成 SKILL.md'}
+                  {isDistilling ? t('chat.distill.generating') : t('chat.distill.generate')}
                 </button>
                 <button
                   onClick={() => {
                     if (currentSessionId) useStore.getState().dismissDistillProposal(currentSessionId)
                   }}
-                  className="px-2 py-1 rounded-[5px] text-[11px] hover:bg-[var(--border)]/40 transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  className="px-2 py-1 rounded-[5px] text-[11px] hover:bg-[var(--border)]/40 transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                 >
-                  忽略
+                  {t('chat.distill.ignore')}
                 </button>
               </div>
             </div>
@@ -621,7 +722,7 @@ export default function ChatWindow() {
               setIsAtBottom(true)
               scrollToBottom(true)
             }}
-            className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium shadow-md hover:border-[var(--accent)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-all cursor-pointer"
+            className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium shadow-md hover:border-[var(--accent)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors transition-transform cursor-pointer"
             style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             aria-label={t('chat.scroll_to_bottom', '回到最新回复')}
           >

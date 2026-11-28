@@ -97,6 +97,8 @@ export interface ArenaResult {
   model_name: string
   provider_name: string
   content: string
+  error?: string
+  slot_index?: number
   latency_ms?: number
   variant?: string | null
   temperature?: number | null

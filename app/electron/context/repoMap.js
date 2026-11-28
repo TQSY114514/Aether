@@ -15,7 +15,7 @@
 
 const fs = require('fs')
 const path = require('path')
-const { execSync } = require('child_process')
+const { execSync, execFile } = require('child_process')
 const { scanWorkspace } = require('./fileScanner')
 const { extractFile } = require('./symbolExtractor')
 
@@ -36,24 +36,46 @@ function toPosix(p) {
  * @returns {{ changed: Set<string>, deleted: Set<string> } | null} relPaths (posix),
  *   or null when git is unavailable / rootDir is not a repo.
  */
+function parseGitStatusPorcelain(out) {
+  const changed = new Set()
+  const deleted = new Set()
+  for (const line of String(out).split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    const status = t.slice(0, 2)
+    const rel = t.slice(3).split(' -> ')[0].trim() // renames: "old -> new"
+    if (status.startsWith('D')) deleted.add(toPosix(rel))
+    else changed.add(toPosix(rel))
+  }
+  return { changed, deleted }
+}
+
 function getChangedFiles(rootDir) {
   try {
     const opts = { cwd: rootDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 8 * 1024 * 1024 }
-    const changed = new Set()
-    const deleted = new Set()
     const out = execSync('git status --porcelain', opts)
-    for (const line of String(out).split('\n')) {
-      const t = line.trim()
-      if (!t) continue
-      const status = t.slice(0, 2)
-      const rel = t.slice(3).split(' -> ')[0].trim() // renames: "old -> new"
-      if (status.startsWith('D')) deleted.add(toPosix(rel))
-      else changed.add(toPosix(rel))
-    }
-    return { changed, deleted }
+    return parseGitStatusPorcelain(out)
   } catch {
     return null // not a git repo or git unavailable
   }
+}
+
+function getChangedFilesAsync(rootDir) {
+  return new Promise((resolve) => {
+    try {
+      execFile(
+        'git',
+        ['status', '--porcelain'],
+        { cwd: rootDir, encoding: 'utf-8', windowsHide: true, timeout: 4000, maxBuffer: 8 * 1024 * 1024 },
+        (err, stdout) => {
+          if (err) return resolve(null)
+          try { resolve(parseGitStatusPorcelain(stdout)) } catch { resolve(null) }
+        }
+      )
+    } catch {
+      resolve(null)
+    }
+  })
 }
 
 /**
@@ -132,8 +154,9 @@ async function generateRepoMap(rootDir, options = {}) {
   }
 
   // Determine changed files (git first, fall back to mtime).
-  const git = getChangedFiles(rootDir)
+  const git = await getChangedFilesAsync(rootDir)
   const extractionByAbs = new Map()
+  let extractedSinceYield = 0
 
   for (const f of files) {
     const rel = toPosix(f.relPath)
@@ -149,6 +172,11 @@ async function generateRepoMap(rootDir, options = {}) {
       if (extraction) {
         entry.fileCache.set(f.absPath, { mtime: f.modified, extraction })
         extractionByAbs.set(f.absPath, extraction)
+      }
+      extractedSinceYield++
+      if (extractedSinceYield >= 25) {
+        extractedSinceYield = 0
+        await new Promise((r) => setImmediate(r))
       }
     }
   }
@@ -417,7 +445,7 @@ async function isIndexStale(rootDir) {
   const entry = _cache.get(rootDir)
   if (!entry) return true
   // If git reports no changes, the cached map is still valid.
-  const git = getChangedFiles(rootDir)
+  const git = await getChangedFilesAsync(rootDir)
   if (git && git.changed.size === 0 && git.deleted.size === 0) return false
   try {
     const files = await scanWorkspace(rootDir)

@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
 import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X, Maximize2 } from 'lucide-react'
-import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
+import { renderMarkdown, sanitizeHtml, getHighlightVersion, subscribeHighlightReady } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
@@ -15,6 +15,65 @@ import SubagentDeck from './SubagentDeck'
 import ImageLightboxModal from './ImageLightboxModal'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+
+const ForkContinueActions = memo(function ForkContinueActions({
+  messageId,
+  isStreaming,
+  isAborted = false,
+  showEdit = false,
+  onStartEdit,
+  forkSession,
+  continueMessage,
+}: {
+  messageId: number
+  isStreaming: boolean
+  isAborted?: boolean
+  showEdit?: boolean
+  onStartEdit?: () => void
+  forkSession: (id: number) => void
+  continueMessage?: () => void
+}) {
+  const sending = useStore((s) => s.sending)
+  return (
+    <>
+      {!isStreaming && showEdit && onStartEdit && (
+        <button
+          onClick={onStartEdit}
+          disabled={sending}
+          className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          title={t('chat.edit')}
+          aria-label={t('chat.edit')}
+        >
+          <Pencil size={12} />
+        </button>
+      )}
+      {!isStreaming && (
+        <button
+          className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          title={t('chat.fork')}
+          aria-label={t('chat.fork')}
+          onClick={() => forkSession(messageId)}
+          disabled={sending}
+        >
+          <GitFork size={12} />
+        </button>
+      )}
+      {isAborted && !isStreaming && continueMessage && (
+        <button
+          className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-opacity transition-transform press-scale hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+          title={t('chat.continue_tooltip')}
+          aria-label={t('chat.continue')}
+          onClick={() => continueMessage()}
+          disabled={sending}
+        >
+          <Play size={10} />
+          <span>{t('chat.continue')}</span>
+        </button>
+      )}
+    </>
+  )
+})
 
 /** Render one conversation message with its rich content and status metadata. */
 function MessageBubble({ message, searchHighlight, active }: { message: Message; searchHighlight?: string; active?: boolean }) {
@@ -43,7 +102,6 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
     return list.filter((img: any) => Boolean(img?.preview))
   }, [attachment])
 
-  const sending = useStore(s => s.sending)
   const bubbleWidth = useStore(s => s.bubbleWidth)
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
@@ -59,6 +117,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const editMessage = useStore(s => s.editMessage)
   const continueMessage = useStore(s => s.continueMessage)
   const forkSession = useStore(s => s.forkSession)
+  const sending = useStore(s => s.sending)
 
   const [memoryPopoverOpen, setMemoryPopoverOpen] = useState(false)
   const [pinnedHitIds, setPinnedHitIds] = useState<Set<number>>(new Set())
@@ -104,11 +163,18 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
 
   const startEdit = useCallback(() => { setDraft(message.content); setEditing(true) }, [message.content])
   const submitEdit = useCallback(async () => {
+    if (sending) return
     const c = draft.trim()
     if (!c || c === message.content) { setEditing(false); return }
     setEditing(false)
     await editMessage(message.id, c)
-  }, [draft, message.id, message.content, editMessage])
+  }, [sending, draft, message.id, message.content, editMessage])
+
+  const [hlVersion, setHlVersion] = useState(getHighlightVersion)
+  useEffect(() => {
+    if (!message.content || !message.content.includes('```')) return
+    return subscribeHighlightReady(() => setHlVersion(getHighlightVersion()))
+  }, [message.content])
 
   const onBubbleClick = useCallback((e: React.MouseEvent) => {
     const fold = (e.target as HTMLElement).closest('.code-fold') as HTMLElement | null
@@ -165,7 +231,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
 
   const renderedContent = useMemo(() => {
     return renderContent(message.content)
-  }, [renderContent, message.content])
+  }, [renderContent, message.content, hlVersion])
 
 
   return (
@@ -187,7 +253,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                   onChange={(e) => setDraft(e.target.value)}
                   autoFocus
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) {
                       e.preventDefault()
                       submitEdit()
                     }
@@ -207,8 +273,8 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                   </button>
                   <button
                     onClick={submitEdit}
-                    disabled={sending || !draft.trim()}
-                    className="px-2.5 py-1 text-xs rounded-md text-white disabled:opacity-40 transition-opacity"
+                    disabled={!draft.trim() || sending}
+                    className="px-2.5 py-1 text-xs rounded-md text-white disabled:opacity-40 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                     style={{ backgroundColor: 'var(--accent)' }}
                   >
                     {t('chat.edit.submit')}
@@ -304,7 +370,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               </>
             )}
           </div>
-          <div className="flex items-center gap-1 px-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 px-1 mt-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
             {message.created_at && (
               <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
                 {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -312,34 +378,19 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
             <button
               onClick={handleCopy}
-              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
               title={t('chat.copy')}
               aria-label={t('chat.copy')}
             >
               {copied ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
             </button>
-            {!isStreaming && !editing && (
-              <button
-                onClick={startEdit}
-                disabled={sending}
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30"
-                title={t('chat.edit')}
-                aria-label={t('chat.edit')}
-              >
-                <Pencil size={12} />
-              </button>
-            )}
-            {!isStreaming && (
-              <button
-                onClick={() => forkSession(message.id)}
-                disabled={sending}
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30"
-                title={t('chat.fork')}
-                aria-label={t('chat.fork')}
-              >
-                <GitFork size={12} />
-              </button>
-            )}
+            <ForkContinueActions
+              messageId={message.id}
+              isStreaming={isStreaming}
+              showEdit={!editing}
+              onStartEdit={startEdit}
+              forkSession={forkSession}
+            />
           </div>
         </div>
       ) : (
@@ -522,62 +573,45 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               </div>
             ) : <div />}
 
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ml-auto">
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 ml-auto">
               <button
                 onClick={handleCopy}
-              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
-              title={t('chat.copy')}
-              aria-label={t('chat.copy')}
-            >
-              {copied ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
-            </button>
-            {!isStreaming && !isError && (
-              <button
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
-                title={t('chat.regenerate')}
-                aria-label={t('chat.regenerate')}
-                onClick={() => regenerate()}
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                title={t('chat.copy')}
+                aria-label={t('chat.copy')}
               >
-                <RefreshCw size={12} />
+                {copied ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
               </button>
-            )}
-            {!isStreaming && (
-              <button
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30"
-                title={t('chat.fork')}
-                aria-label={t('chat.fork')}
-                onClick={() => forkSession(message.id)}
-                disabled={sending}
-              >
-                <GitFork size={12} />
-              </button>
-            )}
-            {isAborted && !isStreaming && (
-              <button
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-all press-scale hover:opacity-90"
-                style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
-                title={t('chat.continue_tooltip')}
-                aria-label={t('chat.continue')}
-                onClick={() => continueMessage()}
-                disabled={sending}
-              >
-                <Play size={10} />
-                <span>{t('chat.continue')}</span>
-              </button>
-            )}
-            {isError && !isStreaming && (
-              <button
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-all press-scale hover:opacity-90 shadow-sm"
-                style={{ backgroundColor: 'var(--error)', color: '#fff' }}
-                title={t('chat.retry')}
-                aria-label={t('chat.retry')}
-                onClick={() => regenerate()}
-              >
-                <RefreshCw size={10} />
-                <span>{t('chat.retry')}</span>
-              </button>
-            )}
-          </div>
+              {!isStreaming && !isError && (
+                <button
+                  className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                  title={t('chat.regenerate')}
+                  aria-label={t('chat.regenerate')}
+                  onClick={() => regenerate()}
+                >
+                  <RefreshCw size={12} />
+                </button>
+              )}
+              <ForkContinueActions
+                messageId={message.id}
+                isStreaming={isStreaming}
+                isAborted={isAborted}
+                forkSession={forkSession}
+                continueMessage={continueMessage}
+              />
+              {isError && !isStreaming && (
+                <button
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-opacity transition-transform press-scale hover:opacity-90 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                  style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+                  title={t('chat.retry')}
+                  aria-label={t('chat.retry')}
+                  onClick={() => regenerate()}
+                >
+                  <RefreshCw size={10} />
+                  <span>{t('chat.retry')}</span>
+                </button>
+              )}
+            </div>
         </div>
         </div>
       )}
