@@ -46,7 +46,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         cfg.modelId = defModel.id
       }
     }
-    if (s.defaultPersonaId !== null && s.defaultPersonaId !== undefined && s.defaultPersonaId > 0) {
+    if (s.defaultPersonaId !== null && s.defaultPersonaId !== undefined) {
       cfg.personaId = s.defaultPersonaId
     }
     if (!cfg.providerId && enabledProviders.length > 0) {
@@ -213,11 +213,22 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     const existing = get().sessionConfigs[id] || { providerId: null, modelId: null, personaId: null, workspace: null }
     const updated = { ...existing, ...partial }
     await window.electronAPI.session.setConfig(id, updated)
+    set((s) => ({
+      sessionConfigs: { ...s.sessionConfigs, [id]: updated },
+      ...(partial.workspace !== undefined
+        ? {
+            sessions: s.sessions.map((sess) =>
+              sess.id === id ? { ...sess, cwd: partial.workspace || undefined } : sess,
+            ),
+          }
+        : {}),
+    }))
     if (partial.workspace !== undefined) {
       try { await window.electronAPI.agent.setWorkspace({ dir: partial.workspace, sessionId: id }) } catch {}
-      get().loadWorkspaceSoul(partial.workspace || null)
+      if (get().currentSessionId === id) {
+        get().loadWorkspaceSoul(partial.workspace || null)
+      }
     }
-    set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [id]: updated } }))
   },
 
   deleteSession: async (id) => {

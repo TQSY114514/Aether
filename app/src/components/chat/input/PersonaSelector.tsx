@@ -11,6 +11,52 @@ import { t } from '@/utils/i18n'
 import { useStore } from '@/store'
 import type { Persona } from '@/types'
 
+export interface PersonaOptionEntry {
+  id: number
+  domId: string
+}
+
+export type PersonaKeyAction =
+  | { type: 'move'; nextIndex: number }
+  | { type: 'select'; personaId: number; returnFocusToTrigger: boolean }
+  | { type: 'passthrough' }
+
+export function resolvePersonaListKey(params: {
+  key: string
+  optionIds: PersonaOptionEntry[]
+  activeIndex: number
+  disabled: boolean
+  activeRole: string | null
+  activeDomId: string | null
+  isKnownHostElement: boolean
+}): PersonaKeyAction {
+  const { key, optionIds, activeIndex, disabled, activeRole, activeDomId, isKnownHostElement } = params
+  if (optionIds.length === 0) return { type: 'passthrough' }
+  if (key === 'ArrowDown') {
+    return { type: 'move', nextIndex: (activeIndex + 1) % optionIds.length }
+  }
+  if (key === 'ArrowUp') {
+    return { type: 'move', nextIndex: (activeIndex - 1 + optionIds.length) % optionIds.length }
+  }
+  if (key === 'Home') {
+    return { type: 'move', nextIndex: 0 }
+  }
+  if (key === 'End') {
+    return { type: 'move', nextIndex: optionIds.length - 1 }
+  }
+  if (key === 'Enter' || key === ' ') {
+    const isFocusedOption = activeRole === 'option'
+    if (!isKnownHostElement && !isFocusedOption) {
+      return { type: 'passthrough' }
+    }
+    const target = (isFocusedOption && optionIds.find((o) => o.domId === activeDomId)) || optionIds[activeIndex]
+    if (target && !disabled) {
+      return { type: 'select', personaId: target.id, returnFocusToTrigger: isFocusedOption }
+    }
+  }
+  return { type: 'passthrough' }
+}
+
 export interface PersonaSelectorProps {
   currentPersonaId: number | null | undefined
   personas: Persona[]
@@ -29,6 +75,7 @@ export default function PersonaSelector({
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -85,34 +132,48 @@ export default function PersonaSelector({
     const activeOpt = optionIds[activeIndex]
     if (activeOpt?.domId) {
       const el = document.getElementById(activeOpt.domId)
-      el?.scrollIntoView({ block: 'nearest' })
+      el?.scrollIntoView?.({ block: 'nearest' })
     }
   }, [open, activeIndex, optionIds])
 
+  const optionIndexById = useMemo(() => {
+    const map = new Map<number, number>()
+    optionIds.forEach((o, i) => map.set(o.id, i))
+    return map
+  }, [optionIds])
+
   const handleListKeyDown = (e: React.KeyboardEvent) => {
-    if (optionIds.length === 0) return
-    if (e.key === 'ArrowDown') {
+    const activeEl = document.activeElement as HTMLElement | null
+    const activeRole = activeEl?.getAttribute('role') ?? null
+    const isKnownHostElement =
+      !activeEl ||
+      activeEl === e.currentTarget ||
+      activeEl === triggerRef.current ||
+      activeEl === listboxRef.current
+    const action = resolvePersonaListKey({
+      key: e.key,
+      optionIds,
+      activeIndex,
+      disabled,
+      activeRole,
+      activeDomId: activeEl?.id ?? null,
+      isKnownHostElement,
+    })
+    if (action.type === 'move') {
       e.preventDefault()
-      setActiveIndex((i) => (i + 1) % optionIds.length)
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setActiveIndex((i) => (i - 1 + optionIds.length) % optionIds.length)
-    } else if (e.key === 'Home') {
-      e.preventDefault()
-      setActiveIndex(0)
-    } else if (e.key === 'End') {
-      e.preventDefault()
-      setActiveIndex(optionIds.length - 1)
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      const activeEl = document.activeElement as HTMLElement | null
-      if (activeEl && activeEl !== e.currentTarget && !activeEl.getAttribute('role')?.includes('option')) {
-        return
+      setActiveIndex(action.nextIndex)
+      if (activeRole === 'option') {
+        const nextOpt = optionIds[action.nextIndex]
+        if (nextOpt?.domId) {
+          document.getElementById(nextOpt.domId)?.focus?.()
+        }
       }
-      const target = optionIds[activeIndex]
-      if (target && !disabled) {
-        e.preventDefault()
-        onSelect(target.id)
-        setOpen(false)
+    } else if (action.type === 'select') {
+      e.preventDefault()
+      onSelect(action.personaId)
+      setOpen(false)
+      if (action.returnFocusToTrigger) {
+        triggerRef.current?.focus?.()
       }
     }
   }
@@ -123,6 +184,7 @@ export default function PersonaSelector({
     <div ref={containerRef} className="relative flex items-center gap-1 shrink-0" onKeyDown={open ? handleListKeyDown : undefined}>
       <Tooltip text={tooltipText}>
         <button
+          ref={triggerRef}
           type="button"
           disabled={disabled}
           onClick={() => setOpen((prev) => !prev)}
@@ -178,6 +240,10 @@ export default function PersonaSelector({
               role="option"
               aria-selected={isSoulActive}
               disabled={disabled}
+              onFocus={() => {
+                const idx = optionIndexById.get(-1)
+                if (idx !== undefined) setActiveIndex(idx)
+              }}
               onClick={() => {
                 onSelect(-1)
                 setOpen(false)
@@ -202,6 +268,10 @@ export default function PersonaSelector({
             role="option"
             aria-selected={!isSoulActive && (!currentPersonaId || currentPersonaId === 0)}
             disabled={disabled}
+            onFocus={() => {
+              const idx = optionIndexById.get(0)
+              if (idx !== undefined) setActiveIndex(idx)
+            }}
             onClick={() => {
               onSelect(0)
               setOpen(false)
@@ -234,6 +304,10 @@ export default function PersonaSelector({
                 role="option"
                 aria-selected={isSelected}
                 disabled={disabled}
+                onFocus={() => {
+                  const idx = optionIndexById.get(p.id)
+                  if (idx !== undefined) setActiveIndex(idx)
+                }}
                 onClick={() => {
                   onSelect(p.id)
                   setOpen(false)

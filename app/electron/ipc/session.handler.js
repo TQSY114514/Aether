@@ -74,17 +74,29 @@ function registerSessionHandlers(ipcMain, db) {
     // Persist configuration & session CWD atomically before mutating in-memory workspace pin
     const prevCfg = db.getSessionConfig(id)
     const nextCfg = { ...(prevCfg || {}), workspace: canonical }
-    db.setSessionConfig(id, nextCfg)
-
-    try {
+    const persistCwd = () => {
+      db.setSessionConfig(id, nextCfg)
       if (typeof db.setSessionCwd === 'function') {
         db.setSessionCwd(id, canonical)
       } else {
         db.updateSession(id, { cwd: canonical })
       }
-    } catch (err) {
-      try { if (prevCfg != null) db.setSessionConfig(id, prevCfg) } catch {}
-      throw err
+    }
+    const tx = typeof db.transaction === 'function' ? db.transaction(persistCwd) : null
+    if (typeof tx === 'function') {
+      tx()
+    } else {
+      db.setSessionConfig(id, nextCfg)
+      try {
+        if (typeof db.setSessionCwd === 'function') {
+          db.setSessionCwd(id, canonical)
+        } else {
+          db.updateSession(id, { cwd: canonical })
+        }
+      } catch (err) {
+        try { db.setSessionConfig(id, prevCfg ?? null) } catch {}
+        throw err
+      }
     }
 
     try {

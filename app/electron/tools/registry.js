@@ -1830,20 +1830,57 @@ TOOLS.push(
         return JSON.stringify({ ok: false, error: `Refusing to set dangerous or sensitive directory as CWD: ${canonical}` })
       }
       if (ctx?.db && sid != null) {
-        const prevCfg = ctx.db.getSessionConfig?.(sid)
+        const prevCfg = ctx.db.getSessionConfig?.(sid) ?? null
         const prevCwd = getExplicitSessionCwd(ctx.db, sid)
-        try {
+        const nextCfg = { ...(prevCfg || {}), workspace: canonical }
+        const persistBoth = () => {
           if (typeof ctx.db.setSessionCwd === 'function') {
             ctx.db.setSessionCwd(sid, canonical)
           }
-        } catch (err) {
-          return JSON.stringify({ ok: false, error: `Failed to persist session CWD: ${err?.message || String(err)}` })
+          ctx.db.setSessionConfig?.(sid, nextCfg)
         }
-        try {
-          ctx.db.setSessionConfig?.(sid, { ...(prevCfg || {}), workspace: canonical })
-        } catch (err) {
-          try { if (typeof ctx.db.setSessionCwd === 'function' && prevCwd != null) ctx.db.setSessionCwd(sid, prevCwd) } catch {}
-          return JSON.stringify({ ok: false, error: `Failed to persist session config: ${err?.message || String(err)}` })
+        const tx = typeof ctx.db.transaction === 'function' ? ctx.db.transaction(persistBoth) : null
+        if (typeof tx === 'function') {
+          try {
+            tx()
+          } catch (err) {
+            return JSON.stringify({ ok: false, error: `Failed to persist session CWD/config: ${err?.message || String(err)}` })
+          }
+        } else {
+          try {
+            if (typeof ctx.db.setSessionCwd === 'function') {
+              ctx.db.setSessionCwd(sid, canonical)
+            }
+          } catch (err) {
+            return JSON.stringify({ ok: false, error: `Failed to persist session CWD: ${err?.message || String(err)}` })
+          }
+          try {
+            ctx.db.setSessionConfig?.(sid, nextCfg)
+          } catch (err) {
+            let rollbackFailed = false
+            try {
+              if (prevCwd != null) {
+                if (typeof ctx.db.setSessionCwd === 'function') ctx.db.setSessionCwd(sid, prevCwd)
+              } else if (typeof ctx.db.updateSession === 'function') {
+                ctx.db.updateSession(sid, { cwd: null })
+              }
+            } catch {
+              rollbackFailed = true
+            }
+            if (rollbackFailed) {
+              // Dual persistence failure in non-transactional DB: keep in-memory state consistent with persisted CWD
+              if (ctx && typeof ctx === 'object') ctx.cwd = canonical
+              if (sid != null && _hasSessionWorkspace(sid)) {
+                try { setWorkspaceRootForSession(sid, canonical) } catch {}
+              }
+              return JSON.stringify({
+                ok: false,
+                cwd: canonical,
+                error: `Failed to persist session config and rollback failed: ${err?.message || String(err)}`,
+              })
+            }
+            return JSON.stringify({ ok: false, error: `Failed to persist session config: ${err?.message || String(err)}` })
+          }
         }
       }
       if (ctx && typeof ctx === 'object') {

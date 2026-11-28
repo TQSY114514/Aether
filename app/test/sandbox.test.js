@@ -545,4 +545,53 @@ describe('registry 工具接线（读边界 + yolo）', () => {
       expect(sb.isForbiddenCwd('/private/etc')).toBe(true)
     }
   })
+
+  it('change_directory 与 session:set-cwd 在 prevCfg/prevCwd 为 null 时的回滚不写脏默认状态', async () => {
+    const { reg, ws } = await freshRegistry()
+    const cdTool = reg.TOOLS.find((t) => t.name === 'change_directory')
+    const targetDir = mkdtempSync(join(tmpdir(), 'sbx-cd-rb-'))
+    tmpDirs.push(targetDir)
+
+    // 1. Non-transactional DB: prevCwd is null -> rollback clears cwd back to null via updateSession
+    let storedCwd = null
+    const mockDb = {
+      getSessionConfig: () => null,
+      getSession: () => ({ id: 9, cwd: storedCwd, config: null }),
+      setSessionCwd: (_sid, c) => { storedCwd = c },
+      updateSession: (_sid, fields) => { if ('cwd' in fields) storedCwd = fields.cwd },
+      setSessionConfig: () => { throw new Error('disk full') },
+    }
+    const ctx = { cwd: ws, sessionId: 9, db: mockDb }
+    const failRes = JSON.parse(await cdTool.run({ path: targetDir }, ctx))
+    expect(failRes.ok).toBe(false)
+    expect(storedCwd).toBeNull()
+    expect(ctx.cwd).toBe(ws)
+
+    // 2. Transactional DB: throws -> transaction rolls back without partial writes
+    let txCommitted = false
+    const txDb = {
+      getSessionConfig: () => null,
+      getSession: () => ({ id: 9, cwd: null, config: null }),
+      transaction: (fn) => () => { fn(); txCommitted = true },
+      setSessionCwd: () => {},
+      setSessionConfig: () => { throw new Error('tx error') },
+    }
+    const txRes = JSON.parse(await cdTool.run({ path: targetDir }, { cwd: ws, sessionId: 9, db: txDb }))
+    expect(txRes.ok).toBe(false)
+    expect(txCommitted).toBe(false)
+
+    // 3. session:set-cwd handler rollback restores prevCfg=null when setSessionCwd throws
+    const { registerSessionHandlers } = await import('../electron/ipc/session.handler')
+    const handlers = new Map()
+    const fakeIpc = { handle: (ch, fn) => handlers.set(ch, fn) }
+    let persistedCfg = null
+    const handlerDb = {
+      getSessionConfig: () => persistedCfg,
+      setSessionConfig: (_id, cfg) => { persistedCfg = cfg },
+      setSessionCwd: () => { throw new Error('cwd write fail') },
+    }
+    registerSessionHandlers(fakeIpc, handlerDb)
+    expect(() => handlers.get('session:set-cwd')(null, 9, targetDir)).toThrow('cwd write fail')
+    expect(persistedCfg).toBeNull()
+  })
 })

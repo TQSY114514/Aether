@@ -1506,7 +1506,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "zh-CN": {
     "common.browse": "浏览...",
@@ -2923,7 +2924,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "指令",
     "ref.hint": "↑↓ 切换 · Enter/Tab 补全",
     "chat.split_run.label": "双模型对比 (Split Run)",
-    "persona.save_failed": "保存人设失败"
+    "persona.save_failed": "保存人设失败",
+    "persona.default_auto": "自动（若存在项目 SOUL.md 则自动启用）"
   },
   "es": {
     "app.name": "Aether",
@@ -4156,7 +4158,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "ja": {
     "app.name": "Aether",
@@ -5389,7 +5392,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "自動（プロジェクトの SOUL.md があれば使用）"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -6635,7 +6639,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "令",
     "ref.hint": "↑↓ 擇選 · Enter/Tab 補全",
     "chat.split_run.label": "雙器並較 (Split Run)",
-    "persona.save_failed": "存人設未果"
+    "persona.save_failed": "存人設未果",
+    "persona.default_auto": "自動（有 SOUL.md 則從之）"
   },
   "fr": {
     "app.name": "Aether",
@@ -7868,7 +7873,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "de": {
     "app.name": "Aether",
@@ -9101,7 +9107,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "pt": {
     "app.name": "Aether",
@@ -10334,7 +10341,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "ru": {
     "app.name": "Aether",
@@ -11567,7 +11575,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -12817,7 +12826,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.review_collapse_all": "收合全部差異",
     "chat.review_copy_path": "複製檔案路徑",
     "chat.review_path_copied": "路徑已複製",
-    "persona.save_failed": "儲存人設失敗"
+    "persona.save_failed": "儲存人設失敗",
+    "persona.default_auto": "自動（若存在專案 SOUL.md 則自動啟用）"
   },
   "ar": {
     "app.name": "Aether",
@@ -14050,7 +14060,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "uk": {
     "app.name": "Aether",
@@ -15283,7 +15294,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "ko": {
     "app.name": "Aether",
@@ -16516,7 +16528,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   },
   "hi": {
     "app.name": "Aether",
@@ -17749,7 +17762,8 @@ const translations: Record<string, Record<string, string>> = {
     "ref.type.command": "Command",
     "ref.hint": "↑↓ Navigate · Enter/Tab Complete",
     "chat.split_run.label": "Split Run",
-    "persona.save_failed": "Failed to save persona"
+    "persona.save_failed": "Failed to save persona",
+    "persona.default_auto": "Auto (use project SOUL.md if present)"
   }
 }
 

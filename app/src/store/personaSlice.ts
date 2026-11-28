@@ -22,9 +22,9 @@ export const createPersonaSlice: StateCreator<AppState, [], [], Partial<AppState
     const sess = currentSessionId ? sessions.find(s => s.id === currentSessionId) : null
     const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
     const expectedWs = sess?.cwd || cfg?.workspace || null
-    const ws = workspaceRoot !== undefined ? workspaceRoot : expectedWs
+    const targetWs = workspaceRoot !== undefined ? workspaceRoot : expectedWs
     try {
-      const soul = await window.electronAPI.persona.getWorkspaceSoul(ws)
+      const soul = await window.electronAPI.persona.getWorkspaceSoul(targetWs)
       const latest = get()
       const latestKey = latest.currentSessionId ? String(latest.currentSessionId) : '__global__'
       const latestSess = latest.currentSessionId ? latest.sessions.find(s => s.id === latest.currentSessionId) : null
@@ -33,7 +33,7 @@ export const createPersonaSlice: StateCreator<AppState, [], [], Partial<AppState
       if (
         _soulReqSeqMap.get(sessionKey) !== reqSeq ||
         latestKey !== sessionKey ||
-        latestWs !== (workspaceRoot !== undefined ? workspaceRoot : expectedWs)
+        latestWs !== targetWs
       ) {
         return
       }
@@ -41,7 +41,14 @@ export const createPersonaSlice: StateCreator<AppState, [], [], Partial<AppState
     } catch {
       const latest = get()
       const latestKey = latest.currentSessionId ? String(latest.currentSessionId) : '__global__'
-      if (_soulReqSeqMap.get(sessionKey) === reqSeq && latestKey === sessionKey) {
+      const latestSess = latest.currentSessionId ? latest.sessions.find(s => s.id === latest.currentSessionId) : null
+      const latestCfg = latest.currentSessionId ? latest.sessionConfigs[latest.currentSessionId] : null
+      const latestWs = latestSess?.cwd || latestCfg?.workspace || null
+      if (
+        _soulReqSeqMap.get(sessionKey) === reqSeq &&
+        latestKey === sessionKey &&
+        latestWs === targetWs
+      ) {
         set({ workspaceSoul: null })
       }
     }
@@ -59,6 +66,6 @@ export const createPersonaSlice: StateCreator<AppState, [], [], Partial<AppState
 
   deletePersona: async (id) => {
     await window.electronAPI.persona.delete(id)
-    await get().loadPersonas()
+    set((s) => ({ personas: s.personas.filter((p) => p.id !== id) }))
   },
 })

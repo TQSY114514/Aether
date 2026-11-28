@@ -145,4 +145,55 @@ describe("sessionSlice", () => {
     expect(s.streamingBySession[5]).toBeUndefined()
     expect(s.sessions.map((x) => x.id)).toEqual([8])
   })
+
+  it("createSession preserves defaultPersonaId 0 (No persona) and -1 (SOUL.md)", async () => {
+    for (const defaultPersonaId of [0, -1, 7, null]) {
+      let receivedCfg: any = null
+      const created = makeSession({ id: 200, persona_id: defaultPersonaId })
+      stubWindow({
+        provider: { list: async () => [{ id: 1, name: "p", api_url: "", api_key: "", api_format: "openai", enabled: 1, created_at: "" }] },
+        model: { list: async () => [{ id: 1, provider_id: 1, model_name: "m", is_primary: 1, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null, created_at: "" }] },
+        persona: { getWorkspaceSoul: async () => null },
+        session: {
+          list: async () => [],
+          createAndSelect: async (cfg: any) => {
+            receivedCfg = cfg
+            return { session: created, config: { ...cfg }, messages: [] }
+          },
+          setConfig: async () => {},
+        },
+      })
+      useStore.setState({ defaultPersonaId, defaultModelId: null, allModels: [], sessions: [], sessionConfigs: {} })
+      await useStore.getState().createSession()
+      expect(receivedCfg.personaId).toBe(defaultPersonaId)
+    }
+  })
+
+  it("saveSessionConfig syncs sessions[].cwd before loadWorkspaceSoul checks latestWs", async () => {
+    const soulB = { name: "Soul B", prompt: "Prompt B", isWorkspace: true }
+    stubWindow({
+      persona: {
+        getWorkspaceSoul: async (ws: string | null) => (ws === "/ws/b" ? soulB : null),
+      },
+      session: {
+        list: async () => [],
+        setConfig: async () => {},
+      },
+      agent: { setWorkspace: async () => {} },
+    })
+    useStore.setState({
+      currentSessionId: 5,
+      sessions: [makeSession({ id: 5, cwd: "/ws/a" })],
+      sessionConfigs: { 5: { providerId: 1, modelId: 1, personaId: null, workspace: "/ws/a" } },
+      workspaceSoul: null,
+    })
+
+    await useStore.getState().saveSessionConfig(5, { workspace: "/ws/b" })
+    await flush()
+
+    const s = useStore.getState()
+    expect(s.sessionConfigs[5]?.workspace).toBe("/ws/b")
+    expect(s.sessions.find((x) => x.id === 5)?.cwd).toBe("/ws/b")
+    expect(s.workspaceSoul).toEqual(soulB)
+  })
 })

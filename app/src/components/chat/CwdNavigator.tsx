@@ -17,8 +17,35 @@ const RECENT_CWDS_KEY = 'aether:recent_cwds'
 const IS_CASE_INSENSITIVE_FS =
   typeof navigator !== 'undefined' && /win|mac/i.test(navigator.platform || navigator.userAgent)
 
-function samePath(a: string, b: string): boolean {
-  return IS_CASE_INSENSITIVE_FS ? a.toLowerCase() === b.toLowerCase() : a === b
+function normalizeComparePath(p: string): string {
+  if (p.length <= 1 || /^[a-zA-Z]:[\\/]$/.test(p)) return p
+  return p.replace(/[\\/]+$/, '')
+}
+
+export function samePath(a: string, b: string, caseInsensitive = IS_CASE_INSENSITIVE_FS): boolean {
+  const na = normalizeComparePath(a)
+  const nb = normalizeComparePath(b)
+  return caseInsensitive ? na.toLowerCase() === nb.toLowerCase() : na === nb
+}
+
+export function computePopoverPosition(
+  rect: { left: number; right: number },
+  viewportWidth: number,
+): { alignRight: boolean; clampedLeft: number | null } {
+  const margin = 16
+  const popW = Math.min(390, Math.max(0, viewportWidth - margin * 2))
+  const leftFits = rect.left + popW <= viewportWidth - margin
+  const rightFits = rect.right - popW >= margin
+  if (!leftFits && rightFits) {
+    return { alignRight: true, clampedLeft: null }
+  }
+  if (leftFits) {
+    return { alignRight: false, clampedLeft: null }
+  }
+  const minViewportLeft = margin
+  const maxViewportLeft = Math.max(margin, viewportWidth - margin - popW)
+  const clampedViewportLeft = Math.max(minViewportLeft, Math.min(rect.left, maxViewportLeft))
+  return { alignRight: false, clampedLeft: clampedViewportLeft - rect.left }
 }
 
 type Props = {
@@ -93,7 +120,10 @@ export default function CwdNavigator({
   const setSessionCwd = useStore((s) => s.setSessionCwd)
 
   const [open, setOpen] = useState(false)
-  const [alignRight, setAlignRight] = useState(true)
+  const [popoverPos, setPopoverPos] = useState<{ alignRight: boolean; clampedLeft: number | null }>({
+    alignRight: true,
+    clampedLeft: null,
+  })
   const [draft, setDraft] = useState(activeCwd || '')
   const [error, setError] = useState<string | null>(null)
   const [recentCwds, setRecentCwds] = useState<string[]>([])
@@ -106,16 +136,21 @@ export default function CwdNavigator({
   }, [activeCwd, open])
 
   useEffect(() => {
-    if (open) {
-      setRecentCwds(loadRecentCwds())
+    if (!open) return
+    setRecentCwds(loadRecentCwds())
+    const updatePosition = () => {
       if (containerRef.current && typeof window !== 'undefined') {
         const rect = containerRef.current.getBoundingClientRect()
-        const popW = Math.min(390, window.innerWidth - 32)
-        const rightOverflow = rect.left + popW > window.innerWidth - 16
-        const leftHasRoom = rect.right - popW >= 16
-        setAlignRight(rightOverflow && leftHasRoom)
+        setPopoverPos(computePopoverPosition(rect, window.innerWidth))
       }
-      requestAnimationFrame(() => inputRef.current?.select())
+    }
+    updatePosition()
+    requestAnimationFrame(() => inputRef.current?.select())
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
     }
   }, [open])
 
@@ -228,8 +263,14 @@ export default function CwdNavigator({
         <div
           role="dialog"
           aria-label={t('cwd.navigator_title')}
-          className={`popover-scale-up absolute top-full ${alignRight ? 'right-0' : 'left-0'} mt-1.5 w-[390px] max-w-[calc(100vw-32px)] rounded-[10px] border shadow-xl z-50 p-3 flex flex-col gap-2.5`}
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+          className={`popover-scale-up absolute top-full ${
+            popoverPos.clampedLeft === null ? (popoverPos.alignRight ? 'right-0' : 'left-0') : ''
+          } mt-1.5 w-[390px] max-w-[calc(100vw-32px)] rounded-[10px] border shadow-xl z-50 p-3 flex flex-col gap-2.5`}
+          style={{
+            backgroundColor: 'var(--bg-secondary)',
+            borderColor: 'var(--border)',
+            ...(popoverPos.clampedLeft !== null ? { left: `${popoverPos.clampedLeft}px` } : {}),
+          }}
         >
           {/* Header + quiet rules badge + quick actions */}
           <div className="flex items-center justify-between gap-2">

@@ -89,14 +89,17 @@ export default function PersonaSettings() {
     })
     if (!ok) return
     const wasDefault = defaultPersonaId === p.id
+    let deleted = false
     try {
-      if (wasDefault) {
+      await deletePersona(p.id)
+      deleted = true
+      if (editingIdRef.current === p.id) cancelEdit()
+      if (wasDefault && useStore.getState().defaultPersonaId === p.id) {
         await setDefaultPersona(null)
       }
-      await deletePersona(p.id)
-      if (editingIdRef.current === p.id) cancelEdit()
+      await loadPersonas()
     } catch (err: any) {
-      if (wasDefault) {
+      if (!deleted && wasDefault && useStore.getState().defaultPersonaId !== p.id) {
         try { await setDefaultPersona(p.id) } catch {}
       }
       toast(err?.message || t('persona.save_failed'), { type: 'error' })
@@ -235,10 +238,11 @@ export default function PersonaSettings() {
           </p>
         </div>
         <select
-          value={defaultPersonaId ?? ''}
+          value={defaultPersonaId === null || defaultPersonaId === undefined ? '' : String(defaultPersonaId)}
           onChange={(e) => {
-            const val = e.target.value ? Number(e.target.value) : null
-            setDefaultPersona(val)
+            const raw = e.target.value
+            const val = raw === '' ? null : Number(raw)
+            setDefaultPersona(Number.isFinite(val as number) ? val : null)
           }}
           aria-label={t('settings.default_persona')}
           className="px-2.5 py-1.5 text-xs rounded-md border outline-none hover:border-[var(--accent)] focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.99] disabled:opacity-40 cursor-pointer min-w-[180px]"
@@ -248,9 +252,15 @@ export default function PersonaSettings() {
             color: 'var(--text-primary)',
           }}
         >
-          <option value="">{t('chat.no_persona')}</option>
+          <option value="">{t('persona.default_auto')}</option>
+          <option value="0">{t('chat.no_persona')}</option>
+          {(workspaceSoul || defaultPersonaId === -1) && (
+            <option value="-1">
+              {workspaceSoul ? `SOUL.md: ${workspaceSoul.name}` : 'SOUL.md'}
+            </option>
+          )}
           {personas.map((p) => (
-            <option key={p.id} value={p.id}>
+            <option key={p.id} value={String(p.id)}>
               {p.name}
             </option>
           ))}

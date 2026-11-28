@@ -47,12 +47,82 @@ describe("providerSlice", () => {
 describe("personaSlice", () => {
   beforeEach(() => {
     stubWindow()
-    useStore.setState({ personas: [] })
+    useStore.setState({ personas: [], workspaceSoul: null, currentSessionId: null, sessions: [], sessionConfigs: {} })
   })
 
   it("loadPersonas writes the persona list into the store", async () => {
     await useStore.getState().loadPersonas()
     expect(useStore.getState().personas).toEqual([persona1])
+  })
+
+  it("loadWorkspaceSoul scopes request sequence per session and ignores stale workspace errors", async () => {
+    let resolveS1!: (v: any) => void
+    let rejectOldWs!: (e: Error) => void
+    let resolveS2!: (v: any) => void
+    const getWorkspaceSoul = vi.fn((ws: string | null) => {
+      if (ws === "/ws/1") return new Promise((r) => { resolveS1 = r })
+      if (ws === "/ws/2") return new Promise((r) => { resolveS2 = r })
+      if (ws === "/ws/err") return new Promise((_, rej) => { rejectOldWs = rej })
+      return Promise.resolve(null)
+    })
+    stubWindow({ persona: { list: async () => [], getWorkspaceSoul } })
+
+    // Session 1 triggers load for /ws/1
+    useStore.setState({
+      currentSessionId: 1,
+      sessions: [{ id: 1, title: "S1", persona_id: null, created_at: "", pinned: 0, updated_at: "", cwd: "/ws/1" }],
+      sessionConfigs: { 1: { providerId: null, modelId: null, personaId: null, workspace: "/ws/1" } },
+    })
+    const p1 = useStore.getState().loadWorkspaceSoul("/ws/1")
+
+    // Rapid switch to Session 2 triggers load for /ws/2 while Session 1 is still pending
+    useStore.setState({
+      currentSessionId: 2,
+      sessions: [
+        { id: 1, title: "S1", persona_id: null, created_at: "", pinned: 0, updated_at: "", cwd: "/ws/1" },
+        { id: 2, title: "S2", persona_id: null, created_at: "", pinned: 0, updated_at: "", cwd: "/ws/2" },
+      ],
+      sessionConfigs: {
+        1: { providerId: null, modelId: null, personaId: null, workspace: "/ws/1" },
+        2: { providerId: null, modelId: null, personaId: null, workspace: "/ws/2" },
+      },
+    })
+    const p2 = useStore.getState().loadWorkspaceSoul("/ws/2")
+
+    // Session 2 resolves first, then stale Session 1 resolves: Session 2's soul must remain
+    const soul2 = { name: "Soul2", prompt: "p2", isWorkspace: true }
+    const soul1 = { name: "Soul1", prompt: "p1", isWorkspace: true }
+    resolveS2(soul2)
+    await p2
+    expect(useStore.getState().workspaceSoul).toEqual(soul2)
+
+    resolveS1(soul1)
+    await p1
+    expect(useStore.getState().workspaceSoul).toEqual(soul2)
+
+    // Same session: /ws/err starts, then cwd changes to /ws/2 before /ws/err rejects -> must not clear /ws/2 soul
+    const pErr = useStore.getState().loadWorkspaceSoul("/ws/err")
+    useStore.setState({
+      sessions: [
+        { id: 1, title: "S1", persona_id: null, created_at: "", pinned: 0, updated_at: "", cwd: "/ws/1" },
+        { id: 2, title: "S2", persona_id: null, created_at: "", pinned: 0, updated_at: "", cwd: "/ws/2" },
+      ],
+    })
+    rejectOldWs(new Error("boom"))
+    await pErr
+    expect(useStore.getState().workspaceSoul).toEqual(soul2)
+  })
+
+  it("deletePersona deletes via IPC and removes from store without calling loadPersonas", async () => {
+    const del = vi.fn(async () => {})
+    const list = vi.fn(async () => [persona1])
+    stubWindow({ persona: { list, create: async () => {}, update: async () => {}, delete: del } })
+    useStore.setState({ personas: [persona1, { ...persona1, id: 2, name: "Second" }] })
+
+    await useStore.getState().deletePersona(1)
+    expect(del).toHaveBeenCalledWith(1)
+    expect(list).not.toHaveBeenCalled()
+    expect(useStore.getState().personas.map((p) => p.id)).toEqual([2])
   })
 })
 

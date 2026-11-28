@@ -29,6 +29,25 @@ function classifyFile(file: File): 'text' | 'image' {
   return 'text'
 }
 
+export function applyReferenceReplacement(
+  input: string,
+  refCursor: number,
+  { prefix, replacement }: { prefix: string; replacement: string },
+): { next: string; pos: number } | null {
+  const before = input.slice(0, refCursor)
+  const match = before.match(/([@#!])(?:"([^"\r\n]*)|([^\s]*))$/)
+  if (!match) return null
+  const start = before.length - match[0].length
+  const inserted = prefix + replacement
+  let remaining = input.slice(refCursor)
+  const wasQuoted = match[2] !== undefined
+  if (wasQuoted && remaining.startsWith('"') && (replacement.endsWith('"') || !replacement.startsWith('"'))) {
+    remaining = remaining.slice(1)
+  }
+  const next = input.slice(0, start) + inserted + remaining
+  return { next, pos: start + inserted.length }
+}
+
 /** Render the chat composer, quick commands, and model controls. */
 export default function ChatInput() {
   // Slash commands loaded from IPC (scan CMD.md files). Falls back to defaults.
@@ -445,23 +464,14 @@ export default function ChatInput() {
   }
 
   const handleReferenceSelect = ({ prefix, replacement }: { prefix: string; query: string; replacement: string }) => {
-    const before = input.slice(0, refCursor)
-    const match = before.match(/([@#!])(?:"([^"\r\n]*)|([^\s]*))$/)
-    if (!match) return
-    const start = before.length - match[0].length
-    const inserted = prefix + replacement
-    let remaining = input.slice(refCursor)
-    if (replacement.endsWith('"') && remaining.startsWith('"')) {
-      remaining = remaining.slice(1)
-    }
-    const next = input.slice(0, start) + inserted + remaining
-    setInput(next)
-    const pos = start + inserted.length
-    setRefCursor(pos)
+    const res = applyReferenceReplacement(input, refCursor, { prefix, replacement })
+    if (!res) return
+    setInput(res.next)
+    setRefCursor(res.pos)
     requestAnimationFrame(() => {
       const el = textareaRef.current
       el?.focus()
-      el?.setSelectionRange(pos, pos)
+      el?.setSelectionRange(res.pos, res.pos)
     })
   }
 
