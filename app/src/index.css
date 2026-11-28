@@ -137,9 +137,30 @@ select option {
   animation: shimmer-x 2s linear infinite;
 }
 
+@keyframes aether-dot-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+.aether-step-dots {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 3px);
+  gap: 2px;
+}
+.aether-step-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: aether-dot-pulse 1.2s ease-in-out infinite;
+}
+.aether-step-dots span:nth-child(2) { animation-delay: 0.2s; }
+.aether-step-dots span:nth-child(3) { animation-delay: 0.4s; }
+.aether-step-dots span:nth-child(4) { animation-delay: 0.6s; }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-blur-fade, .border-beam::after, .shimmer-text { animation: none; }
   .shimmer-text { color: var(--text-muted); -webkit-background-clip: unset; background-clip: unset; }
+  .aether-step-dots span { animation: none; opacity: 0.85; }
 }
 
 
